@@ -1,0 +1,124 @@
+name: agenttape
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agenttape
+      POSTGRES_PASSWORD: agenttape
+      POSTGRES_DB: agenttape
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenttape -d agenttape"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  realtime:
+    build:
+      context: ../apps/realtime
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8002:8002"
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  discovery:
+    build:
+      context: ../apps/discovery
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  ingestion:
+    build:
+      context: ../apps/ingestion
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8004/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  scoring:
+    build:
+      context: ../apps/scoring
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8005/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  pgdata:

@@ -1,0 +1,27 @@
+* text=auto eol=lf
+
+# Binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.svg    text eol=lf
+*.woff2  binary
+*.pdf    binary
+
+# Source files: always LF
+*.sh     text eol=lf
+*.py     text eol=lf
+*.ts     text eol=lf
+*.tsx    text eol=lf
+*.js     text eol=lf
+*.mjs    text eol=lf
+*.json   text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.toml   text eol=lf
+*.md     text eol=lf
+*.css    text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
