@@ -16,4 +16,4 @@ RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8004
-CMD ["uvicorn", "agenttape_ingestion.main:app", "--host", "0.0.0.0", "--port", "8004"]
+CMD ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8004"]

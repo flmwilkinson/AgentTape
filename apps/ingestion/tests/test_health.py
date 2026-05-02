@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from agenttape_ingestion.main import app
+from ingestion.main import app
 
 
 @pytest.mark.asyncio
