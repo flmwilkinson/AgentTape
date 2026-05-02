@@ -16,4 +16,4 @@ RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8005
-CMD ["uvicorn", "agenttape_scoring.main:app", "--host", "0.0.0.0", "--port", "8005"]
+CMD ["uvicorn", "scoring.main:app", "--host", "0.0.0.0", "--port", "8005"]

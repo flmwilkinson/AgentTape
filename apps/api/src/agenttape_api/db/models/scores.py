@@ -33,7 +33,9 @@ class Score(Base):
 
     agent_score: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
     adoption: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
-    quality: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
+    # Nullable: "Unrated" is its own state distinct from a low score
+    # (see migration 0002_quality_nullable + apps/scoring/compute.py).
+    quality: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     momentum: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
     community: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
     manipulation_resistance: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
