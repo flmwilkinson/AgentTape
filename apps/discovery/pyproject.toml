@@ -8,9 +8,29 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "httpx>=0.27.0",
     "redis[hiredis]>=5.2.0",
+    "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30.0",
+    "pgvector>=0.3.6",
     "apscheduler>=3.10.0",
     "feedparser>=6.0.11",
+    "beautifulsoup4>=4.12.0",
+    "tenacity>=9.0.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "anthropic>=0.39.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "vcrpy>=6.0.2",
+    "pytest-vcr>=1.0.2",
+    "testcontainers[postgres]>=4.9.0",
+    "psycopg[binary]>=3.2.0",
+    "alembic>=1.14.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
 ]
 
 [build-system]
@@ -18,4 +38,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agenttape_discovery"]
+packages = ["src/discovery"]

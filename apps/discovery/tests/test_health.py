@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from agenttape_discovery.main import app
+from discovery.main import app
 
 
 @pytest.mark.asyncio
