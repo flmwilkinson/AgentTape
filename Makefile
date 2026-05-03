@@ -39,7 +39,12 @@ dev:
 	@echo "  postgres  localhost:5432"
 	@echo "  redis     localhost:6379"
 	@echo ""
-	@echo "Web (run separately on host):  cd apps/web && pnpm dev"
+	@echo "Starting Next.js dev server in apps/web (Ctrl-C to stop)…"
+	cd apps/web && $(PNPM) dev
+
+dev-bg:
+	$(COMPOSE) up -d --build
+	@echo "Backend up. Run 'make web' in another shell for the frontend."
 
 db:
 	$(COMPOSE) up -d postgres redis

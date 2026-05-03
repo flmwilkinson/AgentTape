@@ -1,0 +1,214 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { api } from "@/lib/api-client";
+import { formatScore, relativeTime } from "@/lib/format";
+import { IndexHistoryChart } from "@/components/index-history-chart";
+import { MoverChip } from "@/components/mover-chip";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  try {
+    const i = await api.getIndex(slug);
+    return {
+      title: i.name,
+      description: `${i.name} — ${i.members_count} constituents.`,
+      openGraph: {
+        title: `${i.name} — AgentTape`,
+        images: [{ url: `/api/og/index/${i.slug}` }],
+      },
+    };
+  } catch {
+    return { title: slug };
+  }
+}
+
+export default async function IndexDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  let detail;
+  try {
+    detail = await api.getIndex(slug);
+  } catch {
+    notFound();
+  }
+  const [history, rebalances] = await Promise.all([
+    api.indexHistory(slug, "30d").catch(() => []),
+    api.indexRebalances(slug, 6).catch(() => []),
+  ]);
+
+  const composite = detail.composite_value;
+  const first = history[0]?.composite_value ?? null;
+  const delta = composite != null && first != null ? composite - first : null;
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    name: detail.name,
+    description: detail.methodology_md ?? `${detail.name} index`,
+    identifier: detail.slug,
+    url: `/indexes/${detail.slug}`,
+  };
+
+  return (
+    <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <div className="border-b border-border bg-card">
+        <div className="container py-10">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Index · {detail.rebalance_frequency}
+          </div>
+          <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl">
+            {detail.name}
+          </h1>
+          <div className="mt-6 grid gap-6 md:grid-cols-[auto_1fr]">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Composite
+              </div>
+              <div className="mt-1 text-stat-xl font-semibold num">
+                {formatScore(composite)}
+              </div>
+              {delta !== null && (
+                <div className="mt-1">
+                  <MoverChip delta={delta} unit="score" />
+                  <span className="ml-2 text-xs text-muted-foreground">vs 30d ago</span>
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <IndexHistoryChart history={history} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container py-8 md:py-12 space-y-12">
+        {/* Constituents */}
+        <section>
+          <SectionHead label="Constituents" hint={`${detail.members_count} agents`} />
+          <div className="overflow-hidden rounded-md border border-border bg-card">
+            <table className="num w-full text-sm">
+              <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2 text-left">Agent</th>
+                  <th className="px-4 py-2 text-right">Weight</th>
+                  <th className="px-4 py-2 text-right">Score</th>
+                  <th className="px-4 py-2 text-right">Added</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.constituents.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-6 text-center text-xs text-muted-foreground"
+                    >
+                      No constituents yet — index hasn't rebalanced.
+                    </td>
+                  </tr>
+                )}
+                {detail.constituents.map((c) => (
+                  <tr
+                    key={c.agent.slug}
+                    className="border-b border-border last:border-b-0"
+                  >
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/agents/${c.agent.slug}`}
+                        className="font-sans font-medium hover:text-primary"
+                      >
+                        {c.agent.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {(c.weight * 100).toFixed(2)}%
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold">
+                      {formatScore(c.agent.score?.agent_score ?? null)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {relativeTime(c.added_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Rebalance log */}
+        <section>
+          <SectionHead label="Rebalance log" />
+          <ol className="space-y-4">
+            {rebalances.length === 0 && (
+              <li className="text-xs text-muted-foreground">
+                No rebalances yet.
+              </li>
+            )}
+            {rebalances.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-md border border-border bg-card p-4 text-sm"
+              >
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {new Date(r.run_at).toLocaleString()}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="num">
+                    +{(r.additions?.length ?? 0)} added
+                  </span>
+                  <span className="num">−{(r.removals?.length ?? 0)} removed</span>
+                  <span className="num text-muted-foreground">
+                    ~{(r.weight_changes?.length ?? 0)} reweights
+                  </span>
+                </div>
+                {r.narrative_md && (
+                  <p className="editorial mt-3 max-w-prose text-base leading-relaxed text-foreground/90">
+                    {r.narrative_md}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* Methodology */}
+        {detail.methodology_md && (
+          <section>
+            <SectionHead label="Methodology" />
+            <div className="rounded-md border border-border bg-editorial p-6 md:p-8">
+              <pre className="editorial whitespace-pre-wrap font-serif text-base leading-relaxed text-foreground/90">
+                {detail.methodology_md}
+              </pre>
+            </div>
+          </section>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function SectionHead({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-3">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        {label}
+      </div>
+      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    </div>
+  );
+}

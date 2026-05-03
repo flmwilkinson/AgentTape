@@ -1,0 +1,55 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  ActivitySquare,
+  Compass,
+  Home,
+  Search,
+  StickyNote,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// Mobile-only bottom tab bar. The labels deliberately echo the desktop
+// nav (Tape / Indexes / Search / Discovery / Methodology) but use icons
+// so they fit on a phone.
+const TABS = [
+  { href: "/", label: "Tape", icon: Home },
+  { href: "/indexes", label: "Indexes", icon: ActivitySquare },
+  { href: "/search", label: "Search", icon: Search },
+  { href: "/discovery", label: "Discovery", icon: Compass },
+  { href: "/methodology", label: "Method", icon: StickyNote },
+];
+
+export function NavMobile() {
+  const pathname = usePathname();
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur md:hidden">
+      <ul className="grid grid-cols-5">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active =
+            t.href === "/" ? pathname === "/" : pathname.startsWith(t.href);
+          return (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className={cn(
+                  "flex h-16 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground transition-colors",
+                  active && "text-primary",
+                )}
+                aria-label={t.label}
+              >
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 1.75} />
+                <span className="font-mono uppercase tracking-wider">
+                  {t.label}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
