@@ -1,13 +1,11 @@
 """Redis pub/sub subscriber.
 
-Listens on the channels populated by ingestion + discovery and marks
-agents dirty in the debouncer. The actual recompute runs on the
-debouncer's tick — never on the subscriber thread — so a flood of
-ticks can never block recompute work.
+Listens on the global event channel and marks agents dirty in the
+debouncer. The actual recompute runs on the debouncer's tick — never
+on the subscriber thread — so a flood of ticks can never block
+recompute work.
 
-Subscribed channels:
-    tape:ticks       — ingestion publishes signal changes + spikes
-    tape:admissions  — discovery publishes new agent admissions
+Channel: ``events.global`` (everything ingestion / discovery / scoring publishes).
 """
 from __future__ import annotations
 
@@ -24,7 +22,7 @@ from scoring.debouncer import Debouncer
 log = logging.getLogger(__name__)
 
 
-CHANNELS = ("tape:ticks", "tape:admissions")
+CHANNELS = ("events.global",)
 
 
 async def run_subscriber(

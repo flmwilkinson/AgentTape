@@ -554,8 +554,15 @@ async def _emit_score_changed(
     prior: float | None,
     pillars: PillarScores,
 ) -> None:
+    slug_row = await session.execute(
+        text("SELECT slug FROM agents WHERE id = :id"), {"id": agent_id}
+    )
+    slug = slug_row.scalar_one_or_none()
+
     payload = {
+        "kind": "score_changed",
         "agent_id": str(agent_id),
+        "agent_slug": slug,
         "agent_score": pillars.agent_score,
         "prior": prior,
         "adoption": pillars.adoption,
@@ -574,8 +581,11 @@ async def _emit_score_changed(
         ),
         {"aid": agent_id, "p": json.dumps(payload)},
     )
+    body = json.dumps(payload)
     try:
-        await redis_client.publish("tape:scores", json.dumps(payload))
+        await redis_client.publish("events.global", body)
+        if slug:
+            await redis_client.publish(f"events.agent.{slug}", body)
     except Exception as e:  # noqa: BLE001
         log.warning("redis publish (score_changed) failed: %s", e)
 

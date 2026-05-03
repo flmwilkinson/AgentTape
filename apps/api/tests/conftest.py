@@ -1,8 +1,9 @@
-"""Test fixtures spinning up a real Postgres (with pgvector) via testcontainers.
+"""Top-level test fixtures shared by both ``tests/db/`` (schema tests) and
+``tests/test_api_routes.py`` (route tests).
 
-We deliberately do NOT mock the database. The schema relies on Postgres-specific
-features — pgvector, declarative partitioning, ENUM types, JSONB, triggers — and
-mocked tests would mask migration bugs.
+The DB stack is real: pgvector/pgvector:pg16 via testcontainers, with the
+Alembic migrations applied once per test session. Tests get clean state
+through the ``_reset_data`` autouse fixture below.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
-API_DIR = Path(__file__).resolve().parents[2]
+API_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
@@ -38,12 +39,6 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Iterator[PostgresContainer]:
-    """A real Postgres with pgvector preinstalled.
-
-    Uses pgvector/pgvector:pg16 so CREATE EXTENSION vector succeeds. TimescaleDB
-    is intentionally absent: the migration treats it as best-effort, so the
-    default test path exercises the no-Timescale branch.
-    """
     container = PostgresContainer(
         image="pgvector/pgvector:pg16",
         username="agenttape",
@@ -58,7 +53,6 @@ def postgres_container() -> Iterator[PostgresContainer]:
 
 
 def _sync_url(c: PostgresContainer) -> str:
-    """Convert testcontainers' default psycopg2 URL to plain psycopg2 (Alembic)."""
     return c.get_connection_url().replace("postgresql+psycopg2://", "postgresql://", 1)
 
 
@@ -71,7 +65,6 @@ def alembic_config(postgres_container: PostgresContainer) -> Config:
     cfg = Config(str(API_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(API_DIR / "migrations"))
     cfg.set_main_option("sqlalchemy.url", _sync_url(postgres_container))
-    # Ensure migrations/env.py can import our package.
     sys.path.insert(0, str(API_DIR / "src"))
     return cfg
 
@@ -80,7 +73,6 @@ def alembic_config(postgres_container: PostgresContainer) -> Config:
 def migrated_db(
     postgres_container: PostgresContainer, alembic_config: Config
 ) -> Iterator[PostgresContainer]:
-    """Run migrations once per session, then yield the container."""
     os.environ["DATABASE_URL"] = _sync_url(postgres_container)
     command.upgrade(alembic_config, "head")
     yield postgres_container
@@ -104,10 +96,8 @@ async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _reset_data(engine: AsyncEngine) -> AsyncIterator[None]:
-    """Truncate all data between tests but keep the schema intact."""
     yield
     async with engine.begin() as conn:
-        # Order matters less with CASCADE, but we restart identities for cleanliness.
         await conn.exec_driver_sql(
             "TRUNCATE TABLE "
             "events, rebalances, index_snapshots, index_members, indexes, "
@@ -115,3 +105,15 @@ async def _reset_data(engine: AsyncEngine) -> AsyncIterator[None]:
             "agent_tags, tags, discovery_candidates, agents "
             "RESTART IDENTITY CASCADE"
         )
+
+
+@pytest.fixture
+def settings_with_db(migrated_db: PostgresContainer, monkeypatch):
+    """Point the API's lazy session factory at the test container."""
+    monkeypatch.setenv("DATABASE_URL", _async_url(migrated_db))
+    # Reset the lazy globals so a new engine picks up the env var.
+    from agenttape_api.db import session as db_session  # type: ignore
+
+    db_session._engine = None
+    db_session._session_factory = None
+    return None

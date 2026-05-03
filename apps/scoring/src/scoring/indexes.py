@@ -356,6 +356,7 @@ async def rebalance_index(
     )
 
     payload = {
+        "kind": "index_rebalanced",
         "index_slug": slug,
         "members": len(proposed),
         "additions": len(diff.additions),
@@ -371,8 +372,10 @@ async def rebalance_index(
         ),
         {"p": json.dumps(payload)},
     )
+    body = json.dumps(payload)
     try:
-        await redis_client.publish("tape:rebalances", json.dumps(payload))
+        await redis_client.publish("events.global", body)
+        await redis_client.publish(f"events.index.{slug}", body)
     except Exception as e:  # noqa: BLE001
         log.warning("redis publish (rebalance) failed: %s", e)
 

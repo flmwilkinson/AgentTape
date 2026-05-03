@@ -327,7 +327,18 @@ async def _persist_flags(
         ),
         {"id": agent_id, "flags": json.dumps(flag_obj)},
     )
-    payload = {"agent_id": str(agent_id), "flags": flag_obj}
+    # Look up the agent slug so we can address events.agent.<slug>.
+    slug_row = await session.execute(
+        text("SELECT slug FROM agents WHERE id = :id"), {"id": agent_id}
+    )
+    slug = slug_row.scalar_one_or_none()
+
+    payload = {
+        "kind": "agent_flagged",
+        "agent_id": str(agent_id),
+        "agent_slug": slug,
+        "flags": flag_obj,
+    }
     await session.execute(
         text(
             """
@@ -337,7 +348,10 @@ async def _persist_flags(
         ),
         {"id": agent_id, "p": json.dumps(payload)},
     )
+    body = json.dumps(payload)
     try:
-        await redis_client.publish("tape:flags", json.dumps(payload))
+        await redis_client.publish("events.global", body)
+        if slug:
+            await redis_client.publish(f"events.agent.{slug}", body)
     except Exception as e:  # noqa: BLE001
         log.warning("redis publish (flag) failed: %s", e)

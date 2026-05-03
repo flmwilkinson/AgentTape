@@ -107,9 +107,9 @@ async def test_first_reading_writes_signal_no_spike(
     assert stats == {"fetched": 1, "written": 1, "spiked": 0, "changed": 0}
     assert await _signals(session, aid, SignalSource.GITHUB_STARS) == [100.0]
     assert await _events(session, aid, "signal_spike") == 0
-    # Publish recorded as initial.
-    payloads = _payloads_for(redis_client, "tape:ticks")
-    assert any(p["kind"] == "initial" for p in payloads)
+    # Publish recorded as initial on the global event channel.
+    payloads = _payloads_for(redis_client, "events.global")
+    assert any(p.get("tick") == "initial" for p in payloads)
 
 
 async def test_change_publishes_tick_no_spike(
@@ -137,8 +137,8 @@ async def test_change_publishes_tick_no_spike(
 
     assert stats["changed"] == 1
     assert stats["spiked"] == 0
-    payloads = _payloads_for(redis_client, "tape:ticks")
-    assert any(p.get("kind") == "change" for p in payloads)
+    payloads = _payloads_for(redis_client, "events.global")
+    assert any(p.get("tick") == "change" for p in payloads)
 
 
 async def test_2x_jump_emits_signal_spike(
@@ -166,7 +166,10 @@ async def test_2x_jump_emits_signal_spike(
 
     assert stats["spiked"] == 1
     assert await _events(session, aid, "signal_spike") == 1
-    spikes = [p for p in _payloads_for(redis_client, "tape:ticks") if p.get("type") == "spike"]
+    spikes = [
+        p for p in _payloads_for(redis_client, "events.global")
+        if p.get("kind") == "signal_spike"
+    ]
     assert spikes
     assert spikes[-1]["multiplier"] == 4.0
 

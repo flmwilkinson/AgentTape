@@ -352,8 +352,13 @@ async def _admit(
         ),
         {"aid": agent_id, "p": json.dumps(event_payload)},
     )
+    # Publish to events.global (firehose) and events.agent.<slug> (per-agent
+    # channel). Both topology keys are documented in apps/realtime — clients
+    # subscribe to whichever scope they need without server-side JSON filtering.
+    body = json.dumps({"kind": "agent_admitted", **event_payload})
     try:
-        await redis_client.publish("tape:admissions", json.dumps(event_payload))
+        await redis_client.publish("events.global", body)
+        await redis_client.publish(f"events.agent.{slug}", body)
     except Exception as e:
         log.warning("redis publish failed: %s", e)
 

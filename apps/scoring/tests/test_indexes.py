@@ -210,9 +210,10 @@ async def test_rebalance_writes_event_and_publishes(
         )
     ).scalar_one()
     assert events == 1
-    # Redis got the publish on tape:rebalances.
+    # Redis got both the global firehose and the per-index publish.
     channels = [c for c, _ in redis_client.published]
-    assert "tape:rebalances" in channels
+    assert "events.global" in channels
+    assert "events.index.tape-100" in channels
 
 
 async def test_narrative_falls_back_without_anthropic_key(

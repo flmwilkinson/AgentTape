@@ -5,15 +5,19 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./api": "./src/api.ts"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "pnpm run generate:types && tsc",
     "lint": "echo \"(no lint)\" && exit 0",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(no shared tests yet)\" && exit 0"
+    "test": "echo \"(no shared tests yet)\" && exit 0",
+    "generate:types": "openapi-typescript ../../apps/api/openapi.json -o src/api.ts --immutable",
+    "generate:types:live": "openapi-typescript http://localhost:8001/openapi.json -o src/api.ts --immutable"
   },
   "devDependencies": {
+    "openapi-typescript": "^7.4.4",
     "typescript": "^5.6.3"
   }
 }

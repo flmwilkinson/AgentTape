@@ -12,9 +12,12 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+import redis.asyncio as redis_async
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 
 from ingestion.config import get_settings
+from ingestion.db import session_factory
 from ingestion.scheduler import build_schedulers
 
 log = logging.getLogger(__name__)
@@ -39,3 +42,33 @@ app = FastAPI(title="AgentTape Ingestion", version="0.0.0", lifespan=lifespan)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "ingestion"}
+
+
+@app.get("/ready")
+async def ready() -> dict[str, Any]:
+    checks: dict[str, Any] = {"db": False, "redis": False}
+    db_err = redis_err = None
+    try:
+        async with session_factory()() as session:
+            await session.execute(text("SELECT 1"))
+        checks["db"] = True
+    except Exception as e:  # noqa: BLE001
+        db_err = str(e)
+    try:
+        client = redis_async.from_url(
+            os.environ.get("REDIS_URL", "redis://redis:6379/0"),
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        await client.ping()
+        await client.aclose()
+        checks["redis"] = True
+    except Exception as e:  # noqa: BLE001
+        redis_err = str(e)
+    if all(checks.values()):
+        return {"status": "ready", **checks}
+    raise HTTPException(
+        status_code=503,
+        detail={"status": "not_ready", **checks, "db_error": db_err, "redis_error": redis_err},
+    )

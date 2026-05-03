@@ -12,10 +12,13 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any
 
+import redis.asyncio as redis_async
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 
 from discovery.config import get_settings
 from discovery.db import session_factory
@@ -76,3 +79,34 @@ app = FastAPI(title="AgentTape Discovery", version="0.0.0", lifespan=lifespan)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "discovery"}
+
+
+@app.get("/ready")
+async def ready() -> dict[str, Any]:
+    """Readiness — Postgres + Redis pings. 503 with detail if either fails."""
+    checks: dict[str, Any] = {"db": False, "redis": False}
+    db_err = redis_err = None
+    try:
+        async with session_factory()() as session:
+            await session.execute(text("SELECT 1"))
+        checks["db"] = True
+    except Exception as e:  # noqa: BLE001
+        db_err = str(e)
+    try:
+        client = redis_async.from_url(
+            os.environ.get("REDIS_URL", "redis://redis:6379/0"),
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        await client.ping()
+        await client.aclose()
+        checks["redis"] = True
+    except Exception as e:  # noqa: BLE001
+        redis_err = str(e)
+    if all(checks.values()):
+        return {"status": "ready", **checks}
+    raise HTTPException(
+        status_code=503,
+        detail={"status": "not_ready", **checks, "db_error": db_err, "redis_error": redis_err},
+    )

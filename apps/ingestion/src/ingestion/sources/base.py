@@ -89,8 +89,13 @@ class Ingestor(ABC):
             log.exception("ingestor %s fetch failed", self.name)
             return {"fetched": 0, "written": 0, "spiked": 0, "changed": 0}
 
+        # Slug-by-id lookup so publishers can address `events.agent.<slug>`
+        # without an extra DB round-trip per tick.
+        slug_by_id = {a.id: a.slug for a in agents}
+
         written, spiked, changed = 0, 0, 0
         for r in readings:
+            slug = slug_by_id.get(r.agent_id)
             prior = await _last_value(session, r.agent_id, r.source)
             await session.execute(
                 text(
@@ -110,12 +115,12 @@ class Ingestor(ABC):
 
             if prior is None:
                 # First reading: tick the dashboard but don't claim it's a spike.
-                await _publish_tick(redis_client, r, prior, kind="initial")
+                await _publish_tick(redis_client, r, prior, slug, kind="initial")
                 continue
 
             if prior != r.value:
                 changed += 1
-                await _publish_tick(redis_client, r, prior, kind="change")
+                await _publish_tick(redis_client, r, prior, slug, kind="change")
 
             # Spike: > N× prior and prior > 0 (avoid 0→1 false positives).
             if (
@@ -123,7 +128,7 @@ class Ingestor(ABC):
                 and r.value >= prior * self.settings.spike_multiplier
             ):
                 spiked += 1
-                await _record_spike(session, redis_client, r, prior)
+                await _record_spike(session, redis_client, r, prior, slug)
 
         await session.commit()
         log.info(
@@ -166,19 +171,27 @@ async def _last_value(
 
 
 async def _publish_tick(
-    redis_client: Any, r: SignalReading, prior: float | None, kind: str
+    redis_client: Any,
+    r: SignalReading,
+    prior: float | None,
+    slug: str | None,
+    kind: str,
 ) -> None:
     msg = {
-        "type": "tick",
-        "kind": kind,
+        "kind": "signal_changed",
+        "tick": kind,
         "agent_id": str(r.agent_id),
+        "agent_slug": slug,
         "source": r.source.value,
         "value": r.value,
         "prior": prior,
         "captured_at": r.captured_at.isoformat(),
     }
+    body = json.dumps(msg)
     try:
-        await redis_client.publish("tape:ticks", json.dumps(msg))
+        await redis_client.publish("events.global", body)
+        if slug:
+            await redis_client.publish(f"events.agent.{slug}", body)
     except Exception as e:  # noqa: BLE001
         log.warning("redis publish (tick) failed: %s", e)
 
@@ -188,9 +201,12 @@ async def _record_spike(
     redis_client: Any,
     r: SignalReading,
     prior: float,
+    slug: str | None,
 ) -> None:
     payload = {
+        "kind": "signal_spike",
         "agent_id": str(r.agent_id),
+        "agent_slug": slug,
         "source": r.source.value,
         "prior": prior,
         "value": r.value,
@@ -206,11 +222,11 @@ async def _record_spike(
         ),
         {"aid": r.agent_id, "p": json.dumps(payload)},
     )
+    body = json.dumps(payload)
     try:
-        await redis_client.publish(
-            "tape:ticks",
-            json.dumps({"type": "spike", **payload}),
-        )
+        await redis_client.publish("events.global", body)
+        if slug:
+            await redis_client.publish(f"events.agent.{slug}", body)
     except Exception as e:  # noqa: BLE001
         log.warning("redis publish (spike) failed: %s", e)
 
