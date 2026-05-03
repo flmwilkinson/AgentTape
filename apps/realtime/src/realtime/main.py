@@ -30,6 +30,10 @@ from sse_starlette.sse import EventSourceResponse
 from realtime import snapshots
 from realtime.connection import Connection
 from realtime.db import session_factory
+from realtime.limits import WSLimitExceeded, connection_count, reserve
+from realtime.telemetry import init as init_telemetry
+
+init_telemetry("agenttape-realtime")
 
 log = logging.getLogger(__name__)
 
@@ -91,9 +95,37 @@ async def ready() -> dict[str, Any]:
 # ---------------------------------------------------------------- ws
 
 
+def _client_ip(websocket: WebSocket) -> str:
+    # Honor X-Forwarded-For when behind Railway / a proxy; fall back to
+    # the socket's remote.
+    fwd = websocket.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    if websocket.client:
+        return websocket.client.host
+    return "anonymous"
+
+
+async def _enforce_limit(
+    websocket: WebSocket, stream_key: str
+):
+    """Reserve a slot or close the socket. Returns the reserve cm or None."""
+    ip = _client_ip(websocket)
+    cm = reserve(ip, stream_key)
+    try:
+        await cm.__aenter__()
+    except WSLimitExceeded as e:
+        await websocket.close(code=4429, reason=str(e))
+        return None
+    return cm
+
+
 @app.websocket("/ws/ticker")
 async def ws_ticker(websocket: WebSocket) -> None:
     await websocket.accept()
+    cm = await _enforce_limit(websocket, "/ws/ticker")
+    if cm is None:
+        return
     conn = Connection(["events.global"])
     await conn.start()
     try:
@@ -104,6 +136,7 @@ async def ws_ticker(websocket: WebSocket) -> None:
         return
     finally:
         await conn.stop()
+        await cm.__aexit__(None, None, None)
 
 
 @app.websocket("/ws/agent/{slug}")
@@ -115,6 +148,9 @@ async def ws_agent(websocket: WebSocket, slug: str) -> None:
         await websocket.close(code=4404, reason="agent not found")
         return
 
+    cm = await _enforce_limit(websocket, f"/ws/agent/{slug}")
+    if cm is None:
+        return
     conn = Connection([f"events.agent.{slug}"])
     await conn.start()
     try:
@@ -124,6 +160,7 @@ async def ws_agent(websocket: WebSocket, slug: str) -> None:
         return
     finally:
         await conn.stop()
+        await cm.__aexit__(None, None, None)
 
 
 @app.websocket("/ws/index/{slug}")
@@ -135,6 +172,9 @@ async def ws_index(websocket: WebSocket, slug: str) -> None:
         await websocket.close(code=4404, reason="index not found")
         return
 
+    cm = await _enforce_limit(websocket, f"/ws/index/{slug}")
+    if cm is None:
+        return
     conn = Connection([f"events.index.{slug}"])
     await conn.start()
     try:
@@ -144,6 +184,13 @@ async def ws_index(websocket: WebSocket, slug: str) -> None:
         return
     finally:
         await conn.stop()
+        await cm.__aexit__(None, None, None)
+
+
+@app.get("/admin/stats", tags=["admin"])
+async def admin_stats() -> dict[str, Any]:
+    """Internal — exposed for apps/api's /admin page to scrape WS counts."""
+    return {"connections": connection_count()}
 
 
 @app.websocket("/ws/watchlist")

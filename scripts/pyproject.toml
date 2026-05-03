@@ -1,0 +1,18 @@
+[project]
+name = "agenttape-scripts"
+version = "0.0.0"
+description = "AgentTape one-shot scripts (launch reports, ops utilities)."
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2.0",
+    "reportlab>=4.2.0",
+    "matplotlib>=3.9.0",
+    "pillow>=11.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

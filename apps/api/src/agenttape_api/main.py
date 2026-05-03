@@ -5,12 +5,21 @@ import os
 from typing import Any
 
 import redis.asyncio as redis_async
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 
 from agenttape_api.db.session import session_factory
+from agenttape_api.rate_limit import limiter, public_rate_limit
 from agenttape_api.routes import ROUTERS
+from agenttape_api.telemetry import init as init_telemetry
+
+# Boot telemetry as soon as the module is imported — uvicorn imports
+# main.py before opening the socket, so traces cover the first request.
+init_telemetry("agenttape-api")
 
 log = logging.getLogger(__name__)
 
@@ -28,8 +37,25 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_headers=["*", "x-api-key"],
 )
+
+# Rate limiting: 60 rpm anon / 600 rpm with X-API-Key. The middleware
+# applies the limit to every route; routes that need stricter limits
+# can decorate themselves with @limiter.limit(...).
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.middleware("http")
+async def attach_rate_limit(request: Request, call_next):
+    # slowapi looks for ``request.state.view_rate_limit`` (a string like
+    # "60/minute") to decide which bucket to count against. Setting it
+    # per-request lets us key auth vs anon off the X-API-Key header.
+    request.state.view_rate_limit = public_rate_limit(request)
+    return await call_next(request)
+
 
 for router in ROUTERS:
     app.include_router(router)

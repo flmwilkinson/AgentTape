@@ -1,9 +1,11 @@
 import { ImageResponse } from "next/og";
 import { api } from "@/lib/api-client";
 
+// Route handler exports — Next.js 15 only allows ``runtime`` here. The
+// ImageResponse below sets the content-type + size on the response.
 export const runtime = "edge";
-export const contentType = "image/png";
-export const size = { width: 1200, height: 630 };
+
+const SIZE = { width: 1200, height: 630 };
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -75,7 +77,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
         </div>
       </div>
     ),
-    size,
+    SIZE,
   );
 }
 

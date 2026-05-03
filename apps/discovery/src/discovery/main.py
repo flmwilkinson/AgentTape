@@ -24,6 +24,9 @@ from discovery.config import get_settings
 from discovery.db import session_factory
 from discovery.promoter import run_promoter
 from discovery.scouts import ALL_SCOUTS, Scout
+from discovery.telemetry import init as init_telemetry
+
+init_telemetry("agenttape-discovery")
 
 log = logging.getLogger(__name__)
 

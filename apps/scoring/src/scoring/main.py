@@ -27,6 +27,9 @@ from scoring.debouncer import get_debouncer
 from scoring.indexes import ensure_indexes
 from scoring.scheduler import build_scheduler
 from scoring.subscriber import run_subscriber
+from scoring.telemetry import init as init_telemetry
+
+init_telemetry("agenttape-scoring")
 
 log = logging.getLogger(__name__)
 

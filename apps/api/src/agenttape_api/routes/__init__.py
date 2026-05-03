@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agenttape_api.routes.admin import router as admin_router
 from agenttape_api.routes.agents import router as agents_router
 from agenttape_api.routes.discovery import router as discovery_router
 from agenttape_api.routes.events import router as events_router
@@ -16,4 +17,5 @@ ROUTERS = [
     tags_router,
     events_router,
     discovery_router,
+    admin_router,
 ]

@@ -19,6 +19,9 @@ from sqlalchemy import text
 from ingestion.config import get_settings
 from ingestion.db import session_factory
 from ingestion.scheduler import build_schedulers
+from ingestion.telemetry import init as init_telemetry
+
+init_telemetry("agenttape-ingestion")
 
 log = logging.getLogger(__name__)
 
