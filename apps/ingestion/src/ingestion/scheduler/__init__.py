@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -81,6 +82,18 @@ def build_schedulers(settings: Settings | None = None) -> dict[str, AsyncIOSched
         (TierName.MEDIUM, MEDIUM, settings.medium_tier_seconds),
         (TierName.SLOW, SLOW, settings.slow_tier_seconds),
     )
+    # First fire offsets stagger the tiers so they don't all hammer
+    # the DB at once on startup. FAST runs ~10 s after boot, MEDIUM
+    # ~30 s, SLOW ~60 s. After the first fire each tier ticks on its
+    # own interval. Without an explicit next_run_time, APScheduler
+    # waits a full interval before the first run — that's why a
+    # 5-minute FAST tier still wouldn't have ticked an hour later.
+    first_fire_offsets = {
+        TierName.FAST: 10,
+        TierName.MEDIUM: 30,
+        TierName.SLOW: 60,
+    }
+    now = datetime.now(UTC)
     for tier_name, classes, interval in plan:
         sched = AsyncIOScheduler(
             job_defaults={
@@ -94,8 +107,7 @@ def build_schedulers(settings: Settings | None = None) -> dict[str, AsyncIOSched
             IntervalTrigger(seconds=interval),
             args=[settings, tier_name, classes],
             id=f"tier-{tier_name}",
-            # Kick off immediately so we don't wait an hour for the first MEDIUM tick.
-            next_run_time=None,
+            next_run_time=now + timedelta(seconds=first_fire_offsets[tier_name]),
         )
         schedulers[tier_name] = sched
     return schedulers

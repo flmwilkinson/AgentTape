@@ -15,6 +15,7 @@ the subscriber's event loop.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as redis_async
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -71,15 +72,22 @@ def build_scheduler(settings: Settings | None = None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(
         job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 60}
     )
+    # Stagger first fires so the heartbeat and snapshot don't both
+    # hit the DB at boot. After their first fire each runs on its
+    # interval. Explicit next_run_time is required — APScheduler
+    # otherwise waits a full interval before firing once.
+    now = datetime.now(UTC)
     scheduler.add_job(
         _heartbeat_recompute_job,
         IntervalTrigger(seconds=settings.heartbeat_recompute_seconds),
         id="hourly-recompute",
+        next_run_time=now + timedelta(seconds=20),
     )
     scheduler.add_job(
         _snapshot_job,
         IntervalTrigger(seconds=settings.snapshot_interval_seconds),
         id="hourly-snapshot",
+        next_run_time=now + timedelta(seconds=45),
     )
     scheduler.add_job(
         _rebalance_job,
