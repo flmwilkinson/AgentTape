@@ -15,8 +15,9 @@ const NAV: { href: string; label: string }[] = [
   { href: "/", label: "Floor" },
   { href: "/indexes", label: "Indexes" },
   { href: "/models", label: "Models" },
+  { href: "/sectors", label: "Sectors" },
   { href: "/trending", label: "Trending" },
-  { href: "/new", label: "New" },
+  { href: "/articles", label: "Articles" },
 ];
 
 export function NavDesktop() {

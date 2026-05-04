@@ -292,11 +292,13 @@ async def signals_for_agent(
 async def agent_score_history(
     session: AsyncSession, *, agent_id: UUID, since: datetime, limit: int
 ) -> list[dict[str, Any]]:
-    """Score timeseries for one agent — used by /compare for the overlay chart."""
+    """Full pillar timeseries for one agent — fed into /agents/<slug>'s
+    breakdown chart and the /compare overlay. Returns every pillar so a
+    reader can see WHICH pillar moved when the headline moved."""
     rows = await session.execute(
         text(
             """
-            SELECT computed_at, agent_score
+            SELECT computed_at, agent_score, adoption, quality, momentum, community
             FROM scores
             WHERE agent_id = :id AND computed_at >= :since
             ORDER BY computed_at ASC
@@ -306,7 +308,14 @@ async def agent_score_history(
         {"id": agent_id, "since": since, "limit": limit},
     )
     return [
-        {"captured_at": r.computed_at, "agent_score": float(r.agent_score)}
+        {
+            "captured_at": r.computed_at,
+            "agent_score": float(r.agent_score),
+            "adoption": float(r.adoption) if r.adoption is not None else None,
+            "quality": float(r.quality) if r.quality is not None else None,
+            "momentum": float(r.momentum) if r.momentum is not None else None,
+            "community": float(r.community) if r.community is not None else None,
+        }
         for r in rows
     ]
 
@@ -548,11 +557,40 @@ WINDOWS = {
 
 
 async def movers(
-    session: AsyncSession, *, window: str, limit: int
+    session: AsyncSession,
+    *,
+    window: str,
+    limit: int,
+    capability: str | None = None,
+    deployment: str | None = None,
+    entity_kind: str | None = None,
 ) -> list[dict[str, Any]]:
     delta = WINDOWS.get(window, timedelta(days=1))
     since = datetime.now(UTC) - delta
-    # For each agent, latest score and the score at-or-before the window start.
+
+    # Optional tag/kind filters — joined into the deltas projection so they
+    # apply BEFORE the limit, otherwise we'd silently truncate to <N matches.
+    extra_joins = ""
+    extra_where = ""
+    params: dict[str, Any] = {"since": since, "limit": limit}
+    if capability:
+        extra_joins += (
+            " JOIN agent_tags at_cap ON at_cap.agent_id = a.id"
+            " JOIN tags t_cap ON t_cap.id = at_cap.tag_id"
+            " AND t_cap.kind = 'capability' AND t_cap.value = :capability"
+        )
+        params["capability"] = capability
+    if deployment:
+        extra_joins += (
+            " JOIN agent_tags at_dep ON at_dep.agent_id = a.id"
+            " JOIN tags t_dep ON t_dep.id = at_dep.tag_id"
+            " AND t_dep.kind = 'deployment' AND t_dep.value = :deployment"
+        )
+        params["deployment"] = deployment
+    if entity_kind:
+        extra_where += " AND a.entity_kind = :entity_kind"
+        params["entity_kind"] = entity_kind
+
     sql = f"""
         WITH base AS (
             SELECT s.agent_id,
@@ -583,11 +621,13 @@ async def movers(
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
         {RANKS_JOIN}
+        {extra_joins}
         WHERE a.eligibility_status = 'admitted'
+        {extra_where}
         ORDER BY abs(d.delta) DESC
         LIMIT :limit
     """
-    rows = await session.execute(text(sql), {"since": since, "limit": limit})
+    rows = await session.execute(text(sql), params)
     return [
         {
             "agent": _row_to_agent_summary(r),

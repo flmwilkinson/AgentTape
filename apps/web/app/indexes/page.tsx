@@ -26,8 +26,8 @@ export default async function IndexesPage() {
           Five indexes at launch.
         </h1>
         <p className="mt-3 max-w-prose text-sm text-muted-foreground md:text-base">
-          Equal-weight v1, weekly rebalance Mondays 03:00 UTC. Every index has
-          a published methodology and a transparent rebalance log.
+          Equal-weight v1. Every index has a published methodology and a
+          transparent rebalance log.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

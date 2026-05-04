@@ -4,6 +4,7 @@ import { ExternalLink, Github } from "lucide-react";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
+import { AgentBreakdownChart } from "@/components/agent-breakdown-chart";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
 import { ScoreContributors } from "@/components/score-contributors";
@@ -105,6 +106,11 @@ export default async function AgentPage({
             Discovered {relativeTime(agent.discovered_at)}
           </span>
         </section>
+
+        {/* Score breakdown chart — overall + four pillar lines, since
+            this agent first listed. Reading the lines together is how
+            you tell which pillar carried (or dragged) the headline. */}
+        <AgentBreakdownChart slug={slug} />
 
         {/* What moved this score in the last 24 hours — rules-based
             attribution surfaced from the same signals the score uses. */}

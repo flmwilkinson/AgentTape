@@ -182,10 +182,19 @@ export const api = {
     ),
 
   agentScoreHistory: (slug: string, window = "30d") =>
-    apiFetch<{ captured_at: string; agent_score: number }[]>(
-      `/agents/${slug}/score-history`,
-      { searchParams: { window }, cache: "no-store" },
-    ),
+    apiFetch<
+      {
+        captured_at: string;
+        agent_score: number;
+        adoption: number | null;
+        quality: number | null;
+        momentum: number | null;
+        community: number | null;
+      }[]
+    >(`/agents/${slug}/score-history`, {
+      searchParams: { window },
+      cache: "no-store",
+    }),
 
   listIndexes: () => apiFetch<IndexSummary[]>("/indexes", { cache: "no-store" }),
 
@@ -203,8 +212,19 @@ export const api = {
       searchParams: { limit },
     }),
 
-  movers: (window: "1h" | "1d" | "7d" | "30d" = "1d", limit = 10) =>
-    apiFetch<Mover[]>("/movers", { searchParams: { window, limit }, cache: "no-store" }),
+  movers: (
+    window: "1h" | "1d" | "7d" | "30d" = "1d",
+    limit = 10,
+    filters: {
+      capability?: string;
+      deployment?: string;
+      entity_kind?: "application" | "foundation_model";
+    } = {},
+  ) =>
+    apiFetch<Mover[]>("/movers", {
+      searchParams: { window, limit, ...filters },
+      cache: "no-store",
+    }),
 
   search: (q: string, mode: "text" | "vibe" = "text", limit = 20) =>
     apiFetch<SearchResult>("/search", {
@@ -213,6 +233,31 @@ export const api = {
     }),
 
   tags: () => apiFetch<Tag[]>("/tags"),
+
+  sectors: (
+    kind: "capability" | "deployment" | "maturity" = "capability",
+    window: "1d" | "7d" | "30d" = "7d",
+  ) =>
+    apiFetch<
+      {
+        value: string;
+        display_name: string;
+        members: number;
+        avg_now: number | null;
+        avg_then: number | null;
+        delta: number | null;
+        verdict:
+          | "booming"
+          | "growing"
+          | "steady"
+          | "cooling"
+          | "declining"
+          | "no_history";
+      }[]
+    >("/sectors", {
+      searchParams: { kind, window },
+      cache: "no-store",
+    }),
 
   events: (params: { kind?: string; limit?: number; offset?: number } = {}) =>
     apiFetch<Page<EventOut>>("/events", { searchParams: params, cache: "no-store" }),

@@ -37,7 +37,7 @@ export function IndexCard({ index, history, topThree, className }: IndexCardProp
       <div className="flex items-baseline justify-between">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Index · {index.rebalance_frequency}
+            Index
           </div>
           <div className="text-base font-medium leading-tight">
             {index.name}

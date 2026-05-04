@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { api } from "@/lib/api-client";
-import { formatScore, relativeTime } from "@/lib/format";
+import { formatScore } from "@/lib/format";
+import { CapabilityRail } from "@/components/capability-rail";
 import { IndexCard } from "@/components/index-card";
 import { MoverChip } from "@/components/mover-chip";
-import { Sparkline } from "@/components/sparkline";
 import { TickerCard } from "@/components/ticker-card";
 import { TickerTape } from "@/components/ticker-tape";
 
@@ -23,11 +23,10 @@ import { TickerTape } from "@/components/ticker-tape";
 export const dynamic = "force-dynamic";
 
 export default async function FloorPage() {
-  const [agentsPage, indexes, movers24h, movers7d, recent] = await Promise.all([
+  const [agentsPage, indexes, movers24h, recent] = await Promise.all([
     api.listAgents({ sort: "score", limit: 60 }),
     api.listIndexes(),
     api.movers("1d", 8),
-    api.movers("7d", 8),
     api.recentDiscoveries(8),
   ]);
 
@@ -97,6 +96,23 @@ export default async function FloorPage() {
           </div>
         </section>
 
+        {/* Top by capability — the "I want a coding agent" entry point.
+            Three-per-rail keeps the page scannable; the row icons jump
+            straight to GitHub / homepage so the floor is one click from
+            something runnable. */}
+        <section>
+          <SectionHead
+            label="Top by capability"
+            hint="The leading three stocks per category"
+            trailing={
+              <Link href="/search" className="text-xs text-primary hover:underline">
+                Browse all →
+              </Link>
+            }
+          />
+          <CapabilityRail />
+        </section>
+
         {/* New listings — the "rush to compare new releases" surface. */}
         <section>
           <SectionHead
@@ -124,7 +140,7 @@ export default async function FloorPage() {
         <section>
           <SectionHead
             label="Indexes"
-            hint="Top stocks grouped by sector or foundation model · weekly rebalance"
+            hint="Top stocks grouped by sector or foundation model"
             trailing={
               <Link href="/indexes" className="text-xs text-primary hover:underline">
                 All indexes →

@@ -46,26 +46,14 @@ export default async function ModelsPage() {
       </header>
 
       {models.length === 0 ? (
-        <section className="rounded-md border border-dashed border-border bg-card p-8">
+        <section className="rounded-md border border-dashed border-border bg-card p-8 text-center">
           <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            FM-50 — empty
+            No models yet
           </div>
-          <p className="editorial mt-3 max-w-prose text-base leading-relaxed text-foreground/85">
-            The foundation-model scout pulls from{" "}
-            <a
-              href="https://openrouter.ai/api/v1/models"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary hover:underline"
-            >
-              openrouter.ai/api/v1/models
-            </a>
-            {" "}on its own schedule. If you're seeing this page empty, the
-            scout hasn't run yet — kick it off from the discovery service:
+          <p className="editorial mt-3 max-w-prose mx-auto text-base leading-relaxed text-muted-foreground">
+            The foundation-model board is warming up. Models stream in from
+            the OpenRouter catalogue on a daily schedule — check back shortly.
           </p>
-          <pre className="mt-4 overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-            python -m discovery.run openrouter_models
-          </pre>
         </section>
       ) : (
         <section className="overflow-hidden rounded-md border border-border bg-card">

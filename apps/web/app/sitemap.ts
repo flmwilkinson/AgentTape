@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { api } from "@/lib/api-client";
+import { ARTICLES } from "@/lib/articles";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.io";
 
@@ -26,6 +27,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/top/foundation-models",
     "/top/open-source-ai-agents",
     "/top/mcp-servers",
+    "/articles",
+    "/sectors",
   ].map((path) => ({
     url: `${SITE}${path}`,
     lastModified: now,
@@ -64,5 +67,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Same fallback — sitemap stays valid even when API is unreachable.
   }
 
-  return [...staticPaths, ...indexUrls, ...agentUrls];
+  // Articles — long-form SEO content. Each gets a dedicated URL with
+  // its publish date as lastmod so search engines respect the freshness.
+  const articleUrls: MetadataRoute.Sitemap = ARTICLES.map((a) => ({
+    url: `${SITE}/articles/${a.slug}`,
+    lastModified: new Date(a.published_at),
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
+  return [...staticPaths, ...indexUrls, ...agentUrls, ...articleUrls];
 }
