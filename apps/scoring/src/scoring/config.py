@@ -19,14 +19,15 @@ class Settings(BaseSettings):
     # 50 signals change in that window.
     recompute_debounce_seconds: int = 60
 
-    # Index snapshots cron — hourly per spec.
-    snapshot_interval_seconds: int = 60 * 60
-
-    # Heartbeat recompute — runs the full agent population at this
-    # cadence so foundation models (and any agent without ingestion
-    # events) get fresh score rows. Hourly is plenty: scoring is
-    # cheap and the chart granularity already maxes at hour buckets.
-    heartbeat_recompute_seconds: int = 60 * 60
+    # Index snapshot + heartbeat cadence. Aligned with ingestion FAST
+    # tier (5 min) so every visible surface — sectors, indexes,
+    # models, agents — refreshes on the same clock. The user-facing
+    # promise is "ticking every 5 minutes"; nothing should be lying.
+    # Foundation models still produce flat lines between metadata
+    # changes (their score is derived from OpenRouter facts, not
+    # ingestion signals) but you'll see the timestamp advance.
+    snapshot_interval_seconds: int = 5 * 60
+    heartbeat_recompute_seconds: int = 5 * 60
 
     # Pillar weights (sum to 1.0).
     weight_adoption: float = 0.35

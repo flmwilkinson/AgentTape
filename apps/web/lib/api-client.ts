@@ -254,7 +254,11 @@ export const api = {
 
   tags: () => apiFetch<Tag[]>("/tags"),
 
-  sectorHistory: (kind: string, value: string, window: "7d" | "30d" | "90d" | "all" = "30d") =>
+  sectorHistory: (
+    kind: string,
+    value: string,
+    window: "1d" | "7d" | "30d" | "90d" | "all" = "7d",
+  ) =>
     apiFetch<
       { captured_at: string; avg_score: number | null; agents: number }[]
     >(`/sectors/${kind}/${value}/history`, {

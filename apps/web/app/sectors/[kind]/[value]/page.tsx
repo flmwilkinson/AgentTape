@@ -38,8 +38,12 @@ export default async function SectorDetailPage({ params }: PageParams) {
   const { kind, value } = await params;
   if (!VALID_KINDS.includes(kind)) notFound();
 
+  // Default window is 7d so the chart fills with hourly buckets
+  // backed by the 5-min heartbeat. The chart endpoint accepts 1d
+  // (5-min buckets), 7d (hourly), 30d / 90d / all (daily) — the
+  // current page only requests 7d but the API can serve any.
   const [history, members] = await Promise.all([
-    api.sectorHistory(kind, value, "30d").catch(() => []),
+    api.sectorHistory(kind, value, "7d").catch(() => []),
     api.listAgents({
       tag_kind: kind,
       tag_value: value,

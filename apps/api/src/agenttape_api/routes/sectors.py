@@ -47,13 +47,19 @@ def _verdict(delta: float | None) -> str:
 async def get_sector_history(
     kind: str,
     value: str,
-    window: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
+    window: str = Query("30d", pattern="^(1d|7d|30d|90d|all)$"),
     session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
-    """Daily average AgentScore for the cohort tagged (kind, value)."""
+    """Time-bucketed average AgentScore for the cohort tagged (kind, value).
+
+    Bucket size scales with the window so the chart always lands at
+    a few hundred points: 5-min for 1d, hourly for 7d, daily beyond.
+    Aligned with the 5-min scoring heartbeat.
+    """
     if kind not in {"capability", "deployment", "maturity", "domain", "license"}:
         return []
     delta_map = {
+        "1d": timedelta(days=1),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
@@ -64,10 +70,17 @@ async def get_sector_history(
         else datetime(2024, 1, 1, tzinfo=UTC)
     )
 
-    # Granularity matches the window. Hourly buckets for short windows
-    # surface intra-day variance from per-hour recomputes; daily buckets
-    # for longer windows keep the chart legible.
-    granularity = "hour" if window == "7d" else "day"
+    # Bucket SQL — 5-min uses arithmetic on epoch seconds; the others
+    # use Postgres date_trunc. Picked so each window lands at roughly
+    # the same number of points (~144–288).
+    if window == "1d":
+        bucket_expr = (
+            "to_timestamp(floor(extract(epoch from s.computed_at) / 300) * 300)"
+        )
+    elif window == "7d":
+        bucket_expr = "date_trunc('hour', s.computed_at)"
+    else:
+        bucket_expr = "date_trunc('day', s.computed_at)"
 
     rows = await session.execute(
         text(
@@ -81,7 +94,7 @@ async def get_sector_history(
                   AND t.value = :value
                   AND a.eligibility_status = 'admitted'
             )
-            SELECT date_trunc('{granularity}', s.computed_at) AS bucket,
+            SELECT {bucket_expr} AS bucket,
                    AVG(s.agent_score)::float AS avg_score,
                    COUNT(DISTINCT s.agent_id) AS agents
             FROM scores s
