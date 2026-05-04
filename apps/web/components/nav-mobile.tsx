@@ -6,27 +6,20 @@ import {
   ActivitySquare,
   Cpu,
   Home,
-  Search,
+  Star,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Mobile-only bottom tab bar. Five tabs max — Methodology lives in
-// the footer / desktop top nav so we don't burn a slot on it here.
-//
-// Labels mirror the desktop nav so the mental model is the same on
-// either device:
-//   Floor    — overview
-//   Indexes  — sector + foundation-model baskets
-//   Models   — foundation-model board
-//   Trending — biggest movers
-//   Search
+// Mobile-only bottom tab bar. Five tabs max. Search lives in the
+// header (top of every page) so we use the slot for Watchlist —
+// the cookie-pinned shortlist users actually return for.
 const TABS = [
   { href: "/", label: "Floor", icon: Home },
   { href: "/indexes", label: "Indexes", icon: ActivitySquare },
   { href: "/models", label: "Models", icon: Cpu },
   { href: "/trending", label: "Trending", icon: TrendingUp },
-  { href: "/search", label: "Search", icon: Search },
+  { href: "/watchlist", label: "Watchlist", icon: Star },
 ];
 
 export function NavMobile() {

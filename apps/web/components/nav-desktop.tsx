@@ -1,34 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { useState } from "react";
+import { Search, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 // Top nav. The product is a directory + index of AI-agent stocks; the
 // labels intentionally use the stock-exchange vocabulary the user
-// already understands.
-//
-//   Floor      — overview / dashboard
-//   Indexes    — sector + foundation-model baskets
-//   Models     — foundation-model board (own scoring axis)
-//   Trending   — biggest movers right now
-//   New        — newly admitted (recent listings)
-//   Search     — text + tag faceted search
+// already understands. Search lives in the header as an always-visible
+// box (not a tab) — same pattern as Bloomberg / Yahoo Finance.
 const NAV: { href: string; label: string }[] = [
   { href: "/", label: "Floor" },
   { href: "/indexes", label: "Indexes" },
   { href: "/models", label: "Models" },
   { href: "/trending", label: "Trending" },
   { href: "/new", label: "New" },
-  { href: "/search", label: "Search" },
 ];
 
 export function NavDesktop() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [q, setQ] = useState("");
   return (
     <header className="hidden md:block sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur">
-      <div className="container flex h-14 items-center gap-8">
+      <div className="container flex h-14 items-center gap-6">
         <Link
           href="/"
           className="font-mono text-sm font-semibold tracking-[0.18em] uppercase"
@@ -55,11 +52,38 @@ export function NavDesktop() {
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+        <form
+          className="ml-auto flex items-center"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const v = q.trim();
+            router.push(v ? `/search?q=${encodeURIComponent(v)}` : "/search");
+          }}
+        >
+          <label className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Search agents, models…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="h-8 w-56 rounded-md border border-border bg-card pl-8 pr-3 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
+        </form>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Link
-            href="/methodology"
-            className="hover:text-foreground"
+            href="/watchlist"
+            className={cn(
+              "inline-flex items-center gap-1 hover:text-foreground",
+              pathname.startsWith("/watchlist") && "text-foreground",
+            )}
+            aria-label="Watchlist"
           >
+            <Star className="h-3.5 w-3.5" />
+            <span>Watchlist</span>
+          </Link>
+          <Link href="/methodology" className="hover:text-foreground">
             Methodology
           </Link>
           <ThemeToggle />

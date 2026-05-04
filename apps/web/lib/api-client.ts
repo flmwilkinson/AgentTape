@@ -52,6 +52,11 @@ export type ScoreEnvelope = {
   // 24-hour delta. null = no history old enough; 0 = computed and flat.
   score_24h_ago: number | null;
   delta_24h: number | null;
+  // Rank within entity_kind (global). 1 = top.
+  // rank_delta_24h: positive = climbed, negative = dropped.
+  rank_now: number | null;
+  rank_24h_ago: number | null;
+  rank_delta_24h: number | null;
 };
 
 export type AgentSummary = {
@@ -174,6 +179,12 @@ export const api = {
     apiFetch<{ agent: AgentSummary; similarity: number }[]>(
       `/agents/${slug}/similar`,
       { searchParams: { limit } },
+    ),
+
+  agentScoreHistory: (slug: string, window = "30d") =>
+    apiFetch<{ captured_at: string; agent_score: number }[]>(
+      `/agents/${slug}/score-history`,
+      { searchParams: { window }, cache: "no-store" },
     ),
 
   listIndexes: () => apiFetch<IndexSummary[]>("/indexes", { cache: "no-store" }),

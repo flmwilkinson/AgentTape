@@ -2,7 +2,7 @@ import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
-import { Sparkline } from "@/components/sparkline";
+import { RankArrow } from "@/components/rank-arrow";
 
 // Foundation-model board.
 //
@@ -72,40 +72,54 @@ export default async function ModelsPage() {
           <table className="num w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground">
               <tr className="border-b border-border">
-                <th className="px-4 py-2 text-right">#</th>
-                <th className="px-4 py-2 text-left">Model</th>
-                <th className="px-4 py-2 text-left">Source</th>
-                <th className="px-4 py-2 text-right">Score</th>
-                <th className="px-4 py-2 text-right">Adoption</th>
-                <th className="px-4 py-2 text-right">Quality</th>
-                <th className="px-4 py-2 text-right">Momentum</th>
+                <th className="px-3 py-2 text-right">#</th>
+                <th className="px-3 py-2 text-left">Model</th>
+                <th className="px-3 py-2 text-right">24h</th>
+                <th className="px-3 py-2 text-right">Score</th>
+                <th className="px-3 py-2 text-right">Δ24h</th>
+                <th className="px-3 py-2 text-right hidden md:table-cell">Adoption</th>
+                <th className="px-3 py-2 text-right hidden md:table-cell">Quality</th>
+                <th className="px-3 py-2 text-right hidden lg:table-cell">Momentum</th>
               </tr>
             </thead>
             <tbody>
               {models.map((m, i) => (
                 <tr key={m.id} className="border-b border-border last:border-b-0">
-                  <td className="px-4 py-2 text-right text-muted-foreground">{i + 1}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 py-2 text-right text-muted-foreground">{i + 1}</td>
+                  <td className="px-3 py-2">
                     <Link
                       href={`/agents/${m.slug}`}
                       className="font-sans font-medium hover:text-primary"
                     >
                       {m.name}
                     </Link>
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {m.discovered_via.replace(/_/g, " ")}
+                    </div>
                   </td>
-                  <td className="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {m.discovered_via.replace(/_/g, " ")}
+                  <td className="px-3 py-2 text-right">
+                    <RankArrow
+                      delta={m.score?.rank_delta_24h ?? null}
+                      rankNow={m.score?.rank_now ?? null}
+                    />
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold">
+                  <td className="px-3 py-2 text-right font-semibold">
                     {formatScore(m.score?.agent_score ?? null)}
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-3 py-2 text-right">
+                    {m.score?.delta_24h != null ? (
+                      <MoverChip delta={m.score.delta_24h} unit="score" variant="outline" />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right hidden md:table-cell">
                     {m.score?.adoption?.toFixed(1) ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-right text-muted-foreground">
+                  <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
                     {m.score?.quality === null ? "Unrated" : m.score?.quality?.toFixed(1) ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-3 py-2 text-right hidden lg:table-cell">
                     {m.score?.momentum?.toFixed(1) ?? "—"}
                   </td>
                 </tr>

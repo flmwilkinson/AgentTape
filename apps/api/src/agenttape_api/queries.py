@@ -34,6 +34,37 @@ SCORE_24H_LATERAL = (
 )
 SCORE_24H_COL = "s24.score_24h_ago"
 
+# Rank lookup. Self-contained subquery so it can plug into any SELECT
+# without a CTE prefix. Joins each agent to:
+#   rank_now      — global rank within its entity_kind by current
+#                   AgentScore DESC (1 = top of the kind)
+#   rank_24h_ago  — same, but ordered by score_24h_ago. NULL when an
+#                   agent has no 24h history yet.
+# The window function runs once per request — fine at our scale.
+RANKS_JOIN = """LEFT JOIN (
+    SELECT
+        ar_a.id,
+        ROW_NUMBER() OVER (
+            PARTITION BY ar_a.entity_kind
+            ORDER BY ar_cs.agent_score DESC NULLS LAST, ar_a.slug ASC
+        ) AS rank_now,
+        CASE WHEN ar_s24h.score_24h_ago IS NULL THEN NULL
+             ELSE ROW_NUMBER() OVER (
+                 PARTITION BY ar_a.entity_kind
+                 ORDER BY ar_s24h.score_24h_ago DESC NULLS LAST, ar_a.slug ASC
+             )
+        END AS rank_24h_ago
+    FROM agents ar_a
+    LEFT JOIN current_scores ar_cs ON ar_cs.agent_id = ar_a.id
+    LEFT JOIN LATERAL (
+        SELECT s.agent_score AS score_24h_ago FROM scores s
+        WHERE s.agent_id = ar_a.id AND s.computed_at <= now() - interval '24 hours'
+        ORDER BY s.computed_at DESC LIMIT 1
+    ) ar_s24h ON true
+    WHERE ar_a.eligibility_status = 'admitted'
+) ar ON ar.id = a.id"""
+RANKS_COLS = "ar.rank_now, ar.rank_24h_ago"
+
 
 def _row_to_agent_summary(row: Any) -> dict[str, Any]:
     """Map a SELECT AGENT_COLS, SCORE_COLS, SCORE_24H_COL row to the AgentSummary shape."""
@@ -46,6 +77,14 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
     delta_24h = (
         score_now - score_24h
         if score_now is not None and score_24h is not None
+        else None
+    )
+    rank_now = (
+        int(row.rank_now) if getattr(row, "rank_now", None) is not None else None
+    )
+    rank_24h_ago = (
+        int(row.rank_24h_ago)
+        if getattr(row, "rank_24h_ago", None) is not None
         else None
     )
     return {
@@ -70,10 +109,19 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
                 else None
             ),
             "computed_at": row.computed_at,
-            # New: 24-hour score delta. A 0 means "computed but unchanged",
+            # 24-hour score delta. A 0 means "computed but unchanged",
             # NULL means "no history old enough" — the UI must distinguish.
             "score_24h_ago": score_24h,
             "delta_24h": delta_24h,
+            # Rank within entity_kind (global, not page-local).
+            "rank_now": rank_now,
+            "rank_24h_ago": rank_24h_ago,
+            # Frontend usually wants the delta directly. Positive = climbed.
+            "rank_delta_24h": (
+                rank_24h_ago - rank_now
+                if rank_now is not None and rank_24h_ago is not None
+                else None
+            ),
         },
     }
 
@@ -117,7 +165,7 @@ async def list_agents(
     }.get(sort, "cs.agent_score DESC NULLS LAST")
 
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (
@@ -125,6 +173,7 @@ async def list_agents(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         {join}
         WHERE {' AND '.join(where)}
         ORDER BY {sort_clause}
@@ -140,6 +189,7 @@ async def list_agents(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         {join}
         WHERE {' AND '.join(where)}
     """
@@ -155,7 +205,7 @@ async def get_agent_by_slug(
     session: AsyncSession, slug: str
 ) -> dict[str, Any] | None:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
                a.hf_org, a.hf_model_ids, a.package_names, a.arxiv_ids,
                a.eligibility_status, a.eligibility_score,
                a.eligibility_reasons, a.manipulation_flags
@@ -166,6 +216,7 @@ async def get_agent_by_slug(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE a.slug = :slug
     """
     row = (await session.execute(text(sql), {"slug": slug})).first()
@@ -235,6 +286,31 @@ async def signals_for_agent(
     return [{"source": k, "points": v} for k, v in series.items()]
 
 
+# --------------------------------------------------------------- score history
+
+
+async def agent_score_history(
+    session: AsyncSession, *, agent_id: UUID, since: datetime, limit: int
+) -> list[dict[str, Any]]:
+    """Score timeseries for one agent — used by /compare for the overlay chart."""
+    rows = await session.execute(
+        text(
+            """
+            SELECT computed_at, agent_score
+            FROM scores
+            WHERE agent_id = :id AND computed_at >= :since
+            ORDER BY computed_at ASC
+            LIMIT :limit
+            """
+        ),
+        {"id": agent_id, "since": since, "limit": limit},
+    )
+    return [
+        {"captured_at": r.computed_at, "agent_score": float(r.agent_score)}
+        for r in rows
+    ]
+
+
 # --------------------------------------------------------------- benchmarks
 
 
@@ -284,7 +360,7 @@ async def similar_agents(
     if not flag:
         return []
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
                1 - (a.embedding <=> base.embedding) AS similarity
         FROM agents base, agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
@@ -293,6 +369,7 @@ async def similar_agents(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE base.id = :id
           AND a.id != :id
           AND a.eligibility_status = 'admitted'
@@ -369,7 +446,7 @@ async def get_index_detail(
         return None
 
     members_sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, im.weight, im.added_at
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}, im.weight, im.added_at
         FROM index_members im
         JOIN agents a ON a.id = im.agent_id
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
@@ -378,6 +455,7 @@ async def get_index_detail(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE im.index_id = :iid AND im.removed_at IS NULL
         ORDER BY cs.agent_score DESC NULLS LAST
     """
@@ -494,7 +572,7 @@ async def movers(
             SELECT agent_id, now_score, then_score, (now_score - then_score) AS delta
             FROM base WHERE rn = 1
         )
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
                d.delta, d.then_score
         FROM deltas d
         JOIN agents a ON a.id = d.agent_id
@@ -504,6 +582,7 @@ async def movers(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
         ORDER BY abs(d.delta) DESC
         LIMIT :limit
@@ -529,7 +608,7 @@ async def text_search(
     session: AsyncSession, *, q: str, limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (
@@ -537,6 +616,7 @@ async def text_search(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
           AND (a.slug ILIKE :q OR a.name ILIKE :q OR a.description ILIKE :q)
         ORDER BY cs.agent_score DESC NULLS LAST
@@ -553,7 +633,7 @@ async def vibe_search(
     session: AsyncSession, *, embedding: list[float], limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
                1 - (a.embedding <=> CAST(:v AS vector)) AS similarity
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
@@ -562,6 +642,7 @@ async def vibe_search(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
           AND a.embedding IS NOT NULL
         ORDER BY a.embedding <=> CAST(:v AS vector) ASC
@@ -662,7 +743,7 @@ async def recent_admissions(
     session: AsyncSession, *, limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (
@@ -670,6 +751,7 @@ async def recent_admissions(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
         ORDER BY a.discovered_at DESC
         LIMIT :limit

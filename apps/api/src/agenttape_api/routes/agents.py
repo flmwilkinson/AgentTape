@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +74,23 @@ async def get_agent_signals(
         limit=limit,
     )
     return [SignalSeries(**s) for s in series]
+
+
+@router.get("/{slug}/score-history")
+async def get_agent_score_history(
+    slug: str,
+    window: str = Query("30d", pattern="^(1h|1d|7d|30d|90d|all)$"),
+    limit: int = Query(2000, ge=1, le=10_000),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> list[dict[str, Any]]:
+    """Score timeseries for one agent. Used by /compare's overlay chart."""
+    detail = await queries.get_agent_by_slug(session, slug)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"agent {slug!r} not found")
+    since = _window_to_since(window)
+    return await queries.agent_score_history(
+        session, agent_id=detail["id"], since=since, limit=limit
+    )
 
 
 @router.get("/{slug}/benchmarks", response_model=list[BenchmarkResultOut])

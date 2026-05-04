@@ -6,6 +6,7 @@ import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
+import { ScoreContributors } from "@/components/score-contributors";
 import { TickerCard } from "@/components/ticker-card";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +105,10 @@ export default async function AgentPage({
             Discovered {relativeTime(agent.discovered_at)}
           </span>
         </section>
+
+        {/* What moved this score in the last 24 hours — rules-based
+            attribution surfaced from the same signals the score uses. */}
+        <ScoreContributors signals={signals} />
 
         {/* Signal time-series */}
         <AgentSignalPanel slug={slug} initial={signals} />

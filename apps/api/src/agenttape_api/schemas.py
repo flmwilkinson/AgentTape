@@ -41,6 +41,11 @@ class ScoreEnvelope(BaseModel):
     # or hidden chip for zero so users can tell them apart.
     score_24h_ago: float | None = None
     delta_24h: float | None = None
+    # Global rank within entity_kind. 1 = top of the kind.
+    # rank_delta_24h: positive number = climbed N positions in 24h.
+    rank_now: int | None = None
+    rank_24h_ago: int | None = None
+    rank_delta_24h: int | None = None
 
 
 class ScoreEnvelopeOptional(BaseModel):
@@ -57,6 +62,9 @@ class ScoreEnvelopeOptional(BaseModel):
     computed_at: datetime | None = None
     score_24h_ago: float | None = None
     delta_24h: float | None = None
+    rank_now: int | None = None
+    rank_24h_ago: int | None = None
+    rank_delta_24h: int | None = None
 
 
 # ---------------------------------------------------------------- agent

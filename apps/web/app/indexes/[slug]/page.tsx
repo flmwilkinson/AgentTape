@@ -5,6 +5,7 @@ import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { IndexHistoryChart } from "@/components/index-history-chart";
 import { MoverChip } from "@/components/mover-chip";
+import { RankArrow } from "@/components/rank-arrow";
 
 export const dynamic = "force-dynamic";
 
@@ -103,29 +104,35 @@ export default async function IndexDetailPage({
             <table className="num w-full text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="px-4 py-2 text-left">Agent</th>
-                  <th className="px-4 py-2 text-right">Weight</th>
-                  <th className="px-4 py-2 text-right">Score</th>
-                  <th className="px-4 py-2 text-right">Added</th>
+                  <th className="px-3 py-2 text-right">#</th>
+                  <th className="px-3 py-2 text-left">Agent</th>
+                  <th className="px-3 py-2 text-right">24h</th>
+                  <th className="px-3 py-2 text-right">Score</th>
+                  <th className="px-3 py-2 text-right">Δ24h</th>
+                  <th className="px-3 py-2 text-right hidden md:table-cell">Weight</th>
+                  <th className="px-3 py-2 text-right hidden md:table-cell">Added</th>
                 </tr>
               </thead>
               <tbody>
                 {detail.constituents.length === 0 && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={7}
                       className="px-4 py-6 text-center text-xs text-muted-foreground"
                     >
-                      No constituents yet — index hasn't rebalanced.
+                      No agents in this index yet — index hasn't rebalanced.
                     </td>
                   </tr>
                 )}
-                {detail.constituents.map((c) => (
+                {detail.constituents.map((c, i) => (
                   <tr
                     key={c.agent.slug}
                     className="border-b border-border last:border-b-0"
                   >
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-2 text-right text-muted-foreground">
+                      {i + 1}
+                    </td>
+                    <td className="px-3 py-2">
                       <Link
                         href={`/agents/${c.agent.slug}`}
                         className="font-sans font-medium hover:text-primary"
@@ -133,13 +140,37 @@ export default async function IndexDetailPage({
                         {c.agent.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
-                      {(c.weight * 100).toFixed(2)}%
+                    <td className="px-3 py-2 text-right">
+                      <RankArrow
+                        delta={c.agent.score?.rank_delta_24h ?? null}
+                        rankNow={c.agent.score?.rank_now ?? null}
+                      />
                     </td>
-                    <td className="px-4 py-2 text-right font-semibold">
+                    <td className="px-3 py-2 text-right font-semibold">
                       {formatScore(c.agent.score?.agent_score ?? null)}
                     </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
+                    <td className="px-3 py-2 text-right">
+                      {c.agent.score?.delta_24h != null ? (
+                        <span
+                          className={
+                            c.agent.score.delta_24h > 0
+                              ? "text-gain"
+                              : c.agent.score.delta_24h < 0
+                                ? "text-loss"
+                                : "text-muted-foreground"
+                          }
+                        >
+                          {c.agent.score.delta_24h > 0 ? "+" : ""}
+                          {c.agent.score.delta_24h.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
+                      {(c.weight * 100).toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
                       {relativeTime(c.added_at)}
                     </td>
                   </tr>

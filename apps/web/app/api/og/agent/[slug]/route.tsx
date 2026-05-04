@@ -25,6 +25,15 @@ export async function GET(_req: Request, { params }: RouteParams) {
     .catch(() => []);
   const values = stars.map((p) => p.value);
   const score = agent.score?.agent_score ?? null;
+  const delta24h = agent.score?.delta_24h ?? null;
+  const rankNow = agent.score?.rank_now ?? null;
+  const rankDelta = agent.score?.rank_delta_24h ?? null;
+  const deltaTone =
+    delta24h == null ? "#8b8e96" : delta24h >= 0 ? "#10b981" : "#ef4444";
+  const deltaText =
+    delta24h == null
+      ? "—"
+      : `${delta24h >= 0 ? "+" : ""}${delta24h.toFixed(2)}`;
 
   return new ImageResponse(
     (
@@ -90,6 +99,44 @@ export async function GET(_req: Request, { params }: RouteParams) {
             >
               {score === null ? "—" : score.toFixed(1)}
             </div>
+          </div>
+          {/* The 24h delta is the *interesting* number for shared cards
+              — it answers "is this hot right now?" at a glance. */}
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ color: "#8b8e96", fontSize: 16, letterSpacing: 4, textTransform: "uppercase" }}>
+              24h
+            </div>
+            <div
+              style={{
+                fontSize: 96,
+                fontWeight: 700,
+                letterSpacing: -2,
+                lineHeight: 1,
+                color: deltaTone,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {deltaText}
+            </div>
+            {rankNow != null && (
+              <div
+                style={{
+                  marginTop: 8,
+                  color: "#8b8e96",
+                  fontSize: 18,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                }}
+              >
+                {rankDelta == null
+                  ? `Rank #${rankNow}`
+                  : rankDelta > 0
+                    ? `Rank #${rankNow} · ▲${rankDelta}`
+                    : rankDelta < 0
+                      ? `Rank #${rankNow} · ▼${Math.abs(rankDelta)}`
+                      : `Rank #${rankNow} · flat`}
+              </div>
+            )}
           </div>
           <SparklineSvg values={values} />
         </div>

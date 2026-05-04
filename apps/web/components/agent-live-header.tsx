@@ -8,6 +8,7 @@ import type { AgentDetail } from "@/lib/api-client";
 import { MoverChip } from "@/components/mover-chip";
 import { NumberTick } from "@/components/number-tick";
 import { PillarBar } from "@/components/pillar-bar";
+import { WatchToggle } from "@/components/watch-toggle";
 import { useWebSocket, type WsFrame } from "@/lib/ws";
 
 // The big-name + score + pillars block at the top of an agent ticker
@@ -28,7 +29,9 @@ export function AgentLiveHeader({ agent }: Props) {
         kind?: string;
       };
       if (ev.kind !== "score_changed") return;
-      setScore({
+      // Live frame doesn't carry 24h history fields — keep whatever we
+      // had at SSR time so deltas still render until the next page nav.
+      setScore((prev) => ({
         agent_score: ev.agent_score ?? null,
         adoption: ev.adoption ?? null,
         quality: ev.quality ?? null,
@@ -36,7 +39,12 @@ export function AgentLiveHeader({ agent }: Props) {
         community: ev.community ?? null,
         manipulation_resistance: ev.manipulation_resistance ?? null,
         computed_at: new Date().toISOString(),
-      });
+        score_24h_ago: prev?.score_24h_ago ?? null,
+        delta_24h: prev?.delta_24h ?? null,
+        rank_now: prev?.rank_now ?? null,
+        rank_24h_ago: prev?.rank_24h_ago ?? null,
+        rank_delta_24h: prev?.rank_delta_24h ?? null,
+      }));
     },
   });
 
@@ -63,6 +71,7 @@ export function AgentLiveHeader({ agent }: Props) {
             )}
             Live
           </span>
+          <WatchToggle slug={agent.slug} showLabel />
         </div>
 
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl md:leading-[1.05]">
