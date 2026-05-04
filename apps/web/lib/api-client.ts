@@ -49,6 +49,9 @@ export type ScoreEnvelope = {
   community: number | null;
   manipulation_resistance: number | null;
   computed_at: string | null;
+  // 24-hour delta. null = no history old enough; 0 = computed and flat.
+  score_24h_ago: number | null;
+  delta_24h: number | null;
 };
 
 export type AgentSummary = {
@@ -60,6 +63,7 @@ export type AgentSummary = {
   discovered_at: string;
   homepage_url: string | null;
   github_repo: string | null;
+  entity_kind: string;
   score: ScoreEnvelope;
 };
 

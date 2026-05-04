@@ -86,13 +86,25 @@ export function AgentLiveHeader({ agent }: Props) {
                 className="text-stat-xl font-semibold"
                 animateOnMount={false}
               />
-              {prior != null && now != null && (
+              {/* 24h delta is the prominent change signal — not the
+                  inter-recompute delta. Distinguishing null (no
+                  history) from 0 (compared, unchanged) matters. */}
+              {agent.score?.delta_24h != null ? (
+                <MoverChip
+                  delta={agent.score.delta_24h}
+                  unit="score"
+                  className="mb-1"
+                />
+              ) : prior != null && now != null && now !== prior ? (
                 <MoverChip delta={now - prior} unit="score" className="mb-1" />
-              )}
+              ) : null}
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
-              {deltaPct}{" "}
-              <span className="text-muted-foreground/60">vs last recompute</span>
+              {agent.score?.delta_24h != null
+                ? `${agent.score.delta_24h >= 0 ? "+" : ""}${agent.score.delta_24h.toFixed(2)} vs 24h ago`
+                : deltaPct !== "—"
+                  ? `${deltaPct} vs last recompute`
+                  : "No 24h history yet"}
             </div>
           </div>
           <PillarBar

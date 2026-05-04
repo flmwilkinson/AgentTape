@@ -38,6 +38,13 @@ class Agent(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text)
     homepage_url: Mapped[str | None] = mapped_column(Text)
 
+    # See migration 0003_entity_kind. Differentiates application agents
+    # from foundation models / frameworks / mcp_servers — each scores
+    # against a slightly different formula.
+    entity_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="application"
+    )
+
     github_repo: Mapped[str | None] = mapped_column(String(255))
     hf_org: Mapped[str | None] = mapped_column(String(255))
     hf_model_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String))

@@ -89,7 +89,24 @@ async def run_promoter(session: AsyncSession, settings: Settings | None = None) 
 
     admitted, rejected, pending_review = 0, 0, 0
     for cand_id, source, source_id, payload in rows:
-        score, reasons = score_candidate(payload or {}, source)
+        p = payload or {}
+
+        # Foundation models from a curated catalogue (openrouter) bypass
+        # the agent-shaped scoring rubric — that rubric assumes things
+        # like "has an LLM dependency", which is meaningless when the
+        # candidate IS an LLM. Admit at a neutral baseline; the scoring
+        # service will recompute against model-specific signals.
+        if p.get("entity_kind") == "foundation_model":
+            await _admit(
+                session, redis_client, settings,
+                cand_id, source, source_id, p,
+                score=settings.auto_admit_threshold,
+                reasons={"foundation_model_catalogue": True},
+            )
+            admitted += 1
+            continue
+
+        score, reasons = score_candidate(p, source)
         if score >= settings.auto_admit_threshold:
             await _admit(
                 session,
@@ -268,18 +285,22 @@ async def _admit(
     embedding = await compute_embedding(
         settings, f"{name}\n{enrichment.description}"
     )
+    # entity_kind is carried through on the payload by scouts that
+    # admit non-application stocks (openrouter for foundation_model,
+    # eventually mcp registries for mcp_server). Default is application.
+    entity_kind = payload.get("entity_kind") or "application"
 
     # Insert agent. UNIQUE(slug) guarantees idempotency on retries.
     inserted = await session.execute(
         text(
             """
             INSERT INTO agents (
-                id, slug, name, description, homepage_url,
+                id, slug, name, description, homepage_url, entity_kind,
                 github_repo, hf_org, hf_model_ids, package_names, arxiv_ids,
                 discovered_via, eligibility_status, eligibility_score,
                 eligibility_reasons, last_admitted_check_at
             ) VALUES (
-                gen_random_uuid(), :slug, :name, :desc, :homepage,
+                gen_random_uuid(), :slug, :name, :desc, :homepage, :entity_kind,
                 :github, :hforg, :hfmodels, CAST(:packages AS jsonb), :arxiv,
                 CAST(:via AS discovery_via),
                 CAST('admitted' AS eligibility_status), :score,
@@ -294,6 +315,7 @@ async def _admit(
             "name": name,
             "desc": enrichment.description,
             "homepage": _extract_homepage(payload),
+            "entity_kind": entity_kind,
             "github": _extract_github(payload, source_id, src_enum),
             "hforg": _extract_hf_org(payload, src_enum),
             "hfmodels": _extract_hf_models(payload, src_enum),

@@ -5,13 +5,23 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+// Top nav. The product is a directory + index of AI-agent stocks; the
+// labels intentionally use the stock-exchange vocabulary the user
+// already understands.
+//
+//   Floor      — overview / dashboard
+//   Indexes    — sector + foundation-model baskets
+//   Models     — foundation-model board (own scoring axis)
+//   Trending   — biggest movers right now
+//   New        — newly admitted (recent listings)
+//   Search     — text + tag faceted search
 const NAV: { href: string; label: string }[] = [
-  { href: "/", label: "Tape" },
+  { href: "/", label: "Floor" },
   { href: "/indexes", label: "Indexes" },
-  { href: "/movers", label: "Movers" },
-  { href: "/discovery", label: "Discovery" },
+  { href: "/models", label: "Models" },
+  { href: "/trending", label: "Trending" },
+  { href: "/new", label: "New" },
   { href: "/search", label: "Search" },
-  { href: "/methodology", label: "Methodology" },
 ];
 
 export function NavDesktop() {
@@ -45,7 +55,13 @@ export function NavDesktop() {
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+          <Link
+            href="/methodology"
+            className="hover:text-foreground"
+          >
+            Methodology
+          </Link>
           <ThemeToggle />
         </div>
       </div>

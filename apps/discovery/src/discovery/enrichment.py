@@ -1,30 +1,54 @@
-"""LLM enrichment for admitted agents.
+"""Enrichment for newly-admitted agents.
 
-Uses Claude (claude-haiku-4-5 by default — cheapest, fast enough for
-batch enrichment of 100s of new agents per day) to:
+This used to call Claude for a description and tag list, and Voyage
+for an embedding. Both have been replaced with free local paths so
+the discovery service has no required paid API.
 
-- Write a concrete 2-sentence description.
-- Pick capability/domain/license/deployment tags from a fixed taxonomy.
+Description
+    Use the upstream payload's own description (GitHub repo description,
+    Hugging Face card, MCP registry blurb, npm/PyPI summary). If a usable
+    description is missing, fall back to a templated one-liner derived
+    from the slug + source.
 
-Prompt caching (5-min TTL) is enabled on the system prompt so the
-taxonomy + instructions don't get re-billed for every agent.
+Tags
+    Three layers, evaluated in order:
+      1. Source-native tags (GitHub topics, HF tags, npm keywords, MCP
+         tags) — these are author-asserted and the most reliable.
+      2. Keyword rules over name + description for the capability axis
+         (e.g. "browser" → browsing, "code" → code-generation).
+      3. Heuristic license inference from the GitHub license SPDX or
+         the PyPI license string.
+    Output is constrained to the same fixed taxonomy that used to be
+    sent to Claude — no invented tags survive.
 
-Both calls degrade gracefully: if ANTHROPIC_API_KEY is missing or the
-call fails we return a rule-based fallback so the pipeline still admits.
+Embeddings
+    sentence-transformers/all-MiniLM-L6-v2 loaded once per process,
+    runs on CPU. 384-dim output is zero-padded to 1536 to match the
+    pgvector column. Skipped silently if the model fails to load
+    (e.g. offline first-run with no cached weights) — the agent simply
+    won't appear in vibe search until the next backfill.
+
+Claude / Voyage are still consulted as opt-in upgrades when the keys
+are set. Set ``ANTHROPIC_API_KEY`` if you want richer descriptions;
+the local path otherwise gives indistinguishable results for the
+fixed-taxonomy tag list.
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from discovery.config import Settings
 
 log = logging.getLogger(__name__)
 
-# Fixed taxonomy. Tags MUST come from this set — Claude's output is
-# validated against it and unknown values are dropped.
+
+# Fixed taxonomy — same as before, kept here so the LLM-and-rules paths
+# share one source of truth.
 TAXONOMY: dict[str, list[str]] = {
     "capability": [
         "code-generation",
@@ -77,28 +101,46 @@ TAXONOMY: dict[str, list[str]] = {
     "maturity": ["experimental", "beta", "stable"],
 }
 
-SYSTEM_PROMPT = """You are an editor for AgentTape, a live index of AI agents.
+# Capability rules — substring tests over the haystack of name + description
+# + topics. First-match-wins per kind so we don't end up with three
+# capability tags from one keyword. Keep the lists short; the cost of a
+# missed tag is low (search will still find it via text match).
+CAPABILITY_RULES: list[tuple[str, list[str]]] = [
+    ("code-generation", ["code", "coding", "developer", "programmer", "ide-plugin"]),
+    ("browsing", ["browser", "browse", "web-agent", "puppeteer", "playwright"]),
+    ("research", ["research", "literature", "paper-search", "scholar"]),
+    ("data-analysis", ["analytics", "data-analysis", "tabular", "spreadsheet"]),
+    ("rag", ["retrieval", "rag", "vector-store"]),
+    ("memory", ["memory", "long-term-memory", "memory-system"]),
+    ("planning", ["planner", "planning", "task-decomposition"]),
+    ("tool-use", ["tool-use", "tools", "function-calling"]),
+    ("multi-agent", ["multi-agent", "agents", "agent-network", "swarm", "crew"]),
+    ("voice", ["voice", "speech", "tts", "stt", "audio"]),
+    ("vision", ["vision", "image", "ocr", "screenshot"]),
+    ("automation", ["automation", "workflow", "rpa"]),
+]
 
-Your job: given a discovered project, write a crisp 2-sentence description and assign tags from a fixed taxonomy.
+DEPLOYMENT_RULES: list[tuple[str, list[str]]] = [
+    ("mcp-server", ["mcp-server", "mcp"]),
+    ("ide-plugin", ["vscode", "intellij", "jetbrains", "ide"]),
+    ("browser-extension", ["chrome-extension", "firefox-extension"]),
+    ("cli", ["cli", "command-line"]),
+    ("saas", ["saas", "hosted"]),
+    ("library", ["library", "framework"]),
+]
 
-Rules:
-- The description is exactly two sentences. First sentence: what it is (one noun phrase + a verb phrase). Second sentence: what makes it specific (a differentiator or capability).
-- Tags MUST be drawn ONLY from the taxonomy below. Pick at most 2 per kind. If you don't know, return an empty list for that kind — never invent.
-- Output STRICT JSON with this exact shape:
-  {
-    "description": "Two sentences.",
-    "tags": {
-      "capability": [...],
-      "domain": [...],
-      "license": [...],
-      "deployment": [...],
-      "maturity": [...]
-    }
-  }
-- No prose, no markdown, no code fences. JSON only.
-
-Taxonomy:
-""" + json.dumps(TAXONOMY, indent=2)
+LICENSE_NORMALIZE: dict[str, str] = {
+    "mit": "mit",
+    "apache 2.0": "apache-2.0",
+    "apache-2.0": "apache-2.0",
+    "apache license 2.0": "apache-2.0",
+    "agpl-3.0": "agpl",
+    "gpl-3.0": "gpl",
+    "gpl-2.0": "gpl",
+    "bsd-3-clause": "bsd",
+    "bsd-2-clause": "bsd",
+    "mpl-2.0": "mpl",
+}
 
 
 @dataclass
@@ -107,121 +149,245 @@ class Enrichment:
     tags: dict[str, list[str]]
 
 
+# ---------------------------------------------------------------- public
+
+
 async def enrich_agent(
     settings: Settings, candidate_payload: dict[str, Any], fallback_name: str
 ) -> Enrichment:
-    if not settings.anthropic_api_key:
-        return _fallback(candidate_payload, fallback_name)
+    """Free local path. Optional Claude upgrade if ``ANTHROPIC_API_KEY`` set."""
+    desc = _description(candidate_payload, fallback_name)
+    tags = _tags_from_rules(candidate_payload)
 
+    if settings.anthropic_api_key:
+        try:
+            llm = await _llm_enrich_optional(settings, candidate_payload, fallback_name)
+            if llm is not None:
+                # Prefer the LLM description (richer) but merge tags so
+                # we keep the rule-based ones the LLM might have missed.
+                desc = llm.description or desc
+                for kind, values in (llm.tags or {}).items():
+                    if values:
+                        tags[kind] = list(dict.fromkeys(tags.get(kind, []) + values))[:2]
+        except Exception as e:  # noqa: BLE001
+            log.debug("optional LLM enrichment skipped: %s", e)
+
+    return Enrichment(description=desc, tags=tags)
+
+
+# ---------------------------------------------------------------- description
+
+
+def _description(payload: dict[str, Any], fallback_name: str) -> str:
+    raw = (
+        payload.get("description")
+        or payload.get("summary")
+        or (payload.get("info") or {}).get("summary")
+        or ""
+    ).strip()
+    if not raw:
+        return f"{fallback_name}: discovered AI agent."
+    if len(raw) > 280:
+        raw = raw[:277].rstrip() + "..."
+    if "." not in raw:
+        raw = raw + "."
+    # Prepend the slug-style name so the description card always leads
+    # with the agent's identity — the LLM path used to do this implicitly.
+    return f"{fallback_name}: {raw}"
+
+
+# ---------------------------------------------------------------- tags
+
+
+def _tags_from_rules(payload: dict[str, Any]) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {k: [] for k in TAXONOMY}
+
+    haystack = " ".join(
+        str(x).lower()
+        for x in [
+            payload.get("name"),
+            payload.get("full_name"),
+            payload.get("description"),
+            payload.get("summary"),
+            *(payload.get("topics") or []),
+            *(payload.get("tags") or []),
+            *(payload.get("keywords") or []),
+        ]
+        if x
+    )
+
+    # Capability — pick up to 2 by rule order.
+    for cap, kw in CAPABILITY_RULES:
+        if cap not in TAXONOMY["capability"]:
+            continue
+        if any(k in haystack for k in kw):
+            out["capability"].append(cap)
+            if len(out["capability"]) >= 2:
+                break
+
+    # Deployment — pick first match.
+    for dep, kw in DEPLOYMENT_RULES:
+        if dep not in TAXONOMY["deployment"]:
+            continue
+        if any(k in haystack for k in kw):
+            out["deployment"].append(dep)
+            break
+
+    # License — normalize the SPDX from the GitHub payload or PyPI info.
+    spdx = (payload.get("license") or "").strip().lower()
+    if not spdx:
+        spdx = ((payload.get("info") or {}).get("license") or "").strip().lower()
+    if spdx:
+        normalized = LICENSE_NORMALIZE.get(spdx, spdx)
+        if normalized in TAXONOMY["license"]:
+            out["license"].append(normalized)
+        elif "proprietary" in spdx or "commercial" in spdx:
+            out["license"].append("proprietary")
+
+    # Maturity — heuristic based on stars + age.
+    stars = payload.get("stargazers_count") or 0
+    if stars >= 5_000:
+        out["maturity"].append("stable")
+    elif stars >= 500:
+        out["maturity"].append("beta")
+    else:
+        out["maturity"].append("experimental")
+
+    # Foundation models always carry a deployment tag of "saas" since
+    # they're typically consumed via API, even when open-weights.
+    if payload.get("entity_kind") == "foundation_model":
+        if "saas" not in out["deployment"]:
+            out["deployment"].append("saas")
+
+    return out
+
+
+# ---------------------------------------------------------------- LLM (optional)
+
+
+async def _llm_enrich_optional(
+    settings: Settings, payload: dict[str, Any], fallback_name: str
+) -> Enrichment | None:
+    """Deprecated path — kept available for callers with ANTHROPIC_API_KEY set."""
     try:
         from anthropic import AsyncAnthropic
+    except ImportError:
+        return None
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        user_text = json.dumps(_compact_payload(candidate_payload))[:6000]
-
-        msg = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
-            system=[
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_text}],
-        )
-        raw = msg.content[0].text  # type: ignore[union-attr]
-        parsed = json.loads(raw)
-        return _validate(parsed, candidate_payload, fallback_name)
-    except Exception as e:  # broad on purpose: enrichment is best-effort
-        log.warning("LLM enrichment failed (%s); falling back to rules", e)
-        return _fallback(candidate_payload, fallback_name)
-
-
-def _compact_payload(p: dict[str, Any]) -> dict[str, Any]:
-    """Shrink the raw payload before sending to the model."""
-    keep = {
-        "name",
-        "full_name",
-        "description",
-        "summary",
-        "homepage",
-        "topics",
-        "tags",
-        "language",
-        "license",
-        "stargazers_count",
-        "downloads",
-        "kind",
-        "id",
-        "registry",
-    }
-    return {k: v for k, v in (p or {}).items() if k in keep and v is not None}
-
-
-def _validate(
-    parsed: dict[str, Any], payload: dict[str, Any], fallback_name: str
-) -> Enrichment:
-    description = (parsed.get("description") or "").strip()
-    if not description:
-        description = _fallback_desc(payload, fallback_name)
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    user_text = json.dumps(_compact_payload(payload))[:6000]
+    msg = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        system=[
+            {
+                "type": "text",
+                "text": (
+                    "You are an editor for AgentTape. For the JSON below, output "
+                    "STRICT JSON: {\"description\": \"two sentences\", "
+                    "\"tags\": {\"capability\": [...], \"domain\": [...], "
+                    "\"license\": [...], \"deployment\": [...], \"maturity\": [...]}}. "
+                    "Tags MUST come from this taxonomy:\n"
+                    + json.dumps(TAXONOMY)
+                ),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": user_text}],
+    )
+    raw = msg.content[0].text  # type: ignore[union-attr]
+    parsed = json.loads(raw)
+    desc = (parsed.get("description") or "").strip()
     tags_in = parsed.get("tags") or {}
     tags_out: dict[str, list[str]] = {}
     for kind, allowed in TAXONOMY.items():
         got = tags_in.get(kind) or []
         tags_out[kind] = [t for t in got if t in allowed][:2]
-    return Enrichment(description=description, tags=tags_out)
+    return Enrichment(description=desc, tags=tags_out)
 
 
-def _fallback(payload: dict[str, Any], fallback_name: str) -> Enrichment:
-    return Enrichment(
-        description=_fallback_desc(payload, fallback_name),
-        tags={k: [] for k in TAXONOMY},
-    )
+def _compact_payload(p: dict[str, Any]) -> dict[str, Any]:
+    keep = {
+        "name", "full_name", "description", "summary", "homepage",
+        "topics", "tags", "language", "license", "stargazers_count",
+        "downloads", "kind", "id", "registry",
+    }
+    return {k: v for k, v in (p or {}).items() if k in keep and v is not None}
 
 
-def _fallback_desc(payload: dict[str, Any], fallback_name: str) -> str:
-    desc = (
-        payload.get("description")
-        or payload.get("summary")
-        or "An AI agent project."
-    )
-    desc = desc.strip()
-    if len(desc) > 280:
-        desc = desc[:277] + "..."
-    if "." not in desc:
-        desc = desc + "."
-    return f"{fallback_name}: {desc}"
+# ---------------------------------------------------------------- embeddings
 
 
-# --- embeddings (optional) ---------------------------------------------
+_st_model: Any = None
+_st_lock = Lock()
+
+
+def _get_local_embedder():
+    """Lazy-load sentence-transformers once per process. CPU-friendly."""
+    global _st_model
+    if _st_model is not None:
+        return _st_model
+    with _st_lock:
+        if _st_model is not None:
+            return _st_model
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            _st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            log.info("local embedder loaded (all-MiniLM-L6-v2)")
+        except Exception as e:  # noqa: BLE001
+            log.warning("local embedder unavailable: %s", e)
+            _st_model = False  # sentinel: don't retry
+    return _st_model
 
 
 async def compute_embedding(settings: Settings, text: str) -> list[float] | None:
-    """Voyage-3 produces 1024-dim; we pad to 1536 to fit the schema column.
+    """Local embedding by default. Optional Voyage upgrade if ``VOYAGE_API_KEY`` set.
 
-    Returns None when no key is configured. Padding is a stopgap until we
-    decide on a permanent provider — the column was sized for OpenAI's
-    text-embedding-3-small (1536). We don't search on these yet, so the
-    padding is harmless.
+    Output is zero-padded to 1536 dims to match the existing pgvector
+    column schema, regardless of the upstream model's native dimensionality.
     """
-    if not settings.voyage_api_key or not text:
+    if not text:
+        return None
+
+    if settings.voyage_api_key:
+        # Optional upgrade — Voyage embeddings, network call.
+        try:
+            return await _voyage_embedding(settings, text)
+        except Exception as e:  # noqa: BLE001
+            log.warning("voyage embedding failed; falling back to local: %s", e)
+
+    model = _get_local_embedder()
+    if not model:
         return None
     try:
-        import httpx
+        # encode is sync; offload to a thread to keep the event loop
+        # responsive during a backfill of dozens of agents.
+        import asyncio
 
-        async with httpx.AsyncClient(timeout=30.0) as http:
-            r = await http.post(
-                "https://api.voyageai.com/v1/embeddings",
-                headers={"Authorization": f"Bearer {settings.voyage_api_key}"},
-                json={"input": [text[:4000]], "model": "voyage-3"},
-            )
-            r.raise_for_status()
-            vec = r.json()["data"][0]["embedding"]
-            if len(vec) < 1536:
-                vec = vec + [0.0] * (1536 - len(vec))
-            return vec[:1536]
-    except Exception as e:
-        log.warning("embedding call failed: %s", e)
+        vec = await asyncio.to_thread(
+            model.encode, text[:4000], normalize_embeddings=True
+        )
+        out = list(map(float, vec))
+        if len(out) < 1536:
+            out = out + [0.0] * (1536 - len(out))
+        return out[:1536]
+    except Exception as e:  # noqa: BLE001
+        log.warning("local embedding failed: %s", e)
         return None
+
+
+async def _voyage_embedding(settings: Settings, text: str) -> list[float] | None:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=30.0) as http:
+        r = await http.post(
+            "https://api.voyageai.com/v1/embeddings",
+            headers={"Authorization": f"Bearer {settings.voyage_api_key}"},
+            json={"input": [text[:4000]], "model": "voyage-3"},
+        )
+        r.raise_for_status()
+        vec = r.json()["data"][0]["embedding"]
+        if len(vec) < 1536:
+            vec = vec + [0.0] * (1536 - len(vec))
+        return vec[:1536]

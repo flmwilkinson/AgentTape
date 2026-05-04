@@ -22,7 +22,9 @@ class ScoreEnvelope(BaseModel):
     """The only way to serialize a score on the wire.
 
     Always carries all four pillars. ``quality`` is nullable because
-    "Unrated" is its own state distinct from a low score.
+    "Unrated" is its own state distinct from a low score. ``score_24h_ago``
+    and ``delta_24h`` are null when the agent has fewer than 24 hours of
+    score history — the UI must distinguish "no data" from "zero change".
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -34,6 +36,11 @@ class ScoreEnvelope(BaseModel):
     community: float = Field(..., ge=0.0, le=100.0)
     manipulation_resistance: float = Field(..., ge=0.0, le=1.0)
     computed_at: datetime
+    # 24-hour delta. Null = no history old enough to compare. Zero = compared
+    # but unchanged. The UI must surface a "—" for null and an explicit "0"
+    # or hidden chip for zero so users can tell them apart.
+    score_24h_ago: float | None = None
+    delta_24h: float | None = None
 
 
 class ScoreEnvelopeOptional(BaseModel):
@@ -48,6 +55,8 @@ class ScoreEnvelopeOptional(BaseModel):
     community: float | None = None
     manipulation_resistance: float | None = None
     computed_at: datetime | None = None
+    score_24h_ago: float | None = None
+    delta_24h: float | None = None
 
 
 # ---------------------------------------------------------------- agent
@@ -72,6 +81,7 @@ class AgentSummary(BaseModel):
     discovered_at: datetime
     homepage_url: str | None
     github_repo: str | None
+    entity_kind: str = "application"
     score: ScoreEnvelopeOptional
 
 

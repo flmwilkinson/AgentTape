@@ -6,6 +6,7 @@ from discovery.scouts.github_search import GithubSearchScout
 from discovery.scouts.hf_trending import HFTrendingScout
 from discovery.scouts.hn_firehose import HNFirehoseScout
 from discovery.scouts.mcp_registries import MCPRegistriesScout
+from discovery.scouts.openrouter_models import OpenRouterModelsScout
 from discovery.scouts.package_search import PackageSearchScout
 
 ALL_SCOUTS: list[type[Scout]] = [
@@ -15,6 +16,7 @@ ALL_SCOUTS: list[type[Scout]] = [
     HNFirehoseScout,
     ArxivScout,
     PackageSearchScout,
+    OpenRouterModelsScout,
 ]
 
 SCOUT_BY_NAME: dict[str, type[Scout]] = {cls.name: cls for cls in ALL_SCOUTS}

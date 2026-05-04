@@ -4,22 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ActivitySquare,
-  Compass,
+  Cpu,
   Home,
   Search,
-  StickyNote,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Mobile-only bottom tab bar. The labels deliberately echo the desktop
-// nav (Tape / Indexes / Search / Discovery / Methodology) but use icons
-// so they fit on a phone.
+// Mobile-only bottom tab bar. Five tabs max — Methodology lives in
+// the footer / desktop top nav so we don't burn a slot on it here.
+//
+// Labels mirror the desktop nav so the mental model is the same on
+// either device:
+//   Floor    — overview
+//   Indexes  — sector + foundation-model baskets
+//   Models   — foundation-model board
+//   Trending — biggest movers
+//   Search
 const TABS = [
-  { href: "/", label: "Tape", icon: Home },
+  { href: "/", label: "Floor", icon: Home },
   { href: "/indexes", label: "Indexes", icon: ActivitySquare },
+  { href: "/models", label: "Models", icon: Cpu },
+  { href: "/trending", label: "Trending", icon: TrendingUp },
   { href: "/search", label: "Search", icon: Search },
-  { href: "/discovery", label: "Discovery", icon: Compass },
-  { href: "/methodology", label: "Method", icon: StickyNote },
 ];
 
 export function NavMobile() {

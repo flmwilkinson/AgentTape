@@ -27,7 +27,7 @@ export default function MethodologyPage() {
           A seed list would bias the index toward whatever the maintainers
           already knew about. The point of AgentTape is the opposite — to
           surface the things you have not heard of yet, the morning they start
-          to matter. The <Link href="/discovery" className="text-primary underline-offset-2 hover:underline">discovery service</Link> sweeps GitHub,
+          to matter. The <Link href="/new" className="text-primary underline-offset-2 hover:underline">discovery service</Link> sweeps GitHub,
           Hugging Face, MCP registries, npm and PyPI, arXiv, and Hacker News
           on its own schedule. Admitted agents appear in the index without
           human intervention.

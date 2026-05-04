@@ -60,26 +60,46 @@ OSI_APPROVED_LICENSES = ["mit", "apache-2.0", "bsd", "mpl", "agpl", "gpl"]
 
 
 CATALOG: list[IndexDef] = [
+    # Flagship — top 100 application agents.
     IndexDef(
         slug="tape-100",
         name="TAPE-100",
         methodology_md=(
-            "The 100 admitted agents with the highest AgentScore.\n"
+            "The 100 application agents with the highest AgentScore.\n"
+            "Foundation models live in FM-50; this index is application-only.\n"
             "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
         ),
         rebalance_frequency="weekly",
-        eligibility_rules={"top_n": 100},
+        eligibility_rules={"top_n": 100, "entity_kind": "application"},
     ),
+    # Foundation-model basket — same scoring formula but only models.
+    IndexDef(
+        slug="fm-50",
+        name="FM-50",
+        methodology_md=(
+            "Top 50 foundation models by AgentScore. Sourced from the\n"
+            "openrouter.ai catalogue and scored against the same four\n"
+            "pillars as application agents — Quality dominates here\n"
+            "because benchmarks ARE the product for foundation models.\n"
+            "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
+        ),
+        rebalance_frequency="weekly",
+        eligibility_rules={"top_n": 50, "entity_kind": "foundation_model"},
+    ),
+    # Sector indexes — application agents grouped by capability /
+    # deployment / license. All scope themselves to entity_kind=application
+    # so foundation models don't pollute the sector lists.
     IndexDef(
         slug="code-25",
         name="CODE-25",
         methodology_md=(
-            "Top 25 agents with a `code-generation` capability tag.\n"
+            "Top 25 application agents with a `code-generation` capability tag.\n"
             "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
         ),
         rebalance_frequency="weekly",
         eligibility_rules={
             "top_n": 25,
+            "entity_kind": "application",
             "tag": {"kind": "capability", "value": "code-generation"},
         },
     ),
@@ -87,12 +107,13 @@ CATALOG: list[IndexDef] = [
         slug="web-25",
         name="WEB-25",
         methodology_md=(
-            "Top 25 agents with a `browsing` capability tag.\n"
+            "Top 25 application agents with a `browsing` capability tag.\n"
             "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
         ),
         rebalance_frequency="weekly",
         eligibility_rules={
             "top_n": 25,
+            "entity_kind": "application",
             "tag": {"kind": "capability", "value": "browsing"},
         },
     ),
@@ -100,13 +121,14 @@ CATALOG: list[IndexDef] = [
         slug="oss-50",
         name="OSS-50",
         methodology_md=(
-            "Top 50 agents whose license tag is OSI-approved (MIT, Apache-2.0, "
-            "BSD, MPL, AGPL, GPL).\n"
+            "Top 50 application agents whose license tag is OSI-approved\n"
+            "(MIT, Apache-2.0, BSD, MPL, AGPL, GPL).\n"
             "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
         ),
         rebalance_frequency="weekly",
         eligibility_rules={
             "top_n": 50,
+            "entity_kind": "application",
             "license_in": OSI_APPROVED_LICENSES,
         },
     ),
@@ -114,12 +136,13 @@ CATALOG: list[IndexDef] = [
         slug="mcp-25",
         name="MCP-25",
         methodology_md=(
-            "Top 25 agents with deployment tag `mcp-server`.\n"
+            "Top 25 application agents with deployment tag `mcp-server`.\n"
             "Equal-weighted v1. Rebalances Mondays 03:00 UTC."
         ),
         rebalance_frequency="weekly",
         eligibility_rules={
             "top_n": 25,
+            "entity_kind": "application",
             "tag": {"kind": "deployment", "value": "mcp-server"},
         },
     ),
@@ -178,6 +201,13 @@ async def _candidates(
     rules = definition.eligibility_rules
     where = ["a.eligibility_status = 'admitted'"]
     params: dict[str, Any] = {}
+
+    # entity_kind filter — application vs foundation_model vs framework /
+    # mcp_server. Defaults to application so legacy index defs without
+    # this rule keep their old behavior.
+    entity_kind = rules.get("entity_kind", "application")
+    where.append("a.entity_kind = :entity_kind")
+    params["entity_kind"] = entity_kind
 
     sql_join = ""
     tag_rule = rules.get("tag")
@@ -285,20 +315,25 @@ async def rebalance_index(
     current = await _active_members(session, index_id)
     diff = _diff(current, proposed)
 
-    # Apply: mark removals as removed, upsert proposals, add new rows.
+    # Apply: mark every active member as removed at rebalance time, then
+    # insert one fresh row per proposed agent. This gives each rebalance
+    # a clean snapshot — the old "leave the existing row alone if the
+    # agent is still in the proposed set" behavior could double-count
+    # if the same agent appeared in successive rebalances at different
+    # added_at timestamps (the PK includes added_at). The trade-off is
+    # that "added_at" no longer means "first added"; for that history
+    # the rebalances table is the source of truth.
     now = datetime.now(UTC)
-    for aid in current:
-        if aid not in proposed:
-            await session.execute(
-                text(
-                    """
-                    UPDATE index_members
-                    SET removed_at = :now
-                    WHERE index_id = :iid AND agent_id = :aid AND removed_at IS NULL
-                    """
-                ),
-                {"now": now, "iid": index_id, "aid": aid},
-            )
+    await session.execute(
+        text(
+            """
+            UPDATE index_members
+            SET removed_at = :now
+            WHERE index_id = :iid AND removed_at IS NULL
+            """
+        ),
+        {"now": now, "iid": index_id},
+    )
     for aid, w in proposed.items():
         await session.execute(
             text(

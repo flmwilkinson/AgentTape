@@ -16,16 +16,38 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # field list and the dict keys stay in sync.
 AGENT_COLS = (
     "a.id, a.slug, a.name, a.description, a.discovered_via, a.discovered_at, "
-    "a.homepage_url, a.github_repo"
+    "a.homepage_url, a.github_repo, a.entity_kind"
 )
 SCORE_COLS = (
     "cs.agent_score, cs.adoption, cs.quality, cs.momentum, cs.community, "
     "cs.manipulation_resistance, cs.computed_at"
 )
+# 24h-old score lookup. Computed in a LATERAL subquery — for each agent
+# we grab the most recent score row strictly older than now()-24h. NULL
+# when an agent has fewer than 24h of history (the UI shows "—").
+SCORE_24H_LATERAL = (
+    "LEFT JOIN LATERAL ("
+    "  SELECT s.agent_score AS score_24h_ago FROM scores s "
+    "  WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours' "
+    "  ORDER BY s.computed_at DESC LIMIT 1"
+    ") s24 ON true"
+)
+SCORE_24H_COL = "s24.score_24h_ago"
 
 
 def _row_to_agent_summary(row: Any) -> dict[str, Any]:
-    """Map a SELECT AGENT_COLS, SCORE_COLS row to the AgentSummary shape."""
+    """Map a SELECT AGENT_COLS, SCORE_COLS, SCORE_24H_COL row to the AgentSummary shape."""
+    score_now = float(row.agent_score) if row.agent_score is not None else None
+    score_24h = (
+        float(row.score_24h_ago)
+        if getattr(row, "score_24h_ago", None) is not None
+        else None
+    )
+    delta_24h = (
+        score_now - score_24h
+        if score_now is not None and score_24h is not None
+        else None
+    )
     return {
         "id": row.id,
         "slug": row.slug,
@@ -35,8 +57,9 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         "discovered_at": row.discovered_at,
         "homepage_url": row.homepage_url,
         "github_repo": row.github_repo,
+        "entity_kind": getattr(row, "entity_kind", "application"),
         "score": {
-            "agent_score": float(row.agent_score) if row.agent_score is not None else None,
+            "agent_score": score_now,
             "adoption": float(row.adoption) if row.adoption is not None else None,
             "quality": float(row.quality) if row.quality is not None else None,
             "momentum": float(row.momentum) if row.momentum is not None else None,
@@ -47,6 +70,10 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
                 else None
             ),
             "computed_at": row.computed_at,
+            # New: 24-hour score delta. A 0 means "computed but unchanged",
+            # NULL means "no history old enough" — the UI must distinguish.
+            "score_24h_ago": score_24h,
+            "delta_24h": delta_24h,
         },
     }
 
@@ -90,9 +117,14 @@ async def list_agents(
     }.get(sort, "cs.agent_score DESC NULLS LAST")
 
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         {join}
         WHERE {' AND '.join(where)}
         ORDER BY {sort_clause}
@@ -103,6 +135,11 @@ async def list_agents(
     total_sql = f"""
         SELECT count(*) FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         {join}
         WHERE {' AND '.join(where)}
     """
@@ -118,12 +155,17 @@ async def get_agent_by_slug(
     session: AsyncSession, slug: str
 ) -> dict[str, Any] | None:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
                a.hf_org, a.hf_model_ids, a.package_names, a.arxiv_ids,
                a.eligibility_status, a.eligibility_score,
                a.eligibility_reasons, a.manipulation_flags
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE a.slug = :slug
     """
     row = (await session.execute(text(sql), {"slug": slug})).first()
@@ -242,10 +284,15 @@ async def similar_agents(
     if not flag:
         return []
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
                1 - (a.embedding <=> base.embedding) AS similarity
         FROM agents base, agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE base.id = :id
           AND a.id != :id
           AND a.eligibility_status = 'admitted'
@@ -322,10 +369,15 @@ async def get_index_detail(
         return None
 
     members_sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, im.weight, im.added_at
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, im.weight, im.added_at
         FROM index_members im
         JOIN agents a ON a.id = im.agent_id
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE im.index_id = :iid AND im.removed_at IS NULL
         ORDER BY cs.agent_score DESC NULLS LAST
     """
@@ -442,11 +494,16 @@ async def movers(
             SELECT agent_id, now_score, then_score, (now_score - then_score) AS delta
             FROM base WHERE rn = 1
         )
-        SELECT {AGENT_COLS}, {SCORE_COLS},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
                d.delta, d.then_score
         FROM deltas d
         JOIN agents a ON a.id = d.agent_id
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE a.eligibility_status = 'admitted'
         ORDER BY abs(d.delta) DESC
         LIMIT :limit
@@ -472,9 +529,14 @@ async def text_search(
     session: AsyncSession, *, q: str, limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE a.eligibility_status = 'admitted'
           AND (a.slug ILIKE :q OR a.name ILIKE :q OR a.description ILIKE :q)
         ORDER BY cs.agent_score DESC NULLS LAST
@@ -491,10 +553,15 @@ async def vibe_search(
     session: AsyncSession, *, embedding: list[float], limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS},
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL},
                1 - (a.embedding <=> CAST(:v AS vector)) AS similarity
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE a.eligibility_status = 'admitted'
           AND a.embedding IS NOT NULL
         ORDER BY a.embedding <=> CAST(:v AS vector) ASC
@@ -595,9 +662,14 @@ async def recent_admissions(
     session: AsyncSession, *, limit: int
 ) -> list[dict[str, Any]]:
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS score_24h_ago FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) s24 ON true
         WHERE a.eligibility_status = 'admitted'
         ORDER BY a.discovered_at DESC
         LIMIT :limit
