@@ -86,7 +86,7 @@ export default function ArticlesIndexPage() {
           you want covered. When the draft comes back, paste the body
           into{" "}
           <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-            apps/web/lib/articles.ts
+            apps/web/lib/articles.tsx
           </code>
           .
         </p>
