@@ -7,6 +7,7 @@ import { formatScore, relativeTime } from "@/lib/format";
 import { AgentBreakdownChart } from "@/components/agent-breakdown-chart";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
+import { FmFactsPanel } from "@/components/fm-facts-panel";
 import { ScoreContributors } from "@/components/score-contributors";
 import { TickerCard } from "@/components/ticker-card";
 
@@ -118,6 +119,13 @@ export default async function AgentPage({
             this agent first listed. Reading the lines together is how
             you tell which pillar carried (or dragged) the headline. */}
         <AgentBreakdownChart slug={slug} />
+
+        {/* Foundation-model facts (only renders for FMs). The panel
+            surfaces the OpenRouter metadata the score is derived from
+            so a reader can sanity-check the headline. */}
+        {agent.entity_kind === "foundation_model" && (
+          <FmFactsPanel facts={agent.facts ?? {}} />
+        )}
 
         {/* What moved this score in the last 24 hours — rules-based
             attribution surfaced from the same signals the score uses. */}

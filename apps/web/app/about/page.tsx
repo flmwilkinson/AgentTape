@@ -218,7 +218,7 @@ export default async function AboutPage() {
               >
                 {a.name}
                 <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {a.entity_kind === "foundation_model" ? "model" : "app"}
+                  {a.entity_kind === "foundation_model" ? "model" : "agent"}
                 </span>
               </Link>
               <span className="num text-sm font-semibold">

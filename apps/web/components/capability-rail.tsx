@@ -62,7 +62,7 @@ export async function CapabilityRail() {
               <div className="text-xs text-muted-foreground">{cap.blurb}</div>
             </div>
             <Link
-              href={`/search?tag_kind=capability&tag_value=${cap.slug}`}
+              href={`/search?kind=capability&value=${cap.slug}`}
               className="text-[10px] font-mono uppercase tracking-wider text-primary hover:underline"
             >
               All →

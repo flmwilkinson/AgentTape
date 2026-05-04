@@ -15,6 +15,16 @@ from agenttape_api.schemas import SearchHit, SearchResult
 router = APIRouter(prefix="/search", tags=["search"])
 
 
+@router.get("/suggest")
+async def search_suggest(
+    q: str = Query(..., min_length=1, max_length=100),
+    limit: int = Query(8, ge=1, le=20),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> list[dict]:
+    """Fast prefix-prioritised autocomplete. Returns name+slug+kind only."""
+    return await queries.search_suggest(session, q=q, limit=limit)
+
+
 @router.get("", response_model=SearchResult)
 async def search(
     q: str = Query(..., min_length=1, max_length=200),

@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { api } from "@/lib/api-client";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
+import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
@@ -7,27 +12,105 @@ import { WatchToggle } from "@/components/watch-toggle";
 
 // Foundation-model board.
 //
-// Pulls every admitted agent whose `entity_kind = 'foundation_model'`.
-// (The filter happens server-side via the FM-50 index when populated;
-// we additionally show the full set here, sorted by score.)
+// Pulls every admitted agent whose entity_kind is foundation_model
+// (~370 today) and lets the reader narrow with three filters that
+// match the questions a buyer actually asks: who makes it, am I
+// paying, can it reason?
+//
+// Filters are client-side because the data already fits in one
+// request and slicing is faster than a server round-trip per change.
 
-export const dynamic = "force-dynamic";
-export const metadata = { title: "Models" };
+const FAMILIES = [
+  { v: "", label: "Any" },
+  { v: "openai", label: "OpenAI" },
+  { v: "anthropic", label: "Anthropic" },
+  { v: "google", label: "Google" },
+  { v: "meta-llama", label: "Meta" },
+  { v: "mistralai", label: "Mistral" },
+  { v: "qwen", label: "Qwen" },
+  { v: "deepseek", label: "DeepSeek" },
+  { v: "x-ai", label: "xAI" },
+  { v: "nvidia", label: "NVIDIA" },
+  { v: "other", label: "Other" },
+] as const;
 
-export default async function ModelsPage() {
-  // FM-50 already publishes the curated, ranked top-50 foundation
-  // models. We render straight from the index constituents so the
-  // ordering matches /indexes/fm-50 exactly — no need to refilter
-  // /agents (which is capped at the application-agent population).
-  const fmIndex = await api.getIndex("fm-50").catch(() => null);
-  const models = (fmIndex?.constituents ?? [])
-    .map((c) => c.agent)
-    .sort(
-      (a, b) => (b.score?.agent_score ?? 0) - (a.score?.agent_score ?? 0),
-    );
+const TIERS = [
+  { v: "", label: "Any" },
+  { v: "free", label: "Free" },
+  { v: "paid", label: "Paid" },
+] as const;
+
+const REASONING = [
+  { v: "", label: "All" },
+  { v: "reasoning", label: "Reasoning" },
+  { v: "non-reasoning", label: "Standard" },
+] as const;
+
+const REASONING_TOKENS = [
+  "reasoning",
+  "thinking",
+  "o1",
+  "o3",
+  "o4",
+  "o5",
+  "deepseek-r1",
+  "deepseek-v3-reasoner",
+];
+
+function familyOf(slug: string): string {
+  // Slugs derive from openrouter ids — "openai/gpt-4.1-nano" becomes
+  // "openai-gpt-4-1-nano". Match multi-word providers (x-ai,
+  // meta-llama) first so the simple split-by-dash doesn't truncate
+  // them to "x" or "meta".
+  const lower = slug.toLowerCase();
+  for (const f of FAMILIES) {
+    if (f.v && f.v !== "other" && lower.startsWith(f.v + "-")) return f.v;
+  }
+  return "other";
+}
+
+function isFree(name: string, slug: string): boolean {
+  return /\(free\)/i.test(name) || /-free$/.test(slug) || /:free/.test(slug);
+}
+
+function isReasoning(name: string, slug: string): boolean {
+  const blob = `${name} ${slug}`.toLowerCase();
+  return REASONING_TOKENS.some((tok) => blob.includes(tok));
+}
+
+export default function ModelsPage() {
+  const [family, setFamily] = useState<string>("");
+  const [tier, setTier] = useState<string>("");
+  const [reasoning, setReasoning] = useState<string>("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["fm-list"],
+    queryFn: () =>
+      api.listAgents({
+        entity_kind: "foundation_model",
+        sort: "score",
+        limit: 500,
+      }),
+  });
+
+  const all = data?.items ?? [];
+  const filtered = useMemo(() => {
+    let out: AgentSummary[] = all;
+    if (family) {
+      out = out.filter((m) => familyOf(m.slug) === family);
+    }
+    if (tier === "free") out = out.filter((m) => isFree(m.name, m.slug));
+    if (tier === "paid") out = out.filter((m) => !isFree(m.name, m.slug));
+    if (reasoning === "reasoning") {
+      out = out.filter((m) => isReasoning(m.name, m.slug));
+    } else if (reasoning === "non-reasoning") {
+      out = out.filter((m) => !isReasoning(m.name, m.slug));
+    }
+    return out;
+  }, [all, family, tier, reasoning]);
 
   return (
-    <div className="container py-8 md:py-12 space-y-10">
+    <div className="container py-8 md:py-12 space-y-8">
       <header>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Foundation models
@@ -36,22 +119,48 @@ export default async function ModelsPage() {
           The model board.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground md:text-base">
-          Foundation models tracked as their own stocks — distinct from
-          application agents because the inputs that matter (benchmark
-          performance, context length, openness, pricing) differ from
-          adoption-driven application metrics. The flagship index here is{" "}
-          <Link href="/indexes/fm-50" className="text-primary hover:underline">FM-50</Link>.
+          Every foundation model AgentTape tracks — sourced from the
+          OpenRouter catalogue, scored by context, pricing, provider
+          tier and modality. The flagship index is{" "}
+          <Link href="/indexes/fm-50" className="text-primary hover:underline">
+            FM-50
+          </Link>
+          .
         </p>
       </header>
 
-      {models.length === 0 ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <Toggle
+          label="Family"
+          value={family}
+          onChange={setFamily}
+          options={FAMILIES.map((f) => ({ v: f.v, label: f.label }))}
+        />
+        <Toggle
+          label="Pricing"
+          value={tier}
+          onChange={setTier}
+          options={TIERS.map((t) => ({ v: t.v, label: t.label }))}
+        />
+        <Toggle
+          label="Mode"
+          value={reasoning}
+          onChange={setReasoning}
+          options={REASONING.map((r) => ({ v: r.v, label: r.label }))}
+        />
+        <span className="ml-auto text-xs text-muted-foreground">
+          {filtered.length} of {all.length} models
+        </span>
+      </div>
+
+      {isLoading ? (
+        <section className="rounded-md border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+          Loading models…
+        </section>
+      ) : filtered.length === 0 ? (
         <section className="rounded-md border border-dashed border-border bg-card p-8 text-center">
-          <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            No models yet
-          </div>
-          <p className="editorial mt-3 max-w-prose mx-auto text-base leading-relaxed text-muted-foreground">
-            The foundation-model board is warming up. Models stream in from
-            the OpenRouter catalogue on a daily schedule — check back shortly.
+          <p className="text-sm text-muted-foreground">
+            No models match these filters. Try clearing one.
           </p>
         </section>
       ) : (
@@ -71,7 +180,7 @@ export default async function ModelsPage() {
               </tr>
             </thead>
             <tbody>
-              {models.map((m, i) => (
+              {filtered.map((m, i) => (
                 <tr key={m.id} className="border-b border-border last:border-b-0">
                   <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                     #{m.score?.rank_now ?? i + 1}
@@ -84,7 +193,9 @@ export default async function ModelsPage() {
                       {m.name}
                     </Link>
                     <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {m.discovered_via.replace(/_/g, " ")}
+                      {familyOf(m.slug)}
+                      {isFree(m.name, m.slug) && " · free"}
+                      {isReasoning(m.name, m.slug) && " · reasoning"}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -98,7 +209,11 @@ export default async function ModelsPage() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {m.score?.delta_24h != null ? (
-                      <MoverChip delta={m.score.delta_24h} unit="score" variant="outline" />
+                      <MoverChip
+                        delta={m.score.delta_24h}
+                        unit="score"
+                        variant="outline"
+                      />
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
@@ -107,7 +222,9 @@ export default async function ModelsPage() {
                     {m.score?.adoption?.toFixed(1) ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
-                    {m.score?.quality === null ? "Unrated" : m.score?.quality?.toFixed(1) ?? "—"}
+                    {m.score?.quality === null
+                      ? "Unrated"
+                      : m.score?.quality?.toFixed(1) ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-right hidden lg:table-cell">
                     {m.score?.momentum?.toFixed(1) ?? "—"}
@@ -122,5 +239,42 @@ export default async function ModelsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+function Toggle({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { v: string; label: string }[];
+}) {
+  return (
+    <label className="inline-flex items-center gap-2">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="inline-flex flex-wrap rounded-md border border-border bg-card p-0.5">
+        {options.map((o) => (
+          <button
+            key={o.v || "any"}
+            type="button"
+            onClick={() => onChange(o.v)}
+            className={cn(
+              "rounded-sm px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors",
+              value === o.v
+                ? "bg-subtle text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </span>
+    </label>
   );
 }

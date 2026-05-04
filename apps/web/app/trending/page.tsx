@@ -19,7 +19,7 @@ import { WatchToggle } from "@/components/watch-toggle";
 const WINDOWS = ["1h", "1d", "7d", "30d"] as const;
 const KINDS = [
   { v: "all", label: "All" },
-  { v: "application", label: "Apps" },
+  { v: "application", label: "Agents" },
   { v: "foundation_model", label: "Models" },
 ] as const;
 
@@ -83,7 +83,7 @@ export default function TrendingPage() {
           Ranked by absolute AgentScore change over the window. Filter by kind,
           capability, or deployment to slice the moves you actually care about.
           The arrow column is rank-movement in the last 24 hours within the
-          kind (apps vs foundation models keep separate ladders).
+          kind (agents vs foundation models keep separate ladders).
         </p>
       </div>
 
@@ -173,7 +173,7 @@ export default function TrendingPage() {
                     {m.agent.name}
                   </Link>
                   <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {m.agent.entity_kind === "foundation_model" ? "model" : "app"}
+                    {m.agent.entity_kind === "foundation_model" ? "model" : "agent"}
                     {" · "}
                     {m.agent.discovered_via.replace(/_/g, " ")}
                   </div>

@@ -95,7 +95,7 @@ export default function WatchlistPage() {
                         {a.name}
                       </Link>
                       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {a.entity_kind === "foundation_model" ? "model" : "app"}
+                        {a.entity_kind === "foundation_model" ? "model" : "agent"}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">

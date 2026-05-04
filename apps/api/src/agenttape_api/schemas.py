@@ -105,6 +105,9 @@ class AgentDetail(AgentSummary):
     eligibility_reasons: dict[str, Any] | None
     manipulation_flags: dict[str, Any] | None
     tags: list[TagOut]
+    # Source-of-truth metadata not on the row itself (e.g. OpenRouter
+    # context_length, pricing, modality for foundation models).
+    facts: dict[str, Any] = Field(default_factory=dict)
 
 
 class SimilarAgent(BaseModel):

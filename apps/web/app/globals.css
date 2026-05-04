@@ -94,6 +94,15 @@
   * {
     @apply border-border;
   }
+  /* Tell the browser our chrome (form controls, native dropdowns,
+     scrollbars) should match the theme. Without this, native <select>
+     popovers flash white before painting on dark mode. */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv11";

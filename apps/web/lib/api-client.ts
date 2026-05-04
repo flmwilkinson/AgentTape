@@ -82,6 +82,7 @@ export type AgentDetail = AgentSummary & {
   eligibility_reasons: Record<string, unknown> | null;
   manipulation_flags: Record<string, unknown> | null;
   tags: { kind: string; value: string; display_name: string }[];
+  facts: Record<string, unknown>;
 };
 
 export type Page<T> = { items: T[]; total: number; limit: number; offset: number };
@@ -150,6 +151,7 @@ export const api = {
     q?: string;
     tag_kind?: string;
     tag_value?: string;
+    entity_kind?: "application" | "foundation_model" | "framework" | "mcp_server";
     sort?: "score" | "discovered" | "name";
     limit?: number;
     offset?: number;
@@ -229,6 +231,21 @@ export const api = {
   search: (q: string, mode: "text" | "vibe" = "text", limit = 20) =>
     apiFetch<SearchResult>("/search", {
       searchParams: { q, mode, limit },
+      cache: "no-store",
+    }),
+
+  searchSuggest: (q: string, limit = 8) =>
+    apiFetch<
+      {
+        kind: "agent";
+        slug: string;
+        name: string;
+        entity_kind: string;
+        description: string | null;
+        agent_score: number | null;
+      }[]
+    >("/search/suggest", {
+      searchParams: { q, limit },
       cache: "no-store",
     }),
 

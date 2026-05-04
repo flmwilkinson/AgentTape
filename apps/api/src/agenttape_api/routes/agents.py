@@ -29,8 +29,11 @@ async def list_agents(
     q: str | None = Query(None, description="Substring match on slug/name/description"),
     tag_kind: str | None = Query(None, description="Filter by tag kind (capability/domain/...)"),
     tag_value: str | None = Query(None, description="Filter by tag value"),
+    entity_kind: str | None = Query(
+        None, pattern="^(application|foundation_model|framework|mcp_server)$"
+    ),
     sort: str = Query("score", pattern="^(score|discovered|name)$"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
     session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> Page[AgentSummary]:
@@ -39,6 +42,7 @@ async def list_agents(
         q=q,
         tag_kind=tag_kind,
         tag_value=tag_value,
+        entity_kind=entity_kind,
         sort=sort,
         limit=limit,
         offset=offset,

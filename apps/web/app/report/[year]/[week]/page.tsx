@@ -3,6 +3,15 @@ import { api } from "@/lib/api-client";
 import { Sparkline } from "@/components/sparkline";
 import { formatScore } from "@/lib/format";
 
+// /report/<year>/<week> — the weekly editorial.
+//
+// Findings are computed deterministically from the past week's
+// movers + sector verdicts + recent admissions. No prose is invented
+// here. If you want LLM-written narrative on top, point this at the
+// /admin/weekly-report endpoint (env-flagged ANTHROPIC_API_KEY) — see
+// the methodology page for the wiring details. Until that endpoint
+// exists, the deterministic copy below is the source of truth.
+
 export const dynamic = "force-dynamic";
 
 interface PageParams {
@@ -16,16 +25,24 @@ export async function generateMetadata({ params }: PageParams) {
 
 export default async function WeeklyReport({ params }: PageParams) {
   const { year, week } = await params;
-  const [movers, indexes] = await Promise.all([
-    api.movers("7d", 6),
+  const [movers, indexes, recent, capabilitySectors] = await Promise.all([
+    api.movers("7d", 12),
     api.listIndexes(),
+    api.recentDiscoveries(50).catch(() => []),
+    api.sectors("capability", "7d").catch(() => []),
   ]);
+
   const tape = indexes.find((i) => i.slug === "tape-100");
   const tapeHistory = tape
-    ? await api
-        .indexHistory(tape.slug, "30d")
-        .catch(() => [])
+    ? await api.indexHistory(tape.slug, "30d").catch(() => [])
     : [];
+
+  const findings = computeFindings({
+    movers,
+    indexes,
+    recent,
+    capabilitySectors,
+  });
 
   return (
     <article className="container py-12 md:py-20 max-w-4xl">
@@ -38,8 +55,8 @@ export default async function WeeklyReport({ params }: PageParams) {
           The week in agents.
         </h1>
         <p className="editorial mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
-          A weekly read on what moved, what's new, and what the index is doing.
-          Auto-generated from the rebalance diff and edited for clarity.
+          Findings derived from this week's movers, sector verdicts and new
+          admissions. Numbers come straight from the indexes.
         </p>
       </header>
 
@@ -65,32 +82,20 @@ export default async function WeeklyReport({ params }: PageParams) {
         </section>
       )}
 
-      {/* Three findings */}
+      {/* Three data-derived findings */}
       <section className="mb-16 grid gap-12 md:grid-cols-3">
-        <Finding
-          number={1}
-          title="Movers tilted to browser-use this week"
-          body="The biggest single-week deltas were dominated by browser-agent projects — three of the top five had a `browsing` capability tag. The OSS-50 picked up two of them in Monday's rebalance."
-        />
-        <Finding
-          number={2}
-          title="Discovery added another long tail"
-          body="The discovery service admitted dozens of agents you have never heard of, mostly via npm and GitHub topic-search. The autonomous design is doing its job: the tail keeps lengthening."
-        />
-        <Finding
-          number={3}
-          title="MCP-25 stayed stable"
-          body="Composite barely moved. The pattern this quarter has been low intra-index churn but rising headline scores as benchmark coverage improves."
-        />
+        {findings.map((f, i) => (
+          <Finding key={i} number={i + 1} title={f.title} body={f.body} />
+        ))}
       </section>
 
       {/* Movers table */}
       <section className="mb-16">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          Top movers
+          Top movers · 7 days
         </div>
         <ul className="mt-4 divide-y divide-border rounded-md border border-border bg-card">
-          {movers.map((m) => (
+          {movers.slice(0, 8).map((m) => (
             <li
               key={m.agent.slug}
               className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-3"
@@ -124,6 +129,88 @@ export default async function WeeklyReport({ params }: PageParams) {
       </p>
     </article>
   );
+}
+
+interface FindingPart {
+  title: string;
+  body: string;
+}
+
+function computeFindings({
+  movers,
+  indexes,
+  recent,
+  capabilitySectors,
+}: {
+  movers: { agent: { name: string }; delta: number }[];
+  indexes: { name: string; composite_value: number | null; members_count: number }[];
+  recent: { discovered_at: string }[];
+  capabilitySectors: {
+    display_name: string;
+    delta: number | null;
+    verdict: string;
+  }[];
+}): FindingPart[] {
+  const out: FindingPart[] = [];
+
+  // 1. Strongest mover narrative.
+  const top = [...movers].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+  if (top && Math.abs(top.delta) >= 0.5) {
+    const dir = top.delta >= 0 ? "added" : "lost";
+    out.push({
+      title: `${top.agent.name} ${dir} ${Math.abs(top.delta).toFixed(1)} points`,
+      body: `The biggest single move on the tape this week. The headline change feeds into Monday's TAPE-100 rebalance — see the rebalance log on /indexes/tape-100 for the diff.`,
+    });
+  } else {
+    out.push({
+      title: "Quiet tape",
+      body: "No headline moves above one point this week. Recompute frequency means signal-stable agents look flat; consult /trending if you want the underlying ROC numbers.",
+    });
+  }
+
+  // 2. Hot sector narrative.
+  const hot = capabilitySectors
+    .filter((s) => s.verdict === "booming" || s.verdict === "growing")
+    .sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))[0];
+  if (hot && hot.delta != null) {
+    out.push({
+      title: `${hot.display_name} agents are ${hot.verdict}`,
+      body: `Average AgentScore in the cohort moved ${hot.delta >= 0 ? "+" : ""}${hot.delta.toFixed(2)} points over the window. /sectors keeps a live read on whether this lasts.`,
+    });
+  } else {
+    const cooling = capabilitySectors
+      .filter((s) => s.verdict === "cooling" || s.verdict === "declining")
+      .sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0))[0];
+    if (cooling && cooling.delta != null) {
+      out.push({
+        title: `${cooling.display_name} cohort is cooling`,
+        body: `Average AgentScore here moved ${cooling.delta.toFixed(2)} points. Worth a closer look — sometimes that's a single dominant agent, sometimes the whole shape.`,
+      });
+    } else {
+      out.push({
+        title: "Sector rotation steady",
+        body: "No capability cohort booming or cooling beyond ±0.5 points this week. Watch /sectors for the first move.",
+      });
+    }
+  }
+
+  // 3. Discovery activity.
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const newThisWeek = recent.filter(
+    (r) => new Date(r.discovered_at).getTime() >= cutoff,
+  ).length;
+  out.push({
+    title:
+      newThisWeek > 0
+        ? `${newThisWeek} new agents listed`
+        : "Quiet on discovery",
+    body:
+      newThisWeek > 0
+        ? `The discovery service admitted ${newThisWeek} new entries over the past week. Browse /new for the full feed — most have GitHub repos and homepages one click away.`
+        : "Discovery emitted no admissions this week — usually a sign of a slow week upstream rather than a system pause. /new will fill again as new GitHub topics and HF trending entries surface.",
+  });
+
+  return out;
 }
 
 function Finding({

@@ -161,7 +161,7 @@ export default function ComparePage() {
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
                   <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {a.entity_kind === "foundation_model" ? "model" : "app"}
+                    {a.entity_kind === "foundation_model" ? "model" : "agent"}
                     {" · "}
                     {a.discovered_via.replace(/_/g, " ")}
                   </div>

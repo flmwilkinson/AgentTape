@@ -69,11 +69,28 @@ export default function SearchPage() {
           Search
         </div>
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
-          Find an agent.
+          {kind && value ? (
+            <>
+              All <span className="font-mono text-2xl">{value}</span> agents.
+            </>
+          ) : (
+            <>Find an agent.</>
+          )}
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Substring match by default. Switch to <span className="font-medium">vibe</span>{" "}
-          to search by embedding similarity (when configured).
+          {kind && value ? (
+            <>
+              Filtered by <span className="font-mono">{kind}:{value}</span>.{" "}
+              Sorted by AgentScore. Use the input below to narrow further, or
+              clear the filter from the sidebar.
+            </>
+          ) : (
+            <>
+              Type starts-of-name first (Gemini → Gemini matches first). Switch
+              to <span className="font-medium">vibe</span> to search by
+              embedding similarity (when configured).
+            </>
+          )}
         </p>
       </div>
 

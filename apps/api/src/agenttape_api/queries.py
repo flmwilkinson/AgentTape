@@ -138,6 +138,7 @@ async def list_agents(
     sort: str,
     limit: int,
     offset: int,
+    entity_kind: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     where = ["a.eligibility_status = 'admitted'"]
     params: dict[str, Any] = {"limit": limit, "offset": offset}
@@ -148,6 +149,10 @@ async def list_agents(
             "(a.slug ILIKE :q OR a.name ILIKE :q OR a.description ILIKE :q)"
         )
         params["q"] = f"%{q}%"
+
+    if entity_kind:
+        where.append("a.entity_kind = :entity_kind")
+        params["entity_kind"] = entity_kind
 
     if tag_kind and tag_value:
         join += (
@@ -208,7 +213,8 @@ async def get_agent_by_slug(
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
                a.hf_org, a.hf_model_ids, a.package_names, a.arxiv_ids,
                a.eligibility_status, a.eligibility_score,
-               a.eligibility_reasons, a.manipulation_flags
+               a.eligibility_reasons, a.manipulation_flags,
+               dc.raw_payload
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (
@@ -216,6 +222,11 @@ async def get_agent_by_slug(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        LEFT JOIN LATERAL (
+            SELECT raw_payload FROM discovery_candidates
+            WHERE promoted_to_agent_id = a.id
+            ORDER BY found_at DESC LIMIT 1
+        ) dc ON true
         {RANKS_JOIN}
         WHERE a.slug = :slug
     """
@@ -235,8 +246,36 @@ async def get_agent_by_slug(
         eligibility_reasons=row.eligibility_reasons,
         manipulation_flags=row.manipulation_flags,
         tags=await _agent_tags(session, row.id),
+        facts=_extract_facts(summary.get("entity_kind"), row.raw_payload),
     )
     return summary
+
+
+def _extract_facts(
+    entity_kind: str | None, raw_payload: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Surface the source-of-truth metadata that wasn't already promoted
+    onto the agents row. Used by the agent page facts panel — the
+    signals time-series isn't the right shape for a foundation model.
+    """
+    if not raw_payload:
+        return {}
+    if entity_kind == "foundation_model":
+        keys = (
+            "openrouter_id",
+            "context_length",
+            "max_completion_tokens",
+            "modality",
+            "tokenizer",
+            "instruct_type",
+            "input_price_per_million",
+            "output_price_per_million",
+            "is_moderated",
+            "html_url",
+        )
+        out = {k: raw_payload.get(k) for k in keys if raw_payload.get(k) is not None}
+        return out
+    return {}
 
 
 async def _agent_tags(session: AsyncSession, agent_id: UUID) -> list[dict[str, str]]:
@@ -647,6 +686,22 @@ async def movers(
 async def text_search(
     session: AsyncSession, *, q: str, limit: int
 ) -> list[dict[str, Any]]:
+    """Ranked text search.
+
+    Relevance order, highest first:
+      1. Name starts with the query   (Gemini → matches "Gemini X")
+      2. Slug starts with the query
+      3. Name contains the query
+      4. Slug contains the query
+      5. Description contains the query   (lowest — keeps fuzzy hits last)
+
+    Ties break on AgentScore. The earlier behavior matched all three
+    ILIKE clauses with no ranking, so a query for "gemini" surfaced
+    every model that *mentioned* gemini in its description, including
+    unrelated wrappers.
+    """
+    pattern = f"%{q}%"
+    starts = f"{q}%"
     sql = f"""
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
@@ -658,13 +713,60 @@ async def text_search(
         ) s24 ON true
         {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
-          AND (a.slug ILIKE :q OR a.name ILIKE :q OR a.description ILIKE :q)
-        ORDER BY cs.agent_score DESC NULLS LAST
+          AND (a.slug ILIKE :pattern OR a.name ILIKE :pattern OR a.description ILIKE :pattern)
+        ORDER BY
+            CASE
+                WHEN a.name ILIKE :starts THEN 1
+                WHEN a.slug ILIKE :starts THEN 2
+                WHEN a.name ILIKE :pattern THEN 3
+                WHEN a.slug ILIKE :pattern THEN 4
+                ELSE 5
+            END ASC,
+            cs.agent_score DESC NULLS LAST
         LIMIT :limit
     """
-    rows = await session.execute(text(sql), {"q": f"%{q}%", "limit": limit})
+    rows = await session.execute(
+        text(sql), {"pattern": pattern, "starts": starts, "limit": limit}
+    )
     return [
         {"agent": _row_to_agent_summary(r), "similarity": None}
+        for r in rows
+    ]
+
+
+async def search_suggest(
+    session: AsyncSession, *, q: str, limit: int
+) -> list[dict[str, Any]]:
+    """Fast autocomplete — name/slug only, no description."""
+    pattern = f"%{q}%"
+    starts = f"{q}%"
+    sql = """
+        SELECT a.slug, a.name, a.entity_kind, a.description, cs.agent_score
+        FROM agents a
+        LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        WHERE a.eligibility_status = 'admitted'
+          AND (a.slug ILIKE :pattern OR a.name ILIKE :pattern)
+        ORDER BY
+            CASE
+                WHEN a.name ILIKE :starts THEN 1
+                WHEN a.slug ILIKE :starts THEN 2
+                ELSE 3
+            END ASC,
+            cs.agent_score DESC NULLS LAST
+        LIMIT :limit
+    """
+    rows = await session.execute(
+        text(sql), {"pattern": pattern, "starts": starts, "limit": limit}
+    )
+    return [
+        {
+            "kind": "agent",
+            "slug": r.slug,
+            "name": r.name,
+            "entity_kind": r.entity_kind,
+            "description": r.description,
+            "agent_score": float(r.agent_score) if r.agent_score is not None else None,
+        }
         for r in rows
     ]
 
