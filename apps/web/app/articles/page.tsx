@@ -25,37 +25,51 @@ export default function ArticlesIndexPage() {
         </p>
       </header>
 
-      {/* The articles list — newest first. */}
-      <ul className="divide-y divide-border rounded-md border border-border bg-card">
-        {ARTICLES.map((a) => (
-          <li key={a.slug}>
-            <Link
-              href={`/articles/${a.slug}`}
-              className="block px-5 py-5 hover:bg-subtle"
-            >
-              <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                {new Date(a.published_at).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-                {a.author && (
-                  <>
-                    <span className="mx-2 text-muted-foreground/40">·</span>
-                    {a.author}
-                  </>
-                )}
-              </div>
-              <div className="mt-1 text-lg font-medium leading-snug">
-                {a.title}
-              </div>
-              <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-                {a.description}
-              </p>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {/* The articles list — newest first. The writer's-room is the
+          primary surface until the list has entries. */}
+      {ARTICLES.length === 0 ? (
+        <section className="rounded-md border border-dashed border-border bg-card px-6 py-10 text-center">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            No articles yet
+          </div>
+          <p className="editorial mt-3 max-w-prose mx-auto text-base leading-relaxed text-muted-foreground">
+            Articles ship as they're written. The first batch is queued —
+            scroll to the writer's room below for the prompt set if you
+            want to draft one.
+          </p>
+        </section>
+      ) : (
+        <ul className="divide-y divide-border rounded-md border border-border bg-card">
+          {ARTICLES.map((a) => (
+            <li key={a.slug}>
+              <Link
+                href={`/articles/${a.slug}`}
+                className="block px-5 py-5 hover:bg-subtle"
+              >
+                <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {new Date(a.published_at).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {a.author && (
+                    <>
+                      <span className="mx-2 text-muted-foreground/40">·</span>
+                      {a.author}
+                    </>
+                  )}
+                </div>
+                <div className="mt-1 text-lg font-medium leading-snug">
+                  {a.title}
+                </div>
+                <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+                  {a.description}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Writer's room — these are the prompts to feed Claude.ai when
           drafting an article. They live on-page so you don't have to

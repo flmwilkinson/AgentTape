@@ -8,6 +8,7 @@ import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { WatchToggle } from "@/components/watch-toggle";
 
 // /trending — biggest movers over a window with three orthogonal
 // filters (window / kind / capability or deployment). Tag filters
@@ -126,8 +127,8 @@ export default function TrendingPage() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-md border border-border bg-card">
-        <table className="num w-full text-sm">
+      <div className="overflow-x-auto rounded-md border border-border bg-card">
+        <table className="num w-full min-w-[640px] text-sm">
           <thead className="text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-3 py-2 text-right">Rank</th>
@@ -136,19 +137,20 @@ export default function TrendingPage() {
               <th className="px-3 py-2 text-right">Score</th>
               <th className="px-3 py-2 text-right">Δ {window}</th>
               <th className="px-3 py-2 text-right hidden md:table-cell">Window start</th>
+              <th className="px-3 py-2 w-8"></th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
                   No movers match these filters in this window.
                 </td>
               </tr>
@@ -192,6 +194,9 @@ export default function TrendingPage() {
                   {m.score_at_window_start === null
                     ? "—"
                     : formatScore(m.score_at_window_start)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <WatchToggle slug={m.agent.slug} size="sm" />
                 </td>
               </tr>
             ))}

@@ -120,7 +120,7 @@ export default async function WeeklyReport({ params }: PageParams) {
         <Link href="/report" className="text-primary hover:underline">
           archive
         </Link>
-        . PDF export — coming soon.
+        .
       </p>
     </article>
   );

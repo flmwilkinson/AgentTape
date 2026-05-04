@@ -29,22 +29,9 @@ export interface Article {
 }
 
 export const ARTICLES: Article[] = [
-  {
-    slug: "best-ai-coding-agents-2026",
-    title: "The best AI coding agents in 2026 — ranked, live",
-    description:
-      "A live comparison of the top AI coding agents — Cursor, Claude Code, Aider, Devin, Cline and more — ranked by the AgentScore composite of adoption, quality and momentum.",
-    published_at: "2026-05-04",
-    keywords: [
-      "best ai coding agents",
-      "ai code generation tools",
-      "claude code vs cursor",
-      "best ai for coding",
-    ],
-    body: `# placeholder
-This article hasn't been written yet. Use the prompt at
-/articles#prompts to draft it, then paste the body here.`,
-  },
+  // Add Article entries here as you write them. Until then the
+  // /articles page renders the writer's-room prompts instead of an
+  // awkward "this is a placeholder" stub.
 ];
 
 export const ARTICLE_BY_SLUG: Record<string, Article> = Object.fromEntries(

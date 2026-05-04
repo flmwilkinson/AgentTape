@@ -20,6 +20,17 @@ export default function MethodologyPage() {
         watches the AI-agent ecosystem and admits things on the day they start
         to matter.
       </p>
+      <p className="mt-4 text-sm text-muted-foreground">
+        Every change to scoring, weights, or index rules ships as a commit —
+        see the{" "}
+        <Link
+          href="/methodology/changelog"
+          className="text-primary hover:underline"
+        >
+          methodology changelog
+        </Link>
+        .
+      </p>
 
       <section className="prose prose-zinc mt-12 max-w-none editorial space-y-5 text-base leading-relaxed text-foreground/90 md:text-lg">
         <H2>No seed list</H2>

@@ -47,7 +47,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
             textTransform: "uppercase",
           }}
         >
-          {`AgentTape · Index · ${detail.rebalance_frequency}`}
+          {`AgentTape · Index`}
         </div>
         <div style={{ display: "flex", marginTop: 24, fontSize: 128, fontWeight: 600, letterSpacing: -3, lineHeight: 1.05 }}>
           {detail.name}

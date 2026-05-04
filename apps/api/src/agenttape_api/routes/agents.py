@@ -1,10 +1,13 @@
 """/agents endpoints."""
 from __future__ import annotations
 
+import csv
+import io
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agenttape_api import queries
@@ -103,6 +106,42 @@ async def get_agent_benchmarks(
         raise HTTPException(status_code=404, detail=f"agent {slug!r} not found")
     rows = await queries.benchmarks_for_agent(session, detail["id"])
     return [BenchmarkResultOut(**r) for r in rows]
+
+
+@router.get("/{slug}/signals.csv")
+async def get_agent_signals_csv(
+    slug: str,
+    window: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> StreamingResponse:
+    """Raw signals as a downloadable CSV. One row per signal reading.
+
+    Columns: source, captured_at (ISO8601), value. The agent's signals
+    are the same numbers the scoring service consumes — exporting them
+    lets readers verify the score for themselves."""
+    detail = await queries.get_agent_by_slug(session, slug)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"agent {slug!r} not found")
+    since = _window_to_since(window)
+    series = await queries.signals_for_agent(
+        session, agent_id=detail["id"], sources=None, since=since, limit=10_000
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["source", "captured_at", "value"])
+    for s in series:
+        for p in s["points"]:
+            writer.writerow(
+                [s["source"], p["captured_at"].isoformat(), p["value"]]
+            )
+    buf.seek(0)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{slug}-signals-{window}.csv"',
+    }
+    return StreamingResponse(
+        iter([buf.getvalue()]), media_type="text/csv", headers=headers
+    )
 
 
 @router.get("/{slug}/similar", response_model=list[SimilarAgent])

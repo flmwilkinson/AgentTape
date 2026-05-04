@@ -434,6 +434,17 @@ async def compute_for_agent(
     excluded = _excluded_sources(flags)
     resistance = _manipulation_resistance(flags)
 
+    # Foundation models score against a different population — the
+    # signals that matter for an LLM (context length, price, modality,
+    # whether it's frontier-tier) are wholly different from the
+    # GitHub/HF/Reddit signals that drive application-agent scores.
+    # We dispatch on entity_kind here rather than tangle both paths in
+    # one signal pipeline, which would require ENUM migrations and
+    # poison the population stats with apples-to-oranges values.
+    kind, payload = await _agent_kind_and_payload(session, agent_id)
+    if kind == "foundation_model":
+        return await _compute_foundation_model(payload, resistance, settings)
+
     adoption, adoption_in = await _adoption(session, agent_id, pop, excluded)
     quality, quality_in = await _quality(session, agent_id, pop)
     momentum, momentum_in = await _momentum(session, agent_id, excluded)
@@ -453,6 +464,170 @@ async def compute_for_agent(
             "community": community_in,
             "excluded": [s.value for s in excluded],
             "manipulation_flags": list(flags or {}),
+        },
+    )
+    pillars.agent_score = _headline(pillars, settings)
+    return pillars
+
+
+async def _agent_kind_and_payload(
+    session: AsyncSession, agent_id: UUID
+) -> tuple[str, dict[str, Any] | None]:
+    """Pull entity_kind plus the original discovery payload (if present)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT a.entity_kind, dc.raw_payload
+            FROM agents a
+            LEFT JOIN discovery_candidates dc
+                ON dc.promoted_to_agent_id = a.id
+            WHERE a.id = :id
+            ORDER BY dc.found_at DESC NULLS LAST
+            LIMIT 1
+            """
+        ),
+        {"id": agent_id},
+    )
+    row = r.first()
+    if row is None:
+        return "application", None
+    return row[0] or "application", row[1]
+
+
+# ---------------------------------------------------------------- FM scoring
+
+
+# Frontier-tier providers — these have stronger reputational quality than
+# wrappers / fine-tunes / regional clones. The list is conservative on
+# purpose; readers can argue with the choice but the formula is documented.
+_FRONTIER_PROVIDERS = {"openai", "anthropic", "google", "meta-llama", "mistralai"}
+
+
+async def _compute_foundation_model(
+    payload: dict[str, Any] | None,
+    resistance: float,
+    settings: Settings,
+) -> PillarScores:
+    """Score a foundation model from its OpenRouter metadata.
+
+    The four pillars map to LLM-relevant axes:
+      - adoption  : context length (longer context = wider use cases)
+      - quality   : provider tier × pricing (frontier provider, sane price)
+      - momentum  : recency proxy from version slug + multimodal bonus
+      - community : pricing accessibility (cheaper = more people use it)
+
+    All values land in [0, 100]. None of these depend on time-series data
+    yet, so the same model gets the same score across recomputes — that's
+    fine; once we add benchmark-leaderboard ingestion these become real
+    deltas. The point of this path is to stop every FM landing on 25.0.
+    """
+    payload = payload or {}
+    ctx = payload.get("context_length") or 0
+    in_price = payload.get("input_price_per_million")
+    out_price = payload.get("output_price_per_million")
+    modality = (payload.get("modality") or "").lower()
+    or_id = (payload.get("openrouter_id") or "").lower()
+    provider = or_id.split("/", 1)[0] if "/" in or_id else ""
+
+    # Adoption — bigger context windows let people build bigger things
+    # with the model. Map: 4k→10, 32k→30, 128k→55, 200k→70, 1M→95.
+    if ctx <= 0:
+        adoption = 30.0
+    elif ctx >= 1_000_000:
+        adoption = 95.0
+    elif ctx >= 200_000:
+        adoption = 70.0 + (ctx - 200_000) / 800_000 * 25.0
+    elif ctx >= 128_000:
+        adoption = 55.0 + (ctx - 128_000) / 72_000 * 15.0
+    elif ctx >= 32_000:
+        adoption = 30.0 + (ctx - 32_000) / 96_000 * 25.0
+    elif ctx >= 4_000:
+        adoption = 10.0 + (ctx - 4_000) / 28_000 * 20.0
+    else:
+        adoption = 5.0
+
+    # Quality — frontier provider gets a 35-point boost; everyone else
+    # starts at 40. Multimodal earns +5 (visions/audio expand the
+    # surface), free models earn -5 (free-tier signals "marketing or
+    # fine-tune" more often than not).
+    quality = 35.0 if provider in _FRONTIER_PROVIDERS else 40.0
+    if provider in _FRONTIER_PROVIDERS:
+        quality += 35.0
+    if "image" in modality or "vision" in modality:
+        quality += 5.0
+    if "free" in or_id:
+        quality -= 5.0
+    quality = max(0.0, min(100.0, quality))
+
+    # Momentum — proxy via version-number heuristics and multimodality.
+    # "5", "5.3", "v3", "next" suggest a recent flagship; older 2.x /
+    # 7B / instruct-only scores lower. This is admittedly handwavy and
+    # will get replaced once we ingest a benchmark-leaderboard signal.
+    momentum = 50.0
+    if any(tag in or_id for tag in (":free", "free")):
+        momentum -= 5.0
+    for sig in ("5.3", "5.4", "5.5", "v5", "next", "preview", "latest", "pro"):
+        if sig in or_id:
+            momentum += 8.0
+            break
+    if "image" in modality or "audio" in modality or "vision" in modality:
+        momentum += 5.0
+    momentum = max(0.0, min(100.0, momentum))
+
+    # Community — cheaper = wider community access. Map blended
+    # input+output price ($/M tokens) to [0, 100]:
+    #   $0     -> 95   (free)
+    #   $0.50  -> 85
+    #   $2     -> 65
+    #   $10    -> 40
+    #   $50    -> 20
+    #   $200+  -> 5
+    blended = None
+    if in_price is not None and out_price is not None:
+        blended = (float(in_price) + float(out_price)) / 2.0
+    elif in_price is not None:
+        blended = float(in_price)
+    if blended is None:
+        community = 50.0
+    elif blended <= 0:
+        community = 95.0
+    elif blended <= 0.5:
+        community = 85.0
+    elif blended <= 2.0:
+        community = 65.0 + (2.0 - blended) / 1.5 * 20.0
+    elif blended <= 10.0:
+        community = 40.0 + (10.0 - blended) / 8.0 * 25.0
+    elif blended <= 50.0:
+        community = 20.0 + (50.0 - blended) / 40.0 * 20.0
+    else:
+        community = 5.0
+    community = max(0.0, min(100.0, community))
+
+    pillars = PillarScores(
+        adoption=adoption,
+        quality=quality,
+        momentum=momentum,
+        community=community,
+        manipulation_resistance=resistance,
+        agent_score=0.0,
+        inputs={
+            "adoption": {"context_length": ctx, "scaled": adoption},
+            "quality": {
+                "provider": provider,
+                "frontier": provider in _FRONTIER_PROVIDERS,
+                "modality": modality,
+                "scaled": quality,
+            },
+            "momentum": {
+                "openrouter_id": or_id,
+                "scaled": momentum,
+            },
+            "community": {
+                "input_price_per_million": in_price,
+                "output_price_per_million": out_price,
+                "blended_price": blended,
+                "scaled": community,
+            },
         },
     )
     pillars.agent_score = _headline(pillars, settings)

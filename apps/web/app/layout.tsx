@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { NavDesktop } from "@/components/nav-desktop";
 import { NavMobile } from "@/components/nav-mobile";
+import { NavMobileTop } from "@/components/nav-mobile-top";
 import "./globals.css";
 
 const sans = Inter({
@@ -45,6 +46,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <QueryProvider>
             <NavDesktop />
+            <NavMobileTop />
             {/* Bottom nav adds 4rem space on mobile so content isn't covered. */}
             <main className="pb-16 md:pb-0">{children}</main>
             <NavMobile />

@@ -6,6 +6,7 @@ import { formatScore, relativeTime } from "@/lib/format";
 import { IndexHistoryChart } from "@/components/index-history-chart";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { WatchToggle } from "@/components/watch-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +70,17 @@ export default async function IndexDetailPage({
       <div className="border-b border-border bg-card">
         <div className="container py-10">
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Index · {detail.rebalance_frequency}
+            Index
           </div>
           <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl">
             {detail.name}
           </h1>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <a href="#rebalance-log" className="text-primary hover:underline">
+              Rebalance log
+            </a>{" "}
+            · <a href="#methodology" className="text-primary hover:underline">Methodology</a>
+          </p>
           <div className="mt-6 grid gap-6 md:grid-cols-[auto_1fr]">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -100,24 +107,25 @@ export default async function IndexDetailPage({
         {/* Constituents */}
         <section>
           <SectionHead label="Constituents" hint={`${detail.members_count} agents`} />
-          <div className="overflow-hidden rounded-md border border-border bg-card">
-            <table className="num w-full text-sm">
+          <div className="overflow-x-auto rounded-md border border-border bg-card">
+            <table className="num w-full min-w-[640px] text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-right">#</th>
+                  <th className="px-3 py-2 text-right">Rank</th>
                   <th className="px-3 py-2 text-left">Agent</th>
                   <th className="px-3 py-2 text-right">24h</th>
                   <th className="px-3 py-2 text-right">Score</th>
                   <th className="px-3 py-2 text-right">Δ24h</th>
                   <th className="px-3 py-2 text-right hidden md:table-cell">Weight</th>
                   <th className="px-3 py-2 text-right hidden md:table-cell">Added</th>
+                  <th className="px-3 py-2 w-8"></th>
                 </tr>
               </thead>
               <tbody>
                 {detail.constituents.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-6 text-center text-xs text-muted-foreground"
                     >
                       No agents in this index yet — index hasn't rebalanced.
@@ -129,8 +137,8 @@ export default async function IndexDetailPage({
                     key={c.agent.slug}
                     className="border-b border-border last:border-b-0"
                   >
-                    <td className="px-3 py-2 text-right text-muted-foreground">
-                      {i + 1}
+                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                      #{c.agent.score?.rank_now ?? i + 1}
                     </td>
                     <td className="px-3 py-2">
                       <Link
@@ -173,6 +181,9 @@ export default async function IndexDetailPage({
                     <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
                       {relativeTime(c.added_at)}
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      <WatchToggle slug={c.agent.slug} size="sm" />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -181,7 +192,7 @@ export default async function IndexDetailPage({
         </section>
 
         {/* Rebalance log */}
-        <section>
+        <section id="rebalance-log" className="scroll-mt-16">
           <SectionHead label="Rebalance log" />
           <ol className="space-y-4">
             {rebalances.length === 0 && (
@@ -219,7 +230,7 @@ export default async function IndexDetailPage({
 
         {/* Methodology */}
         {detail.methodology_md && (
-          <section>
+          <section id="methodology" className="scroll-mt-16">
             <SectionHead label="Methodology" />
             <div className="rounded-md border border-border bg-editorial p-6 md:p-8">
               <pre className="editorial whitespace-pre-wrap font-serif text-base leading-relaxed text-foreground/90">

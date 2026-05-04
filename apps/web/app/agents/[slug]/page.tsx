@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Github } from "lucide-react";
+import { Download, ExternalLink, Github } from "lucide-react";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
@@ -102,6 +102,13 @@ export default async function AgentPage({
               <ExternalLink className="h-4 w-4" /> Homepage
             </a>
           )}
+          <a
+            href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001"}/agents/${slug}/signals.csv?window=30d`}
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+            aria-label="Download raw signals (CSV, last 30 days)"
+          >
+            <Download className="h-4 w-4" /> Signals CSV
+          </a>
           <span className="ml-auto text-xs text-muted-foreground">
             Discovered {relativeTime(agent.discovered_at)}
           </span>

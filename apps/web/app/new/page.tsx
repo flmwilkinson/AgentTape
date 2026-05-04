@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { useWebSocket, type WsFrame } from "@/lib/ws";
 import { formatScore, relativeTime } from "@/lib/format";
+import { WatchToggle } from "@/components/watch-toggle";
 
 // /discovery — the autonomous-discovery brag.
 // Server-rendered initial paint via TanStack Query, plus a WS feed
@@ -81,14 +82,14 @@ export default function DiscoveryPage() {
         {merged.map((a) => (
           <li
             key={a.slug}
-            className="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-md border border-border bg-card px-4 py-3"
+            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-md border border-border bg-card px-3 py-3 md:gap-4 md:px-4"
           >
-            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hidden sm:inline">
               {a.discovered_via.replace(/_/g, " ")}
             </span>
             <Link
               href={`/agents/${a.slug}`}
-              className="min-w-0"
+              className="min-w-0 col-start-1 row-start-1 sm:col-start-auto"
             >
               <div className="truncate text-sm font-medium hover:text-primary">
                 {a.name}
@@ -105,6 +106,7 @@ export default function DiscoveryPage() {
                 {relativeTime(a.discovered_at)}
               </span>
             </div>
+            <WatchToggle slug={a.slug} size="sm" />
           </li>
         ))}
       </ol>

@@ -3,6 +3,7 @@ import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { WatchToggle } from "@/components/watch-toggle";
 
 // Foundation-model board.
 //
@@ -14,18 +15,16 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Models" };
 
 export default async function ModelsPage() {
-  // For now we filter via the existing /agents endpoint plus a tag-style
-  // query. Once the entity_kind column ships through to the API, this
-  // becomes a single ?entity_kind=foundation_model filter.
-  const [fmIndex, allAgents] = await Promise.all([
-    api.getIndex("fm-50").catch(() => null),
-    api.listAgents({ sort: "score", limit: 100 }),
-  ]);
-
-  // Treat anything in FM-50 as a foundation model. Until the scout runs,
-  // FM-50 is empty and this page renders an empty-state explainer.
-  const fmSlugs = new Set(fmIndex?.constituents.map((c) => c.agent.slug) ?? []);
-  const models = allAgents.items.filter((a) => fmSlugs.has(a.slug));
+  // FM-50 already publishes the curated, ranked top-50 foundation
+  // models. We render straight from the index constituents so the
+  // ordering matches /indexes/fm-50 exactly — no need to refilter
+  // /agents (which is capped at the application-agent population).
+  const fmIndex = await api.getIndex("fm-50").catch(() => null);
+  const models = (fmIndex?.constituents ?? [])
+    .map((c) => c.agent)
+    .sort(
+      (a, b) => (b.score?.agent_score ?? 0) - (a.score?.agent_score ?? 0),
+    );
 
   return (
     <div className="container py-8 md:py-12 space-y-10">
@@ -56,11 +55,11 @@ export default async function ModelsPage() {
           </p>
         </section>
       ) : (
-        <section className="overflow-hidden rounded-md border border-border bg-card">
-          <table className="num w-full text-sm">
+        <section className="overflow-x-auto rounded-md border border-border bg-card">
+          <table className="num w-full min-w-[640px] text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground">
               <tr className="border-b border-border">
-                <th className="px-3 py-2 text-right">#</th>
+                <th className="px-3 py-2 text-right">Rank</th>
                 <th className="px-3 py-2 text-left">Model</th>
                 <th className="px-3 py-2 text-right">24h</th>
                 <th className="px-3 py-2 text-right">Score</th>
@@ -68,12 +67,15 @@ export default async function ModelsPage() {
                 <th className="px-3 py-2 text-right hidden md:table-cell">Adoption</th>
                 <th className="px-3 py-2 text-right hidden md:table-cell">Quality</th>
                 <th className="px-3 py-2 text-right hidden lg:table-cell">Momentum</th>
+                <th className="px-3 py-2 w-8"></th>
               </tr>
             </thead>
             <tbody>
               {models.map((m, i) => (
                 <tr key={m.id} className="border-b border-border last:border-b-0">
-                  <td className="px-3 py-2 text-right text-muted-foreground">{i + 1}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                    #{m.score?.rank_now ?? i + 1}
+                  </td>
                   <td className="px-3 py-2">
                     <Link
                       href={`/agents/${m.slug}`}
@@ -109,6 +111,9 @@ export default async function ModelsPage() {
                   </td>
                   <td className="px-3 py-2 text-right hidden lg:table-cell">
                     {m.score?.momentum?.toFixed(1) ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <WatchToggle slug={m.slug} size="sm" />
                   </td>
                 </tr>
               ))}
