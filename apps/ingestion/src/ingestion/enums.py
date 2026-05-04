@@ -21,6 +21,10 @@ class SignalSource(str, enum.Enum):
     REDDIT_MENTIONS_7D = "reddit_mentions_7d"
     BENCHMARK_SCORE = "benchmark_score"
     ARXIV_CITATIONS = "arxiv_citations"
+    # Newer sources — added in migration 0004.
+    BLUESKY_MENTIONS_7D = "bluesky_mentions_7d"
+    STACKOVERFLOW_QUESTIONS_7D = "stackoverflow_questions_7d"
+    PRODUCTHUNT_UPVOTES = "producthunt_upvotes"
 
 
 class EventKind(str, enum.Enum):

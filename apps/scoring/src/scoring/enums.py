@@ -21,6 +21,9 @@ class SignalSource(str, enum.Enum):
     REDDIT_MENTIONS_7D = "reddit_mentions_7d"
     BENCHMARK_SCORE = "benchmark_score"
     ARXIV_CITATIONS = "arxiv_citations"
+    BLUESKY_MENTIONS_7D = "bluesky_mentions_7d"
+    STACKOVERFLOW_QUESTIONS_7D = "stackoverflow_questions_7d"
+    PRODUCTHUNT_UPVOTES = "producthunt_upvotes"
 
 
 class EventKind(str, enum.Enum):
@@ -32,19 +35,25 @@ class EventKind(str, enum.Enum):
     AGENT_FLAGGED = "agent_flagged"
 
 
-# Pillar -> signal sources mapping.
+# Pillar -> signal sources mapping. Signals get added here so they
+# actually contribute to the per-pillar score; if you add an
+# ingestor without adding the source to the right pillar, the data
+# accumulates in the signals table but never moves the score.
 ADOPTION_SOURCES: list[SignalSource] = [
     SignalSource.GITHUB_STARS,
     SignalSource.HF_DOWNLOADS_30D,
     SignalSource.NPM_WEEKLY,
     SignalSource.PYPI_MONTHLY,
     SignalSource.MCP_REGISTRY_LISTED,
+    SignalSource.STACKOVERFLOW_QUESTIONS_7D,
+    SignalSource.PRODUCTHUNT_UPVOTES,
 ]
 
 COMMUNITY_SOURCES: list[SignalSource] = [
     SignalSource.GITHUB_CONTRIBUTORS,
     SignalSource.HN_POINTS_7D,
     SignalSource.REDDIT_POINTS_7D,
+    SignalSource.BLUESKY_MENTIONS_7D,
 ]
 
 # For Momentum's rate-of-change.

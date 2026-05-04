@@ -17,7 +17,23 @@ class Settings(BaseSettings):
     huggingface_token: str | None = None
     reddit_client_id: str | None = None
     reddit_client_secret: str | None = None
+    # Semantic Scholar gates personal email; OpenAlex is the equivalent
+    # open replacement and only wants a contact mailto. Either or both
+    # may be set — the citation ingestor prefers OpenAlex when present.
     semantic_scholar_api_key: str | None = None
+    openalex_mailto: str | None = None
+    # Stack Overflow public read works without auth at low rate. A
+    # free key lifts the daily quota from 300 → 10,000.
+    stackexchange_key: str | None = None
+    # Product Hunt: optional. If unset the ingestor soft-skips. Token
+    # comes from a free OAuth app at api.producthunt.com.
+    product_hunt_token: str | None = None
+    # Bluesky: optional. The public search API recently went auth-only.
+    # Use your account handle (e.g. "you.bsky.social") and an app
+    # password from https://bsky.app/settings/app-passwords (NOT your
+    # main login password). Soft-skips if either is missing.
+    bluesky_handle: str | None = None
+    bluesky_app_password: str | None = None
 
     # Tier intervals (seconds). Pulled out of code so tests can crank them down.
     fast_tier_seconds: int = 5 * 60

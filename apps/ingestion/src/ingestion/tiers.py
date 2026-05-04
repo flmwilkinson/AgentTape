@@ -17,6 +17,8 @@ from ingestion.sources import (
     ArxivCitationsIngestor,
     ArxivIngestor,
     BenchmarksIngestor,
+    BlueskyMentions7dIngestor,
+    FMLeaderboardsIngestor,
     GithubCommits7dIngestor,
     GithubContributorsIngestor,
     GithubForksIngestor,
@@ -28,15 +30,18 @@ from ingestion.sources import (
     Ingestor,
     MCPRegistryListedIngestor,
     NPMWeeklyIngestor,
+    ProductHuntUpvotesIngestor,
     PyPIMonthlyIngestor,
     RedditMentions7dIngestor,
     RedditPoints7dIngestor,
+    StackOverflowQuestions7dIngestor,
 )
 
 FAST: list[type[Ingestor]] = [
     GithubStarsIngestor,
     HNMentions7dIngestor,
     HFTrendingRankIngestor,
+    BlueskyMentions7dIngestor,
 ]
 
 MEDIUM: list[type[Ingestor]] = [
@@ -50,12 +55,15 @@ MEDIUM: list[type[Ingestor]] = [
     NPMWeeklyIngestor,
     PyPIMonthlyIngestor,
     MCPRegistryListedIngestor,
+    StackOverflowQuestions7dIngestor,
 ]
 
 SLOW: list[type[Ingestor]] = [
     BenchmarksIngestor,
     ArxivCitationsIngestor,
     ArxivIngestor,
+    ProductHuntUpvotesIngestor,
+    FMLeaderboardsIngestor,
 ]
 
 
