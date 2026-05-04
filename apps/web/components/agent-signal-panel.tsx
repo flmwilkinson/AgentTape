@@ -20,9 +20,10 @@ const DEFAULT_VISIBLE = [
 interface Props {
   slug: string;
   initial: SignalSeries[];
+  entityKind?: string;
 }
 
-export function AgentSignalPanel({ slug, initial }: Props) {
+export function AgentSignalPanel({ slug, initial, entityKind }: Props) {
   const [window, setWindow] = useState<"7d" | "30d" | "90d" | "all">("30d");
   const { data: series } = useQuery({
     queryKey: ["agent-signals", slug, window],
@@ -38,6 +39,29 @@ export function AgentSignalPanel({ slug, initial }: Props) {
       .map((s) => s.source) ||
     initial.slice(0, 2).map((s) => s.source),
   );
+
+  // Foundation models score from OpenRouter metadata (context, price,
+  // modality, provider tier), not GitHub/HF/Reddit time-series signals.
+  // The empty signal panel for FMs misleads readers into thinking the
+  // ingestion pipeline is broken — render a clear handoff to the
+  // facts panel instead.
+  const isFM = entityKind === "foundation_model";
+  if (isFM && sources.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-card p-4">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          Signals
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Foundation models don't accumulate the same time-series signals as
+          application agents (stars, downloads, mentions). The score is
+          derived from OpenRouter metadata — see <strong>Model facts</strong>{" "}
+          above for the inputs and <strong>How this score was computed</strong>{" "}
+          for the formula.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArticleBody } from "@/components/article-body";
 import { ARTICLES, ARTICLE_BY_SLUG } from "@/lib/articles";
 
 export function generateStaticParams() {
@@ -56,13 +55,13 @@ export default async function ArticlePage({
   };
 
   return (
-    <article className="container py-10 md:py-14 max-w-3xl space-y-8">
+    <article className="container py-10 md:py-14 max-w-5xl">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <header>
+      <header className="mb-10 border-b border-border pb-8">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Article ·{" "}
           {new Date(a.published_at).toLocaleDateString(undefined, {
@@ -79,9 +78,9 @@ export default async function ArticlePage({
         </p>
       </header>
 
-      <ArticleBody body={a.body} />
+      <div>{a.body}</div>
 
-      <div className="hairline pt-6 text-xs text-muted-foreground">
+      <div className="hairline mt-12 pt-6 text-xs text-muted-foreground">
         Read more in{" "}
         <Link href="/articles" className="text-primary hover:underline">
           all articles

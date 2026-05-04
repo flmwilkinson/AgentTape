@@ -139,7 +139,7 @@ export default async function AgentPage({
         <ScoreContributors signals={signals} />
 
         {/* Signal time-series */}
-        <AgentSignalPanel slug={slug} initial={signals} />
+        <AgentSignalPanel slug={slug} initial={signals} entityKind={agent.entity_kind} />
 
         {/* Benchmarks */}
         {benchmarks.length > 0 && (
