@@ -75,9 +75,19 @@ function subscribe(l: Listener) {
   return () => listeners.delete(l);
 }
 
+// React's useSyncExternalStore compares snapshots by reference and
+// will loop forever if either getter returns a fresh value each call.
+// SSR has no cookie, so the empty list is stable and shared.
+const SSR_EMPTY: readonly string[] = Object.freeze([]);
+
 export function useWatchlist(): string[] {
-  // SSR snapshot returns empty — the value populates on hydration.
-  return useSyncExternalStore(subscribe, getWatchlist, () => []);
+  // SSR snapshot returns the same frozen empty array every render so
+  // React doesn't think the snapshot is changing during hydration.
+  return useSyncExternalStore(
+    subscribe,
+    getWatchlist,
+    () => SSR_EMPTY as string[],
+  );
 }
 
 // Track the last visit timestamp so we can show a "since you were last
