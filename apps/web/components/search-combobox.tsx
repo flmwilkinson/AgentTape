@@ -31,15 +31,24 @@ interface Props {
   className?: string;
   inputClassName?: string;
   placeholder?: string;
+  // Initial query — used by /search to pre-populate from the URL.
+  initialQuery?: string;
+  // Override the default Enter behavior. Called with the current
+  // query when the user submits without a highlighted suggestion;
+  // /search uses this to run the search inline (preserving mode).
+  // Selecting a suggestion still navigates to that agent.
+  onEnter?: (q: string) => void;
 }
 
 export function SearchCombobox({
   className,
   inputClassName,
   placeholder = "Search agents, models…",
+  initialQuery = "",
+  onEnter,
 }: Props) {
   const router = useRouter();
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(0);
@@ -77,13 +86,19 @@ export function SearchCombobox({
 
   function go(slug: string) {
     setOpen(false);
-    setQ("");
+    if (!onEnter) setQ("");
     router.push(`/agents/${slug}`);
   }
 
   function runFullSearch() {
     setOpen(false);
     const v = q.trim();
+    if (onEnter) {
+      // Caller wants to handle the submit themselves (e.g. /search
+      // updating URL params while preserving mode).
+      onEnter(v);
+      return;
+    }
     router.push(v ? `/search?q=${encodeURIComponent(v)}` : "/search");
   }
 

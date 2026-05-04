@@ -92,14 +92,17 @@ export default function SearchPage() {
       </div>
 
       {/* Smart search: combobox with prefix-prioritised autocomplete.
-          A keystroke shows agent matches inline; pressing Enter on
-          one jumps straight to the agent page, otherwise the full
-          /search?q= is run. Mode toggle stays here for vibe vs text. */}
+          On /search specifically, Enter without a highlighted match
+          stays on the page and runs the search using the current
+          mode (text or vibe). Selecting a suggestion still jumps to
+          its detail page. */}
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
         <SearchCombobox
           className="flex-1"
           inputClassName="h-11 text-sm"
           placeholder="autonomous browser agent, claude, gemini…"
+          initialQuery={q}
+          onEnter={(next) => setQuery({ q: next })}
         />
         <div className="inline-flex rounded-md border border-border bg-card p-0.5">
           {(["text", "vibe"] as const).map((m) => (

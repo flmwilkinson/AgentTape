@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     # Index snapshots cron — hourly per spec.
     snapshot_interval_seconds: int = 60 * 60
 
+    # Heartbeat recompute — runs the full agent population at this
+    # cadence so foundation models (and any agent without ingestion
+    # events) get fresh score rows. Hourly is plenty: scoring is
+    # cheap and the chart granularity already maxes at hour buckets.
+    heartbeat_recompute_seconds: int = 60 * 60
+
     # Pillar weights (sum to 1.0).
     weight_adoption: float = 0.35
     weight_quality: float = 0.30

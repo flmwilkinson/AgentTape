@@ -31,6 +31,8 @@ services:
     build:
       context: ../apps/api
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
       REDIS_URL: redis://redis:6379/0
@@ -50,6 +52,8 @@ services:
     build:
       context: ../apps/realtime
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
       REDIS_URL: redis://redis:6379/0
@@ -69,6 +73,8 @@ services:
     build:
       context: ../apps/discovery
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
       REDIS_URL: redis://redis:6379/0
@@ -88,6 +94,8 @@ services:
     build:
       context: ../apps/ingestion
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
       REDIS_URL: redis://redis:6379/0
@@ -107,6 +115,8 @@ services:
     build:
       context: ../apps/scoring
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql://agenttape:agenttape@postgres:5432/agenttape
       REDIS_URL: redis://redis:6379/0

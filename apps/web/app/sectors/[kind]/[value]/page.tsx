@@ -5,7 +5,7 @@ import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
-import { Sparkline } from "@/components/sparkline";
+import { SectorChart } from "@/components/sector-chart";
 import { WatchToggle } from "@/components/watch-toggle";
 
 // Sector detail — like an index page but rolled up by tag.
@@ -92,18 +92,7 @@ export default async function SectorDetailPage({ params }: PageParams) {
               )}
             </div>
             <div className="min-w-0">
-              {history.length > 1 ? (
-                <Sparkline
-                  values={history.map((h) => h.avg_score ?? 0)}
-                  width={640}
-                  height={120}
-                />
-              ) : (
-                <div className="rounded-md border border-dashed border-border bg-card p-6 text-center text-xs text-muted-foreground">
-                  Waiting for enough score history to plot a chart. Sectors
-                  populate as the daily scoring cron accumulates readings.
-                </div>
-              )}
+              <SectorChart history={history} />
             </div>
           </div>
         </div>

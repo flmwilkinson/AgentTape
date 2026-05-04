@@ -64,9 +64,14 @@ async def get_sector_history(
         else datetime(2024, 1, 1, tzinfo=UTC)
     )
 
+    # Granularity matches the window. Hourly buckets for short windows
+    # surface intra-day variance from per-hour recomputes; daily buckets
+    # for longer windows keep the chart legible.
+    granularity = "hour" if window == "7d" else "day"
+
     rows = await session.execute(
         text(
-            """
+            f"""
             WITH cohort AS (
                 SELECT a.id
                 FROM tags t
@@ -76,7 +81,7 @@ async def get_sector_history(
                   AND t.value = :value
                   AND a.eligibility_status = 'admitted'
             )
-            SELECT date_trunc('day', s.computed_at) AS bucket,
+            SELECT date_trunc('{granularity}', s.computed_at) AS bucket,
                    AVG(s.agent_score)::float AS avg_score,
                    COUNT(DISTINCT s.agent_id) AS agents
             FROM scores s
