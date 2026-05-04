@@ -6,33 +6,39 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
+import { Dropdown } from "@/components/dropdown";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
 
 // Foundation-model board.
 //
-// Pulls every admitted agent whose entity_kind is foundation_model
-// (~370 today) and lets the reader narrow with three filters that
-// match the questions a buyer actually asks: who makes it, am I
-// paying, can it reason?
-//
-// Filters are client-side because the data already fits in one
-// request and slicing is faster than a server round-trip per change.
+// Pulls every admitted foundation_model (~370) and lets the reader
+// narrow on the questions a buyer actually asks: who makes it, can
+// it think, can it see, am I paying. Slug prefixes are derived from
+// the OpenRouter provider id (e.g. mistral/ministral-3-8b →
+// "mistral-ministral-3-8b") so family detection is straight prefix
+// match against the real data, not the OpenRouter URL form.
 
-const FAMILIES = [
+const FAMILIES: { v: string; label: string }[] = [
   { v: "", label: "Any" },
   { v: "openai", label: "OpenAI" },
   { v: "anthropic", label: "Anthropic" },
   { v: "google", label: "Google" },
-  { v: "meta-llama", label: "Meta" },
-  { v: "mistralai", label: "Mistral" },
+  { v: "meta", label: "Meta" },
+  { v: "mistral", label: "Mistral" },
   { v: "qwen", label: "Qwen" },
   { v: "deepseek", label: "DeepSeek" },
-  { v: "x-ai", label: "xAI" },
+  { v: "xai", label: "xAI" },
   { v: "nvidia", label: "NVIDIA" },
+  { v: "amazon", label: "Amazon" },
+  { v: "perplexity", label: "Perplexity" },
+  { v: "minimax", label: "MiniMax" },
+  { v: "moonshotai", label: "Moonshot" },
+  { v: "z", label: "Z.ai" },
+  { v: "nous", label: "Nous" },
   { v: "other", label: "Other" },
-] as const;
+];
 
 const TIERS = [
   { v: "", label: "Any" },
@@ -46,26 +52,51 @@ const REASONING = [
   { v: "non-reasoning", label: "Standard" },
 ] as const;
 
+const MODALITIES = [
+  { v: "", label: "All" },
+  { v: "text", label: "Text-only" },
+  { v: "image", label: "Vision" },
+  { v: "audio", label: "Audio" },
+  { v: "video", label: "Video" },
+  { v: "multimodal", label: "Multimodal" },
+] as const;
+
+const OPENNESS = [
+  { v: "", label: "All" },
+  { v: "open", label: "Open weights" },
+  { v: "closed", label: "Closed" },
+] as const;
+
+// Open-weights families. Conservative — vendors who actually publish
+// model weights / accept self-hosting. Closed providers (OpenAI,
+// Anthropic, Google) sit in the complement.
+const OPEN_FAMILIES = new Set([
+  "meta",
+  "mistral",
+  "qwen",
+  "deepseek",
+  "nvidia",
+  "moonshotai",
+  "minimax",
+  "nous",
+  "z",
+  "sao10k",
+]);
+
 const REASONING_TOKENS = [
   "reasoning",
   "thinking",
-  "o1",
-  "o3",
-  "o4",
-  "o5",
-  "deepseek-r1",
-  "deepseek-v3-reasoner",
+  "-r1",
+  "-o1",
+  "-o3",
+  "-o4",
+  "-o5",
+  "deep-research",
 ];
 
 function familyOf(slug: string): string {
-  // Slugs derive from openrouter ids — "openai/gpt-4.1-nano" becomes
-  // "openai-gpt-4-1-nano". Match multi-word providers (x-ai,
-  // meta-llama) first so the simple split-by-dash doesn't truncate
-  // them to "x" or "meta".
-  const lower = slug.toLowerCase();
-  for (const f of FAMILIES) {
-    if (f.v && f.v !== "other" && lower.startsWith(f.v + "-")) return f.v;
-  }
+  const head = slug.split("-", 1)[0].toLowerCase();
+  if (FAMILIES.some((f) => f.v === head)) return head;
   return "other";
 }
 
@@ -78,10 +109,22 @@ function isReasoning(name: string, slug: string): boolean {
   return REASONING_TOKENS.some((tok) => blob.includes(tok));
 }
 
+function modalityOf(facts: Record<string, unknown>): string {
+  return ((facts.modality as string | undefined) ?? "text->text").toLowerCase();
+}
+
+function isMultimodal(modality: string): boolean {
+  // Anything with 2+ input types (text + image / audio / video / file).
+  const inputs = modality.split("->")[0];
+  return /\+/.test(inputs);
+}
+
 export default function ModelsPage() {
   const [family, setFamily] = useState<string>("");
   const [tier, setTier] = useState<string>("");
   const [reasoning, setReasoning] = useState<string>("");
+  const [modality, setModality] = useState<string>("");
+  const [openness, setOpenness] = useState<string>("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["fm-list"],
@@ -94,11 +137,10 @@ export default function ModelsPage() {
   });
 
   const all = data?.items ?? [];
+
   const filtered = useMemo(() => {
     let out: AgentSummary[] = all;
-    if (family) {
-      out = out.filter((m) => familyOf(m.slug) === family);
-    }
+    if (family) out = out.filter((m) => familyOf(m.slug) === family);
     if (tier === "free") out = out.filter((m) => isFree(m.name, m.slug));
     if (tier === "paid") out = out.filter((m) => !isFree(m.name, m.slug));
     if (reasoning === "reasoning") {
@@ -106,8 +148,33 @@ export default function ModelsPage() {
     } else if (reasoning === "non-reasoning") {
       out = out.filter((m) => !isReasoning(m.name, m.slug));
     }
+    if (modality) {
+      out = out.filter((m) => {
+        const mod = modalityOf(m.facts);
+        if (modality === "multimodal") return isMultimodal(mod);
+        if (modality === "text") return !isMultimodal(mod);
+        // image / audio / video — substring match on input side.
+        const inputs = mod.split("->")[0];
+        return inputs.includes(modality);
+      });
+    }
+    if (openness === "open") {
+      out = out.filter((m) => OPEN_FAMILIES.has(familyOf(m.slug)));
+    } else if (openness === "closed") {
+      out = out.filter((m) => !OPEN_FAMILIES.has(familyOf(m.slug)));
+    }
     return out;
-  }, [all, family, tier, reasoning]);
+  }, [all, family, tier, reasoning, modality, openness]);
+
+  const totalCount = all.length;
+
+  function clearAll() {
+    setFamily("");
+    setTier("");
+    setReasoning("");
+    setModality("");
+    setOpenness("");
+  }
 
   return (
     <div className="container py-8 md:py-12 space-y-8">
@@ -119,9 +186,8 @@ export default function ModelsPage() {
           The model board.
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground md:text-base">
-          Every foundation model AgentTape tracks — sourced from the
-          OpenRouter catalogue, scored by context, pricing, provider
-          tier and modality. The flagship index is{" "}
+          Every foundation model AgentTape tracks ({totalCount} today),
+          sourced from OpenRouter. The flagship index is{" "}
           <Link href="/indexes/fm-50" className="text-primary hover:underline">
             FM-50
           </Link>
@@ -130,26 +196,22 @@ export default function ModelsPage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Toggle
-          label="Family"
-          value={family}
-          onChange={setFamily}
-          options={FAMILIES.map((f) => ({ v: f.v, label: f.label }))}
-        />
-        <Toggle
-          label="Pricing"
-          value={tier}
-          onChange={setTier}
-          options={TIERS.map((t) => ({ v: t.v, label: t.label }))}
-        />
-        <Toggle
-          label="Mode"
-          value={reasoning}
-          onChange={setReasoning}
-          options={REASONING.map((r) => ({ v: r.v, label: r.label }))}
-        />
+        <Dropdown label="Family" value={family} onChange={setFamily} options={FAMILIES.map((f) => ({ value: f.v, label: f.label }))} triggerWidth="min-w-[140px]" />
+        <Dropdown label="Openness" value={openness} onChange={setOpenness} options={OPENNESS.map((o) => ({ value: o.v, label: o.label }))} />
+        <Dropdown label="Modality" value={modality} onChange={setModality} options={MODALITIES.map((m) => ({ value: m.v, label: m.label }))} />
+        <Dropdown label="Pricing" value={tier} onChange={setTier} options={TIERS.map((t) => ({ value: t.v, label: t.label }))} />
+        <Dropdown label="Mode" value={reasoning} onChange={setReasoning} options={REASONING.map((r) => ({ value: r.v, label: r.label }))} />
+        {(family || tier || reasoning || modality || openness) && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          >
+            Clear
+          </button>
+        )}
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} of {all.length} models
+          {filtered.length} of {totalCount} models
         </span>
       </div>
 
@@ -180,101 +242,71 @@ export default function ModelsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((m, i) => (
-                <tr key={m.id} className="border-b border-border last:border-b-0">
-                  <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                    #{m.score?.rank_now ?? i + 1}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/agents/${m.slug}`}
-                      className="font-sans font-medium hover:text-primary"
-                    >
-                      {m.name}
-                    </Link>
-                    <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {familyOf(m.slug)}
-                      {isFree(m.name, m.slug) && " · free"}
-                      {isReasoning(m.name, m.slug) && " · reasoning"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <RankArrow
-                      delta={m.score?.rank_delta_24h ?? null}
-                      rankNow={m.score?.rank_now ?? null}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    {formatScore(m.score?.agent_score ?? null)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {m.score?.delta_24h != null ? (
-                      <MoverChip
-                        delta={m.score.delta_24h}
-                        unit="score"
-                        variant="outline"
+              {filtered.map((m, i) => {
+                const fam = familyOf(m.slug);
+                const mod = modalityOf(m.facts);
+                const labelBits: string[] = [fam];
+                if (OPEN_FAMILIES.has(fam)) labelBits.push("open");
+                if (isFree(m.name, m.slug)) labelBits.push("free");
+                if (isReasoning(m.name, m.slug)) labelBits.push("reasoning");
+                if (isMultimodal(mod)) labelBits.push("multimodal");
+                return (
+                  <tr key={m.id} className="border-b border-border last:border-b-0">
+                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                      #{m.score?.rank_now ?? i + 1}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/agents/${m.slug}`}
+                        className="font-sans font-medium hover:text-primary"
+                      >
+                        {m.name}
+                      </Link>
+                      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {labelBits.join(" · ")}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <RankArrow
+                        delta={m.score?.rank_delta_24h ?? null}
+                        rankNow={m.score?.rank_now ?? null}
                       />
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right hidden md:table-cell">
-                    {m.score?.adoption?.toFixed(1) ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
-                    {m.score?.quality === null
-                      ? "Unrated"
-                      : m.score?.quality?.toFixed(1) ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right hidden lg:table-cell">
-                    {m.score?.momentum?.toFixed(1) ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <WatchToggle slug={m.slug} size="sm" />
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold">
+                      {formatScore(m.score?.agent_score ?? null)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {m.score?.delta_24h != null ? (
+                        <MoverChip
+                          delta={m.score.delta_24h}
+                          unit="score"
+                          variant="outline"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right hidden md:table-cell">
+                      {m.score?.adoption?.toFixed(1) ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
+                      {m.score?.quality === null
+                        ? "Unrated"
+                        : m.score?.quality?.toFixed(1) ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right hidden lg:table-cell">
+                      {m.score?.momentum?.toFixed(1) ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <WatchToggle slug={m.slug} size="sm" />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>
       )}
     </div>
-  );
-}
-
-function Toggle({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { v: string; label: string }[];
-}) {
-  return (
-    <label className="inline-flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="inline-flex flex-wrap rounded-md border border-border bg-card p-0.5">
-        {options.map((o) => (
-          <button
-            key={o.v || "any"}
-            type="button"
-            onClick={() => onChange(o.v)}
-            className={cn(
-              "rounded-sm px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors",
-              value === o.v
-                ? "bg-subtle text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </span>
-    </label>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { Search as SearchIcon, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import { AgentSearchHit } from "@/components/agent-search-hit";
+import { SearchCombobox } from "@/components/search-combobox";
 
 // URL-as-state: ?q=...&mode=text|vibe&kind=...&value=...
 // Filter URLs are shareable.
@@ -19,9 +19,6 @@ export default function SearchPage() {
   const mode = (params.get("mode") as "text" | "vibe" | null) ?? "text";
   const kind = params.get("kind");
   const value = params.get("value");
-
-  const [draft, setDraft] = useState(q);
-  useEffect(() => setDraft(q), [q]);
 
   function setQuery(next: Partial<{ q: string; mode: "text" | "vibe"; kind: string | null; value: string | null }>) {
     const cur = new URLSearchParams(params.toString());
@@ -94,22 +91,16 @@ export default function SearchPage() {
         </p>
       </div>
 
-      <form
-        className="mb-6 flex flex-col gap-3 md:flex-row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setQuery({ q: draft });
-        }}
-      >
-        <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-card px-3">
-          <SearchIcon className="h-4 w-4 text-muted-foreground" />
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="autonomous browser agent…"
-            className="flex-1 bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </div>
+      {/* Smart search: combobox with prefix-prioritised autocomplete.
+          A keystroke shows agent matches inline; pressing Enter on
+          one jumps straight to the agent page, otherwise the full
+          /search?q= is run. Mode toggle stays here for vibe vs text. */}
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
+        <SearchCombobox
+          className="flex-1"
+          inputClassName="h-11 text-sm"
+          placeholder="autonomous browser agent, claude, gemini…"
+        />
         <div className="inline-flex rounded-md border border-border bg-card p-0.5">
           {(["text", "vibe"] as const).map((m) => (
             <button
@@ -127,7 +118,7 @@ export default function SearchPage() {
             </button>
           ))}
         </div>
-      </form>
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
         {/* Facet sidebar */}

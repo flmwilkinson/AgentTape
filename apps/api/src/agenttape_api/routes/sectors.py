@@ -43,6 +43,61 @@ def _verdict(delta: float | None) -> str:
     return "declining"
 
 
+@router.get("/{kind}/{value}/history")
+async def get_sector_history(
+    kind: str,
+    value: str,
+    window: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> list[dict[str, Any]]:
+    """Daily average AgentScore for the cohort tagged (kind, value)."""
+    if kind not in {"capability", "deployment", "maturity", "domain", "license"}:
+        return []
+    delta_map = {
+        "7d": timedelta(days=7),
+        "30d": timedelta(days=30),
+        "90d": timedelta(days=90),
+    }
+    since = (
+        datetime.now(UTC) - delta_map[window]
+        if window != "all"
+        else datetime(2024, 1, 1, tzinfo=UTC)
+    )
+
+    rows = await session.execute(
+        text(
+            """
+            WITH cohort AS (
+                SELECT a.id
+                FROM tags t
+                JOIN agent_tags at ON at.tag_id = t.id
+                JOIN agents a ON a.id = at.agent_id
+                WHERE t.kind = CAST(:kind AS tag_kind)
+                  AND t.value = :value
+                  AND a.eligibility_status = 'admitted'
+            )
+            SELECT date_trunc('day', s.computed_at) AS bucket,
+                   AVG(s.agent_score)::float AS avg_score,
+                   COUNT(DISTINCT s.agent_id) AS agents
+            FROM scores s
+            WHERE s.agent_id IN (SELECT id FROM cohort)
+              AND s.computed_at >= :since
+            GROUP BY 1
+            ORDER BY 1 ASC
+            """
+        ),
+        {"kind": kind, "value": value, "since": since},
+    )
+    return [
+        {
+            "captured_at": r.bucket,
+            "avg_score": float(r.avg_score) if r.avg_score is not None else None,
+            "agents": int(r.agents),
+        }
+        for r in rows
+    ]
+
+
 @router.get("")
 async def get_sectors(
     kind: str = Query("capability", pattern="^(capability|deployment|maturity)$"),

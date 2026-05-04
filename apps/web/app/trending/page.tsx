@@ -6,6 +6,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
+import { Dropdown } from "@/components/dropdown";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
@@ -100,17 +101,17 @@ export default function TrendingPage() {
           onChange={(v) => setKind(v as (typeof KINDS)[number]["v"])}
           options={KINDS.map((k) => ({ v: k.v, label: k.label }))}
         />
-        <Select
+        <Dropdown
           label="Capability"
           value={capability}
           onChange={setCapability}
-          options={CAPABILITIES.map((c) => ({ v: c.v, label: c.label }))}
+          options={CAPABILITIES.map((c) => ({ value: c.v, label: c.label }))}
         />
-        <Select
+        <Dropdown
           label="Deployment"
           value={deployment}
           onChange={setDeployment}
-          options={DEPLOYMENTS.map((d) => ({ v: d.v, label: d.label }))}
+          options={DEPLOYMENTS.map((d) => ({ value: d.v, label: d.label }))}
         />
         {(capability || deployment || kind !== "all") && (
           <button
@@ -244,33 +245,3 @@ function Toggle({
   );
 }
 
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { v: string; label: string }[];
-}) {
-  return (
-    <label className="inline-flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border bg-card px-2 py-1.5 text-xs"
-      >
-        {options.map((o) => (
-          <option key={o.v} value={o.v}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}

@@ -161,7 +161,7 @@ export default function SectorsPage() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link
-                      href={`/search?kind=${kind}&value=${r.value}`}
+                      href={`/sectors/${kind}/${r.value}`}
                       className="text-[11px] font-mono uppercase tracking-wider text-primary hover:underline"
                     >
                       Drill in →

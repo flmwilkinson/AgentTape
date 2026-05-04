@@ -69,6 +69,9 @@ export type AgentSummary = {
   homepage_url: string | null;
   github_repo: string | null;
   entity_kind: string;
+  // Source-of-truth facts surfaced for foundation models (modality,
+  // openrouter_id, context_length, pricing). {} for application agents.
+  facts: Record<string, unknown>;
   score: ScoreEnvelope;
 };
 
@@ -250,6 +253,14 @@ export const api = {
     }),
 
   tags: () => apiFetch<Tag[]>("/tags"),
+
+  sectorHistory: (kind: string, value: string, window: "7d" | "30d" | "90d" | "all" = "30d") =>
+    apiFetch<
+      { captured_at: string; avg_score: number | null; agents: number }[]
+    >(`/sectors/${kind}/${value}/history`, {
+      searchParams: { window },
+      cache: "no-store",
+    }),
 
   sectors: (
     kind: "capability" | "deployment" | "maturity" = "capability",

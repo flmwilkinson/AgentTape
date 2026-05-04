@@ -91,6 +91,10 @@ class AgentSummary(BaseModel):
     github_repo: str | None
     entity_kind: str = "application"
     score: ScoreEnvelopeOptional
+    # Source-of-truth facts surfaced for foundation models so /models
+    # can filter on modality / context / price client-side without a
+    # separate endpoint. Empty dict for application agents.
+    facts: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentDetail(AgentSummary):

@@ -87,6 +87,10 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         if getattr(row, "rank_24h_ago", None) is not None
         else None
     )
+    raw_payload = getattr(row, "raw_payload", None)
+    facts = _extract_facts(
+        getattr(row, "entity_kind", "application"), raw_payload
+    )
     return {
         "id": row.id,
         "slug": row.slug,
@@ -97,6 +101,7 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         "homepage_url": row.homepage_url,
         "github_repo": row.github_repo,
         "entity_kind": getattr(row, "entity_kind", "application"),
+        "facts": facts,
         "score": {
             "agent_score": score_now,
             "adoption": float(row.adoption) if row.adoption is not None else None,
@@ -170,7 +175,8 @@ async def list_agents(
     }.get(sort, "cs.agent_score DESC NULLS LAST")
 
     sql = f"""
-        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
+        SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
+               dc.raw_payload
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (
@@ -178,6 +184,11 @@ async def list_agents(
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
+        LEFT JOIN LATERAL (
+            SELECT raw_payload FROM discovery_candidates
+            WHERE promoted_to_agent_id = a.id
+            ORDER BY found_at DESC LIMIT 1
+        ) dc ON true
         {RANKS_JOIN}
         {join}
         WHERE {' AND '.join(where)}
