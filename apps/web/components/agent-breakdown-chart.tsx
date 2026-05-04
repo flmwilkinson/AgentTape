@@ -23,6 +23,7 @@ import { api } from "@/lib/api-client";
 // history. They can shrink it.
 
 const WINDOWS = [
+  { v: "1d", label: "1d" },
   { v: "7d", label: "7d" },
   { v: "30d", label: "30d" },
   { v: "90d", label: "90d" },
@@ -167,7 +168,7 @@ export function AgentBreakdownChart({ slug, className }: Props) {
 
 function formatTick(t: number, window: Window): string {
   const d = new Date(t);
-  if (window === "7d") {
+  if (window === "1d") {
     return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });

@@ -8,6 +8,7 @@ import { AgentBreakdownChart } from "@/components/agent-breakdown-chart";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
 import { FmFactsPanel } from "@/components/fm-facts-panel";
+import { PillarExplanations } from "@/components/pillar-explanations";
 import { ScoreContributors } from "@/components/score-contributors";
 import { TickerCard } from "@/components/ticker-card";
 
@@ -114,6 +115,12 @@ export default async function AgentPage({
             Discovered {relativeTime(agent.discovered_at)}
           </span>
         </section>
+
+        {/* "How this score was computed" — turns the four pillar
+            numbers from a black box into a transparent formula. For
+            FMs this explains the OpenRouter-derived computation; for
+            application agents it lists the contributing signals. */}
+        <PillarExplanations agent={agent} signals={signals} />
 
         {/* Score breakdown chart — overall + four pillar lines, since
             this agent first listed. Reading the lines together is how

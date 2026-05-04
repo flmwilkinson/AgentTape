@@ -38,10 +38,9 @@ export default async function SectorDetailPage({ params }: PageParams) {
   const { kind, value } = await params;
   if (!VALID_KINDS.includes(kind)) notFound();
 
-  // Default window is 7d so the chart fills with hourly buckets
-  // backed by the 5-min heartbeat. The chart endpoint accepts 1d
-  // (5-min buckets), 7d (hourly), 30d / 90d / all (daily) — the
-  // current page only requests 7d but the API can serve any.
+  // Members are server-loaded; the chart is now a client component
+  // that fetches history per chosen window. We still pull a quick
+  // 7d slice here just to compute the headline composite + delta.
   const [history, members] = await Promise.all([
     api.sectorHistory(kind, value, "7d").catch(() => []),
     api.listAgents({
@@ -96,7 +95,7 @@ export default async function SectorDetailPage({ params }: PageParams) {
               )}
             </div>
             <div className="min-w-0">
-              <SectorChart history={history} />
+              <SectorChart kind={kind} value={value} />
             </div>
           </div>
         </div>
