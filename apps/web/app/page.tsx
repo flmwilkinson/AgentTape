@@ -23,16 +23,26 @@ import { TickerTape } from "@/components/ticker-tape";
 export const dynamic = "force-dynamic";
 
 export default async function FloorPage() {
+  // /movers ranks by absolute delta. We pull a wide slice (60) so
+  // both gainers and decliners are visible — if we only fetched 8
+  // and all eight were big drops (e.g. after a formula recalibration),
+  // the gainers panel would falsely look empty.
   const [agentsPage, indexes, movers24h, recent] = await Promise.all([
     api.listAgents({ sort: "score", limit: 60 }),
     api.listIndexes(),
-    api.movers("1d", 8),
+    api.movers("1d", 60),
     api.recentDiscoveries(8),
   ]);
 
   const agents = agentsPage.items;
-  const top24h = movers24h.filter((m) => m.delta > 0).slice(0, 3);
-  const drops24h = movers24h.filter((m) => m.delta < 0).slice(0, 3);
+  const top24h = movers24h
+    .filter((m) => m.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 3);
+  const drops24h = movers24h
+    .filter((m) => m.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 3);
   const headline = pickHeadline({ top24h, drops24h, recent });
 
   // For the index cards: pull a thin history per index in parallel so
