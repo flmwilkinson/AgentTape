@@ -4,13 +4,11 @@ import { Download, ExternalLink, Github } from "lucide-react";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
-import { AgentBreakdownChart } from "@/components/agent-breakdown-chart";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
 import { BackLink } from "@/components/back-link";
 import { FmFactsPanel } from "@/components/fm-facts-panel";
-import { PillarExplanations } from "@/components/pillar-explanations";
-import { ScoreContributors } from "@/components/score-contributors";
+import { ScoreBreakdownPanel } from "@/components/score-breakdown-panel";
 import { TickerCard } from "@/components/ticker-card";
 
 export const dynamic = "force-dynamic";
@@ -124,29 +122,26 @@ export default async function AgentPage({
           </span>
         </section>
 
-        {/* "How this score was computed" — turns the four pillar
-            numbers from a black box into a transparent formula. For
-            FMs this explains the OpenRouter-derived computation; for
-            application agents it lists the contributing signals. */}
-        <PillarExplanations agent={agent} signals={signals} />
-
-        {/* Score breakdown chart — overall + four pillar lines, since
-            this agent first listed. Reading the lines together is how
-            you tell which pillar carried (or dragged) the headline. */}
-        <AgentBreakdownChart slug={slug} />
+        {/* Unified score breakdown: time-series chart at the top,
+            collapsible per-pillar contributions below. Each pillar
+            row shows its current score, 24h delta, and (when
+            expanded) every signal feeding it with raw + scaled
+            values. Replaces the previous trio of "How computed",
+            "Breakdown chart" and "What moved" panels — same data,
+            one place. */}
+        <ScoreBreakdownPanel slug={slug} agent={agent} signals={signals} />
 
         {/* Foundation-model facts (only renders for FMs). The panel
-            surfaces the OpenRouter metadata the score is derived from
-            so a reader can sanity-check the headline. */}
+            surfaces the OpenRouter metadata that's *not* used for
+            scoring — context length, pricing, modality — so readers
+            can still sanity-check what the model is. */}
         {agent.entity_kind === "foundation_model" && (
           <FmFactsPanel facts={agent.facts ?? {}} />
         )}
 
-        {/* What moved this score in the last 24 hours — rules-based
-            attribution surfaced from the same signals the score uses. */}
-        <ScoreContributors signals={signals} />
-
-        {/* Signal time-series */}
+        {/* Raw signal time-series — the "show your work" view that
+            sits below the breakdown for readers who want to see the
+            unscaled numbers and download the CSV. */}
         <AgentSignalPanel slug={slug} initial={signals} entityKind={agent.entity_kind} />
 
         {/* Benchmarks */}
