@@ -28,26 +28,68 @@ interface SignalChartProps {
   className?: string;
 }
 
-// Hue-spaced palette so adjacent series in the legend are easy to
-// tell apart on the chart. Deliberately doesn't reuse the
-// gain/loss/neutral tokens because two of those (loss + primary)
-// were rendering as visually-similar reds in dark mode.
-const PALETTE = [
-  "hsl(217 91% 60%)",  // blue
-  "hsl(142 71% 45%)",  // green
-  "hsl(38 92% 50%)",   // amber
-  "hsl(280 75% 60%)",  // violet
-  "hsl(348 83% 58%)",  // rose
-  "hsl(176 64% 42%)",  // teal
-  "hsl(28 80% 52%)",   // orange
-  "hsl(199 89% 48%)",  // sky
-];
+// Each signal is colour-coded by the pillar it primarily feeds, so
+// reading the chart you immediately see which lines roll up to which
+// pillar. Same hue families as the breakdown chart (Adoption=blue,
+// Quality=green, Momentum=red, Community=slate). Within a pillar,
+// lightness varies by index so multiple signals in the same family
+// stay distinguishable.
+
+type Pillar = "adoption" | "quality" | "momentum" | "community";
+
+const SIGNAL_PILLAR: Record<string, Pillar> = {
+  // adoption — raw "how many people use this" counts
+  github_stars: "adoption",
+  hf_downloads_30d: "adoption",
+  npm_weekly: "adoption",
+  pypi_monthly: "adoption",
+  mcp_registry_listed: "adoption",
+  stackoverflow_questions_7d: "adoption",
+  producthunt_upvotes: "adoption",
+
+  // quality — anything benchmark / citation shaped
+  benchmark_score: "quality",
+  arxiv_citations: "quality",
+
+  // momentum — mention velocity and recent activity
+  hn_mentions_7d: "momentum",
+  reddit_mentions_7d: "momentum",
+  bluesky_mentions_7d: "momentum",
+  github_mentions_7d: "momentum",
+  github_commits_7d: "momentum",
+
+  // community — relationships and discussion depth
+  github_contributors: "community",
+  github_forks: "community",
+  hn_points_7d: "community",
+  reddit_points_7d: "community",
+  hf_likes: "community",
+  hf_trending_rank: "community",
+};
+
+const PILLAR_HSL: Record<
+  Pillar,
+  { hue: number; saturation: number; lightnesses: number[] }
+> = {
+  adoption: { hue: 217, saturation: 80, lightnesses: [42, 55, 65, 75] },
+  quality: { hue: 142, saturation: 65, lightnesses: [38, 48, 58, 68] },
+  momentum: { hue: 358, saturation: 70, lightnesses: [50, 60, 70, 80] },
+  community: { hue: 215, saturation: 22, lightnesses: [45, 55, 65, 72] },
+};
 
 // Series colour is bound to the source name — not the array index —
 // so toggling visibility doesn't reshuffle which line is which colour.
+// Within a pillar, peers are ordered by their source name so the
+// shade is stable across reloads.
 function colorFor(source: string, allSources: string[]): string {
-  const i = allSources.indexOf(source);
-  return PALETTE[(i < 0 ? 0 : i) % PALETTE.length];
+  const pillar = SIGNAL_PILLAR[source] ?? "adoption";
+  const peers = allSources
+    .filter((s) => (SIGNAL_PILLAR[s] ?? "adoption") === pillar)
+    .sort();
+  const idx = Math.max(0, peers.indexOf(source));
+  const { hue, saturation, lightnesses } = PILLAR_HSL[pillar];
+  const lightness = lightnesses[idx % lightnesses.length];
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
 export function SignalChart({

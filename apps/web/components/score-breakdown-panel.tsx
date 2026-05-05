@@ -37,12 +37,24 @@ const WINDOWS = [
 ] as const;
 type Window = (typeof WINDOWS)[number]["v"];
 
+// Pillar colours kept in lock-step with components/signal-chart.tsx —
+// the signals chart fans out shades within each pillar's hue family,
+// and these middle shades are the canonical "this pillar is X colour"
+// reference. Reading both charts side-by-side, the same colour means
+// the same pillar.
+const PILLAR_COLORS = {
+  adoption: "hsl(217 80% 55%)",   // blue
+  quality: "hsl(142 65% 48%)",    // green
+  momentum: "hsl(358 70% 60%)",   // red
+  community: "hsl(215 22% 55%)",  // slate
+} as const;
+
 const SERIES = [
   { key: "agent_score", label: "AgentScore", color: "hsl(var(--foreground))", width: 2.5 },
-  { key: "adoption", label: "Adoption", color: "hsl(var(--primary))", width: 1.5 },
-  { key: "quality", label: "Quality", color: "hsl(var(--gain))", width: 1.5 },
-  { key: "momentum", label: "Momentum", color: "hsl(var(--loss))", width: 1.5 },
-  { key: "community", label: "Community", color: "hsl(var(--neutral))", width: 1.5 },
+  { key: "adoption", label: "Adoption", color: PILLAR_COLORS.adoption, width: 1.5 },
+  { key: "quality", label: "Quality", color: PILLAR_COLORS.quality, width: 1.5 },
+  { key: "momentum", label: "Momentum", color: PILLAR_COLORS.momentum, width: 1.5 },
+  { key: "community", label: "Community", color: PILLAR_COLORS.community, width: 1.5 },
 ] as const;
 
 // Mirror of the unified scoring formula in apps/scoring. Anchors must
@@ -104,6 +116,47 @@ const SOURCE_LABELS: Record<string, string> = {
   arxiv_citations: "arXiv citations",
 };
 
+// Each signal has prerequisites on the agent record. github_stars
+// can only ever exist if the agent has a github_repo; hf_downloads
+// requires an HF org or model id; npm_weekly requires an npm package.
+// We surface this distinction in the UI: "Not yet on file" means
+// ingestion will pick it up, "Not applicable" means it never will.
+function applicabilityFor(source: string, agent: AgentDetail): boolean {
+  switch (source) {
+    case "github_stars":
+    case "github_forks":
+    case "github_commits_7d":
+    case "github_contributors":
+    case "github_mentions_7d":
+      return Boolean(agent.github_repo);
+    case "hf_downloads_30d":
+    case "hf_likes":
+    case "hf_trending_rank":
+      return Boolean(agent.hf_org || (agent.hf_model_ids && agent.hf_model_ids.length > 0));
+    case "npm_weekly":
+      return Boolean(agent.package_names && (agent.package_names as Record<string, unknown>).npm);
+    case "pypi_monthly":
+      return Boolean(agent.package_names && (agent.package_names as Record<string, unknown>).pypi);
+    case "arxiv_citations":
+      return Boolean(agent.arxiv_ids && agent.arxiv_ids.length > 0);
+    case "mcp_registry_listed":
+      return agent.discovered_via === "mcp_registry";
+    // Benchmark, HN/Reddit/Bluesky/SO/PH mentions: applicable to
+    // anything with a name (everyone has a name).
+    case "benchmark_score":
+    case "hn_mentions_7d":
+    case "hn_points_7d":
+    case "reddit_mentions_7d":
+    case "reddit_points_7d":
+    case "bluesky_mentions_7d":
+    case "stackoverflow_questions_7d":
+    case "producthunt_upvotes":
+      return true;
+    default:
+      return true;
+  }
+}
+
 interface Props {
   slug: string;
   agent: AgentDetail;
@@ -136,11 +189,12 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
   // Latest reading per signal source + 24h-old reading for delta.
   const sigState = useMemo(() => buildSignalState(signals), [signals]);
 
+  const applicabilityFn = (s: string) => applicabilityFor(s, agent);
   const rows: PillarRow[] = [
-    buildPillar("Adoption", "adoption", agent.score?.adoption, pillarMap.adoption, sigState, false),
-    buildPillar("Quality", "quality", agent.score?.quality, pillarMap.quality, sigState, false),
-    buildPillar("Momentum", "momentum", agent.score?.momentum, pillarMap.momentum, sigState, true),
-    buildPillar("Community", "community", agent.score?.community, pillarMap.community, sigState, false),
+    buildPillar("Adoption", "adoption", agent.score?.adoption, pillarMap.adoption, sigState, false, applicabilityFn),
+    buildPillar("Quality", "quality", agent.score?.quality, pillarMap.quality, sigState, false, applicabilityFn),
+    buildPillar("Momentum", "momentum", agent.score?.momentum, pillarMap.momentum, sigState, true, applicabilityFn),
+    buildPillar("Community", "community", agent.score?.community, pillarMap.community, sigState, false, applicabilityFn),
   ];
 
   return (
@@ -334,9 +388,26 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                       </>
                     )}
                     {r.missing.length > 0 && (
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        Not yet on file:{" "}
+                      <p className="mt-3 text-[11px] text-muted-foreground">
+                        <span className="font-mono uppercase tracking-wider text-foreground/70">
+                          Awaiting first reading
+                        </span>{" "}
+                        — these signals apply to this agent and will be
+                        ingested on the next tier tick:{" "}
                         {r.missing.map((s) => SOURCE_LABELS[s] ?? s).join(", ")}
+                      </p>
+                    )}
+                    {r.not_applicable.length > 0 && (
+                      <p className="mt-2 text-[11px] text-muted-foreground/70">
+                        <span className="font-mono uppercase tracking-wider">
+                          Not applicable
+                        </span>{" "}
+                        — this agent doesn't have the prerequisite (no
+                        GitHub repo, no HF mirror, etc.) for these
+                        signals to ever apply:{" "}
+                        {r.not_applicable
+                          .map((s) => SOURCE_LABELS[s] ?? s)
+                          .join(", ")}
                       </p>
                     )}
                   </div>
@@ -423,7 +494,8 @@ interface PillarRow {
   score: number | null | undefined;
   total: number;
   contributing: ContribRow[];
-  missing: string[];
+  missing: string[];          // applicable but no reading yet
+  not_applicable: string[];   // agent doesn't have the prerequisite
   delta24h: number | null;
 }
 
@@ -434,16 +506,26 @@ function buildPillar(
   sources: string[],
   sigState: Map<string, SignalState>,
   isMomentum: boolean,
+  isApplicable: (source: string) => boolean,
 ): PillarRow {
   const contributing: ContribRow[] = [];
   const missing: string[] = [];
+  const not_applicable: string[] = [];
   const scaledNow: number[] = [];
   const scaledPrior: number[] = [];
 
   for (const s of sources) {
     const state = sigState.get(s);
     if (!state) {
-      missing.push(s);
+      // No reading on file. Distinguish "applicable but not yet
+      // ingested" from "this agent has no prerequisite for this
+      // signal" — readers waiting for the former is fine, waiting
+      // for the latter is futile.
+      if (isApplicable(s)) {
+        missing.push(s);
+      } else {
+        not_applicable.push(s);
+      }
       continue;
     }
     const scaledValue = scaleSignal(s, state.latest);
@@ -500,6 +582,7 @@ function buildPillar(
     total: sources.length,
     contributing,
     missing,
+    not_applicable,
     delta24h,
   };
 }
