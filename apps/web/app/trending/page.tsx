@@ -158,7 +158,7 @@ export default function TrendingPage() {
             )}
             {list.map((m) => (
               <tr
-                key={m.agent.slug}
+                key={`${m.agent.slug}-${m.agent.id}`}
                 className="border-b border-border last:border-b-0"
               >
                 <td className="px-3 py-2 text-right font-mono text-muted-foreground">

@@ -1,281 +1,168 @@
 import type { AgentDetail, SignalSeries } from "@/lib/api-client";
 
-// Latest value of a given source from the signal series payload.
-function latest(signals: SignalSeries[], source: string): number | null {
-  const s = signals.find((x) => x.source === source);
-  if (!s || s.points.length === 0) return null;
-  const sorted = [...s.points].sort(
-    (a, b) =>
-      new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
-  );
-  return sorted[0]?.value ?? null;
-}
-
-// "Why is each pillar what it is?" — surfaces the formula behind the
-// four pillar scores so the agent page is self-explanatory rather
-// than a black box. The logic mirrors what scoring/compute.py does
-// in code; if either side changes, both must update.
+// "How this score was computed" panel.
 //
-// Two paths:
-//   - foundation_model: derived from OpenRouter facts
-//                       (context_length, provider tier, modality, price)
-//   - application:      z-scored against the admitted population from
-//                       latest signal readings
+// Mirrors the unified scoring formula in apps/scoring/src/scoring/
+// compute.py. For each pillar, we list the signals that contributed,
+// the raw value of each, and the scaled 0–100 contribution. Pillars
+// with no contributing signal are shown as Unrated.
 //
-// Numbers shown match the persisted score rows. For FMs we reproduce
-// the formula client-side using `agent.facts`; for application agents
-// we list the signals that fed into each pillar with their latest
-// values pulled from the existing /signals endpoint.
-
-interface Props {
-  agent: AgentDetail;
-  signals: SignalSeries[];
-}
-
-// Open LLM Leaderboard match — when present, Quality is real benchmark
-// data, not the heuristic. Surfaced via the agent.facts dict on FMs.
-const HF_LEADERBOARD_NOTE =
-  "Open LLM Leaderboard composite (Average ⬆️ across IFEval, BBH, MATH, GPQA, MUSR, MMLU-PRO).";
-
-const ADOPTION_SOURCES = [
-  "github_stars",
-  "hf_downloads_30d",
-  "npm_weekly",
-  "pypi_monthly",
-  "mcp_registry_listed",
-  "stackoverflow_questions_7d",
-  "producthunt_upvotes",
-];
-
-const COMMUNITY_SOURCES = [
-  "github_contributors",
-  "hn_points_7d",
-  "reddit_points_7d",
-  "bluesky_mentions_7d",
-];
-
-const MOMENTUM_SOURCES = ADOPTION_SOURCES; // rate-of-change of adoption
+// One panel for both application agents and foundation models — the
+// formula is identical, only the source list differs.
 
 const SOURCE_LABELS: Record<string, string> = {
   github_stars: "GitHub stars",
   github_forks: "GitHub forks",
   github_commits_7d: "Commits (7d)",
   github_contributors: "Contributors",
+  github_mentions_7d: "GitHub mentions (7d)",
   hf_downloads_30d: "HF downloads (30d)",
   hf_likes: "HF likes",
   hf_trending_rank: "HF trending rank",
   npm_weekly: "npm weekly installs",
   pypi_monthly: "PyPI monthly installs",
   mcp_registry_listed: "MCP registry listing",
-  hn_points_7d: "Hacker News points (7d)",
-  hn_mentions_7d: "Hacker News mentions (7d)",
+  hn_points_7d: "HN points (7d)",
+  hn_mentions_7d: "HN mentions (7d)",
   reddit_points_7d: "Reddit points (7d)",
   reddit_mentions_7d: "Reddit mentions (7d)",
   bluesky_mentions_7d: "Bluesky mentions (7d)",
-  stackoverflow_questions_7d: "Stack Overflow questions (7d)",
+  stackoverflow_questions_7d: "SO questions (7d)",
   producthunt_upvotes: "Product Hunt upvotes",
   benchmark_score: "Benchmark score",
   arxiv_citations: "arXiv citations",
 };
 
+const APPLICATION_PILLARS = {
+  adoption: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "mcp_registry_listed",
+    "stackoverflow_questions_7d",
+    "producthunt_upvotes",
+  ],
+  quality: ["benchmark_score"],
+  momentum: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+  ],
+  community: [
+    "github_contributors",
+    "github_forks",
+    "hn_points_7d",
+    "reddit_points_7d",
+    "bluesky_mentions_7d",
+    "hf_likes",
+  ],
+};
+
+const FOUNDATION_MODEL_PILLARS = {
+  adoption: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_stars",
+    "github_mentions_7d",
+  ],
+  quality: ["benchmark_score"],
+  momentum: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_mentions_7d",
+  ],
+  community: [
+    "hf_likes",
+    "github_contributors",
+    "bluesky_mentions_7d",
+    "reddit_points_7d",
+  ],
+};
+
+interface Props {
+  agent: AgentDetail;
+  signals: SignalSeries[];
+}
+
 export function PillarExplanations({ agent, signals }: Props) {
-  if (agent.entity_kind === "foundation_model") {
-    return <FoundationModelExplanation agent={agent} signals={signals} />;
-  }
-  return <ApplicationExplanation agent={agent} signals={signals} />;
-}
+  const pillarMap =
+    agent.entity_kind === "foundation_model"
+      ? FOUNDATION_MODEL_PILLARS
+      : APPLICATION_PILLARS;
 
-function FoundationModelExplanation({
-  agent,
-  signals,
-}: {
-  agent: AgentDetail;
-  signals: SignalSeries[];
-}) {
-  const facts = (agent.facts ?? {}) as {
-    openrouter_id?: string;
-    context_length?: number;
-    modality?: string;
-    input_price_per_million?: number;
-    output_price_per_million?: number;
-  };
-  const ctx = facts.context_length ?? 0;
-  const provider = (facts.openrouter_id ?? "").split("/", 1)[0];
-  const modality = (facts.modality ?? "").toLowerCase();
-  const isFrontier = ["openai", "anthropic", "google", "meta-llama", "mistralai"].includes(
-    provider,
-  );
-  const blendedPrice =
-    facts.input_price_per_million != null && facts.output_price_per_million != null
-      ? (facts.input_price_per_million + facts.output_price_per_million) / 2
-      : facts.input_price_per_million ?? null;
+  const latest = signalLatestMap(signals);
 
-  // Real signals that may have been ingested for this FM. When
-  // present, they explain the score; when absent, the metadata-only
-  // reasoning takes over.
-  const hnNow = latest(signals, "hn_mentions_7d");
-  const bskyNow = latest(signals, "bluesky_mentions_7d");
-  const benchmarkNow = latest(signals, "benchmark_score");
-
-  const rows: { pillar: string; score: number | null | undefined; rule: string }[] = [
-    {
-      pillar: "Adoption",
-      score: agent.score?.adoption,
-      rule: [
-        ctx ? `${formatTokens(ctx)} context window` : null,
-        hnNow != null && hnNow > 0
-          ? `${formatCount(hnNow)} HN mentions in 7d`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" + ") || "No context length on file.",
-    },
-    {
-      pillar: "Quality",
-      score: agent.score?.quality,
-      rule:
-        benchmarkNow != null
-          ? `${benchmarkNow.toFixed(1)} on the Open LLM Leaderboard composite (Average across IFEval / BBH / MATH / GPQA / MUSR / MMLU-PRO).`
-          : [
-              isFrontier ? "Frontier-tier provider" : "Non-frontier provider",
-              modality.includes("image") || modality.includes("vision")
-                ? "+ multimodal"
-                : null,
-              " · heuristic until benchmark data lands.",
-            ]
-              .filter(Boolean)
-              .join(" "),
-    },
-    {
-      pillar: "Momentum",
-      score: agent.score?.momentum,
-      rule:
-        hnNow != null || bskyNow != null
-          ? `7d rate-of-change in mentions: ${[
-              hnNow != null ? `HN ${formatCount(hnNow)}` : null,
-              bskyNow != null ? `Bluesky ${formatCount(bskyNow)}` : null,
-            ]
-              .filter(Boolean)
-              .join(", ")}.`
-          : "Slug-based recency heuristic — replaced by real mention deltas once HN / Bluesky pick the model up.",
-    },
-    {
-      pillar: "Community",
-      score: agent.score?.community,
-      rule:
-        blendedPrice != null
-          ? `Blended price ${blendedPrice === 0 ? "free" : `$${blendedPrice.toFixed(2)}/M tokens`} — cheaper = wider community access.`
-          : "No pricing on file.",
-    },
+  const rows: Row[] = [
+    buildRow("Adoption", agent.score?.adoption, pillarMap.adoption, latest, false),
+    buildRow("Quality", agent.score?.quality, pillarMap.quality, latest, false),
+    buildRow("Momentum", agent.score?.momentum, pillarMap.momentum, latest, true),
+    buildRow("Community", agent.score?.community, pillarMap.community, latest, false),
   ];
 
-  return (
-    <Panel
-      title="How this score was computed"
-      subtitle="Foundation models score against OpenRouter metadata, not GitHub/HF signals — the inputs that move LLMs are different."
-      rows={rows}
-    />
-  );
-}
-
-function ApplicationExplanation({
-  agent,
-  signals,
-}: {
-  agent: AgentDetail;
-  signals: SignalSeries[];
-}) {
-  const latestBySource: Record<string, number | null> = {};
-  for (const s of signals) {
-    const points = s.points ?? [];
-    if (points.length === 0) {
-      latestBySource[s.source] = null;
-      continue;
-    }
-    const sorted = [...points].sort(
-      (a, b) =>
-        new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
-    );
-    latestBySource[s.source] = sorted[0].value;
-  }
-
-  function lineFor(sources: string[]): string {
-    const present = sources
-      .map((s) => ({ s, v: latestBySource[s] }))
-      .filter((x) => x.v != null);
-    if (present.length === 0) {
-      return "No signals yet — pillar uses neutral baseline.";
-    }
-    return present
-      .map((x) => `${SOURCE_LABELS[x.s] ?? x.s}: ${formatCount(x.v as number)}`)
-      .join(" · ");
-  }
-
-  const benchmarkValue = latestBySource["benchmark_score"];
-  const rows = [
-    {
-      pillar: "Adoption",
-      score: agent.score?.adoption,
-      rule: lineFor(ADOPTION_SOURCES),
-    },
-    {
-      pillar: "Quality",
-      score: agent.score?.quality,
-      rule:
-        agent.score?.quality == null
-          ? "Unrated — no benchmark results on file. Quality's 30% weight is redistributed pro-rata to the other three pillars."
-          : benchmarkValue != null
-            ? `Benchmark score ${benchmarkValue.toFixed(2)} (z-scored against the rated population).`
-            : "Benchmark data exists but wasn't loaded into this view.",
-    },
-    {
-      pillar: "Momentum",
-      score: agent.score?.momentum,
-      rule: `7d/30d rate-of-change blend over: ${MOMENTUM_SOURCES.map((s) => SOURCE_LABELS[s] ?? s).join(", ")}.`,
-    },
-    {
-      pillar: "Community",
-      score: agent.score?.community,
-      rule: lineFor(COMMUNITY_SOURCES),
-    },
-  ];
-
-  return (
-    <Panel
-      title="How this score was computed"
-      subtitle="Each pillar z-scores its source signals against the admitted-agent population, clamps to ±3σ, and maps to 0–100."
-      rows={rows}
-    />
-  );
-}
-
-function Panel({
-  title,
-  subtitle,
-  rows,
-}: {
-  title: string;
-  subtitle: string;
-  rows: { pillar: string; score: number | null | undefined; rule: string }[];
-}) {
   return (
     <section className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-4 py-2.5">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          {title}
+          How this score was computed
         </div>
-        <div className="text-[11px] text-muted-foreground">{subtitle}</div>
+        <div className="text-[11px] text-muted-foreground">
+          Each pillar is the mean of its available scaled signals. Pillars
+          with no reading are Unrated. The same formula runs for application
+          agents and foundation models — only the source list differs.
+        </div>
       </div>
       <ul className="divide-y divide-border">
         {rows.map((r) => (
-          <li key={r.pillar} className="grid grid-cols-[80px_60px_1fr] gap-3 px-4 py-2.5 text-sm md:grid-cols-[100px_70px_1fr]">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-              {r.pillar}
-            </span>
-            <span className="num font-semibold">
-              {r.score == null ? "—" : r.score.toFixed(1)}
-            </span>
-            <span className="text-foreground/85">{r.rule}</span>
+          <li key={r.pillar} className="px-4 py-3">
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {r.pillar}
+              </span>
+              <span className="num text-base font-semibold">
+                {r.score == null ? "Unrated" : r.score.toFixed(1)}
+              </span>
+              <span className="ml-auto text-[11px] text-muted-foreground">
+                {r.contributing.length}/{r.total} signals
+              </span>
+            </div>
+            {r.contributing.length === 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {r.pillar === "Quality"
+                  ? "No benchmark results on file. Quality's 30% weight is redistributed pro-rata to the other pillars."
+                  : "No signals on file for this pillar yet."}
+              </p>
+            ) : (
+              <ul className="mt-2 grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+                {r.contributing.map((c) => (
+                  <li
+                    key={c.source}
+                    className="flex items-center justify-between gap-3 rounded-sm bg-subtle px-2.5 py-1"
+                  >
+                    <span className="truncate text-foreground/85">
+                      {SOURCE_LABELS[c.source] ?? c.source}
+                    </span>
+                    <span className="num text-xs text-muted-foreground">
+                      {c.raw_label}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {r.missing.length > 0 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Not yet on file:{" "}
+                {r.missing.map((s) => SOURCE_LABELS[s] ?? s).join(", ")}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -283,10 +170,53 @@ function Panel({
   );
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
-  return String(n);
+interface ContribRow {
+  source: string;
+  raw_label: string;
+}
+
+interface Row {
+  pillar: string;
+  score: number | null | undefined;
+  total: number;
+  contributing: ContribRow[];
+  missing: string[];
+}
+
+function buildRow(
+  pillar: string,
+  score: number | null | undefined,
+  sources: string[],
+  latest: Record<string, number>,
+  isMomentum: boolean,
+): Row {
+  const contributing: ContribRow[] = [];
+  const missing: string[] = [];
+  for (const s of sources) {
+    const v = latest[s];
+    if (v == null) {
+      missing.push(s);
+      continue;
+    }
+    contributing.push({
+      source: s,
+      raw_label: isMomentum ? `${formatCount(v)} now` : formatCount(v),
+    });
+  }
+  return { pillar, score, total: sources.length, contributing, missing };
+}
+
+function signalLatestMap(signals: SignalSeries[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of signals) {
+    if (!s.points || s.points.length === 0) continue;
+    const sorted = [...s.points].sort(
+      (a, b) =>
+        new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
+    );
+    out[s.source] = sorted[0].value;
+  }
+  return out;
 }
 
 function formatCount(n: number): string {

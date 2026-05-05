@@ -26,6 +26,7 @@ const SOURCE_META: Record<
   github_forks: { label: "GitHub forks", pillar: "community" },
   github_commits_7d: { label: "Commits (7d)", pillar: "momentum" },
   github_contributors: { label: "Contributors", pillar: "community" },
+  github_mentions_7d: { label: "GitHub mentions (7d)", pillar: "adoption" },
   hf_downloads_30d: { label: "HF downloads (30d)", pillar: "adoption" },
   hf_likes: { label: "HF likes", pillar: "community" },
   // hf_trending_rank: 1 is best, so a *fall* in rank value = improvement.
@@ -56,7 +57,7 @@ function computeContributions(series: SignalSeries[]): Contribution[] {
   const out: Contribution[] = [];
 
   for (const s of series) {
-    if (s.points.length < 2) continue;
+    if (s.points.length === 0) continue;
     const meta = SOURCE_META[s.source];
     if (!meta) continue;
 
@@ -66,22 +67,25 @@ function computeContributions(series: SignalSeries[]): Contribution[] {
         new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime(),
     );
     const latest = sorted.at(-1)!;
-    // Anchor: the latest point that's older than 24h. If none, take the
-    // earliest available — the widget then describes "since first seen".
+
+    // Pick the anchor for "what was this 24h ago":
+    //   1. The latest reading older than 24h, if any → real comparison.
+    //   2. Otherwise, the signal first appeared inside the 24h window;
+    //      treat the prior as 0 so a freshly-arrived signal shows up
+    //      ("0 → 47, +47").
     const olderPts = sorted.filter(
       (p) => new Date(p.captured_at).getTime() <= cutoff,
     );
-    const anchor =
-      olderPts.length > 0 ? olderPts.at(-1)! : sorted[0];
-    if (anchor === latest) continue;
+    const anchorValue =
+      olderPts.length > 0 ? olderPts.at(-1)!.value : 0;
 
-    const rawDelta = latest.value - anchor.value;
+    const rawDelta = latest.value - anchorValue;
     // Inverse sources (rank: lower is better) flip the sign so positive
     // delta always means "good for the score".
     const delta = meta.inverse ? -rawDelta : rawDelta;
     const pctDelta =
-      anchor.value !== 0
-        ? (delta / Math.abs(anchor.value)) * 100
+      anchorValue !== 0
+        ? (delta / Math.abs(anchorValue)) * 100
         : null;
 
     if (delta === 0) continue;
@@ -92,7 +96,7 @@ function computeContributions(series: SignalSeries[]): Contribution[] {
       delta,
       pctDelta,
       valueNow: latest.value,
-      valuePrior: anchor.value,
+      valuePrior: anchorValue,
     });
   }
 

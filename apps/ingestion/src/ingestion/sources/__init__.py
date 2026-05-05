@@ -12,6 +12,7 @@ from ingestion.sources.github import (
     GithubForksIngestor,
     GithubStarsIngestor,
 )
+from ingestion.sources.github_mentions import GithubMentions7dIngestor
 from ingestion.sources.hackernews import HNMentions7dIngestor
 from ingestion.sources.huggingface import (
     HFDownloads30dIngestor,
@@ -37,6 +38,7 @@ __all__ = [
     "GithubCommits7dIngestor",
     "GithubContributorsIngestor",
     "GithubForksIngestor",
+    "GithubMentions7dIngestor",
     "GithubStarsIngestor",
     "HFDownloads30dIngestor",
     "HFLikesIngestor",

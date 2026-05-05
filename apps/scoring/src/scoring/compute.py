@@ -1,47 +1,47 @@
-"""Score computation.
+"""Unified score computation.
 
-The scoring algorithm is split into three phases:
+One formula for both application agents and foundation models. No
+metadata-derived inflation. Every point of every pillar maps to a
+specific signal reading the agent has on file.
 
-1. **Population stats** — for every signal source, compute the population
-   mean and stddev across the latest reading per agent. We z-score within
-   the admitted population, NOT against an absolute baseline. This is
-   recomputed once per recompute batch, not per-agent.
+The maths
+---------
 
-2. **Per-agent pillars** — Adoption, Quality, Momentum, Community. Each
-   pillar takes its source's latest reading, z-scores it, clamps to
-   [-3, +3] and min-max scales to [0, 100]. Quality is special: if the
-   agent has no benchmark_results we return ``None`` ("Unrated") rather
-   than 0.
+For any count-shaped signal S with raw value v and an absolute
+"value-where-it-scores-50" anchor:
 
-3. **Headline AgentScore** — weighted blend of the four. If quality is
-   unrated, its 30% weight is redistributed pro rata across the other
-   three so unrated agents aren't penalized.
+    scaled(v, anchor) = min(100, 50 * log10(v + 1) / log10(anchor + 1))
 
-Manipulation resistance: any signal flagged on ``agents.manipulation_flags``
-is excluded from that day's score for that agent. ``manipulation_resistance``
-is a confidence in [0, 1]: 1.0 with no flags, decreasing as flags accumulate.
+That gives a stable 0–100 score per signal that doesn't depend on
+the population of other agents. A model with 100k HF downloads
+scores 50 forever, regardless of who else is in the dataset.
+
+Pillar score = arithmetic mean of available scaled signals bound to
+that pillar. If no signals are present for a pillar, the pillar is
+**null** (Unrated). The headline AgentScore is the weight-blended
+mean of the non-null pillars; if all four are null, the agent is
+Unrated as a whole.
+
+Pillar source list differs by entity_kind (see PILLAR_SOURCES) but
+the arithmetic is identical, so two scores are directly comparable
+across kinds.
 """
 from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scoring.config import Settings, get_settings
-from scoring.enums import (
-    ADOPTION_SOURCES,
-    COMMUNITY_SOURCES,
-    MOMENTUM_SOURCES,
-    SignalSource,
-)
+from scoring.enums import SignalSource
 
 log = logging.getLogger(__name__)
 
@@ -51,26 +51,151 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class PillarScores:
-    adoption: float
+    adoption: float | None
     quality: float | None
-    momentum: float
-    community: float
+    momentum: float | None
+    community: float | None
     manipulation_resistance: float
-    agent_score: float
+    agent_score: float | None
     inputs: dict[str, Any] = field(default_factory=dict)
 
 
+# Kept for backwards-compat with the recompute call signature; the
+# new formula doesn't actually need population stats but the
+# subscriber/scheduler call passes it.
 @dataclass
 class PopulationStats:
-    """Mean and stddev per signal source across all admitted agents."""
-
-    means: dict[SignalSource, float]
-    stds: dict[SignalSource, float]
-    benchmark_mean: float | None
-    benchmark_std: float | None
+    placeholder: bool = True
 
 
-# ---------------------------------------------------------------- queries
+# ----------------------------------------------------------- anchor table
+
+# Each anchor is the raw value at which the signal scores exactly 50.
+# Lower values curve toward 0; higher values flatten toward 100. These
+# numbers are documented on the public methodology page so readers can
+# argue with them.
+ANCHORS: dict[SignalSource, float] = {
+    SignalSource.GITHUB_STARS: 1_000,
+    SignalSource.GITHUB_FORKS: 200,
+    SignalSource.GITHUB_CONTRIBUTORS: 30,
+    SignalSource.GITHUB_COMMITS_7D: 50,
+    SignalSource.GITHUB_MENTIONS_7D: 20,
+    SignalSource.HF_DOWNLOADS_30D: 100_000,
+    SignalSource.HF_LIKES: 200,
+    SignalSource.NPM_WEEKLY: 1_000,
+    SignalSource.PYPI_MONTHLY: 10_000,
+    SignalSource.HN_MENTIONS_7D: 10,
+    SignalSource.HN_POINTS_7D: 100,
+    SignalSource.REDDIT_MENTIONS_7D: 10,
+    SignalSource.REDDIT_POINTS_7D: 100,
+    SignalSource.BLUESKY_MENTIONS_7D: 10,
+    SignalSource.STACKOVERFLOW_QUESTIONS_7D: 5,
+    SignalSource.PRODUCTHUNT_UPVOTES: 100,
+    SignalSource.ARXIV_CITATIONS: 100,
+}
+
+
+def scaled(value: float, source: SignalSource) -> float:
+    """Map a raw signal value to a 0–100 score via log-anchor curve."""
+    if source == SignalSource.BENCHMARK_SCORE:
+        # Benchmarks already publish on a 0–100 scale.
+        return max(0.0, min(100.0, value))
+    if source == SignalSource.MCP_REGISTRY_LISTED:
+        # Binary signal: listed (1) → 75, not listed (0) → 0.
+        return 75.0 if value > 0 else 0.0
+    if source == SignalSource.HF_TRENDING_RANK:
+        # Inverted: rank 1 = best, anchor at rank 10 = 50. Use the
+        # same log curve but on the inverse scale.
+        if value <= 0:
+            return 50.0
+        # rank 1 → ~85, rank 10 → 50, rank 100 → ~0
+        return max(0.0, min(100.0, 100.0 - 50.0 * math.log10(value) / math.log10(10)))
+    anchor = ANCHORS.get(source)
+    if anchor is None:
+        # Unknown signal — neutral score. Shouldn't happen if enums match.
+        return 50.0
+    if value < 0:
+        value = 0.0
+    return min(100.0, 50.0 * math.log10(value + 1) / math.log10(anchor + 1))
+
+
+def scaled_roc(now: float, then: float) -> float:
+    """Map a 7-day rate-of-change to a 0–100 score.
+
+    +0% growth = 50, +100% = 100, -50% = 0, capped at extremes.
+    Guards against then=0 with a max() floor so brand-new signals
+    don't blow up the formula.
+    """
+    base = max(then, 1.0)
+    roc = (now - then) / base
+    return max(0.0, min(100.0, 50.0 + 50.0 * roc))
+
+
+# ----------------------------------------------------------- pillar maps
+
+PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
+    "adoption": [
+        SignalSource.GITHUB_STARS,
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.NPM_WEEKLY,
+        SignalSource.PYPI_MONTHLY,
+        SignalSource.MCP_REGISTRY_LISTED,
+        SignalSource.STACKOVERFLOW_QUESTIONS_7D,
+        SignalSource.PRODUCTHUNT_UPVOTES,
+    ],
+    "quality": [SignalSource.BENCHMARK_SCORE],
+    "momentum": [
+        SignalSource.GITHUB_STARS,
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.NPM_WEEKLY,
+        SignalSource.PYPI_MONTHLY,
+        SignalSource.HN_MENTIONS_7D,
+        SignalSource.REDDIT_MENTIONS_7D,
+        SignalSource.BLUESKY_MENTIONS_7D,
+    ],
+    "community": [
+        SignalSource.GITHUB_CONTRIBUTORS,
+        SignalSource.GITHUB_FORKS,
+        SignalSource.HN_POINTS_7D,
+        SignalSource.REDDIT_POINTS_7D,
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.HF_LIKES,
+    ],
+}
+
+PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
+    "adoption": [
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.HN_MENTIONS_7D,
+        SignalSource.REDDIT_MENTIONS_7D,
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.GITHUB_STARS,
+        SignalSource.GITHUB_MENTIONS_7D,
+    ],
+    "quality": [SignalSource.BENCHMARK_SCORE],
+    "momentum": [
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.HN_MENTIONS_7D,
+        SignalSource.REDDIT_MENTIONS_7D,
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.GITHUB_MENTIONS_7D,
+    ],
+    "community": [
+        SignalSource.HF_LIKES,
+        SignalSource.GITHUB_CONTRIBUTORS,
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.REDDIT_POINTS_7D,
+    ],
+}
+
+
+def _pillar_sources(entity_kind: str) -> dict[str, list[SignalSource]]:
+    if entity_kind == "foundation_model":
+        return PILLAR_SOURCES_FOUNDATION_MODEL
+    return PILLAR_SOURCES_APPLICATION
+
+
+# ----------------------------------------------------------- DB queries
 
 
 async def _latest_value(
@@ -117,20 +242,30 @@ async def _value_at(
 async def _agent_benchmark_score(
     session: AsyncSession, agent_id: UUID
 ) -> float | None:
-    """Latest benchmark_results value averaged across all benchmarks the agent appears on."""
+    """Mean of latest benchmark scores across every benchmark this
+    agent has results on. Each score is normalised against its
+    benchmark's max_score so multiple benchmarks combine cleanly."""
     r = await session.execute(
         text(
             """
             WITH latest AS (
-                SELECT benchmark_id, score,
+                SELECT br.benchmark_id, br.score, b.max_score,
                        ROW_NUMBER() OVER (
-                           PARTITION BY benchmark_id
-                           ORDER BY captured_at DESC
+                           PARTITION BY br.benchmark_id
+                           ORDER BY br.captured_at DESC
                        ) AS rn
-                FROM benchmark_results
-                WHERE agent_id = :aid
+                FROM benchmark_results br
+                JOIN benchmarks b ON b.id = br.benchmark_id
+                WHERE br.agent_id = :aid
             )
-            SELECT avg(score) FROM latest WHERE rn = 1
+            SELECT
+                AVG(
+                    CASE
+                        WHEN max_score IS NULL OR max_score <= 0 THEN score
+                        ELSE score / max_score * 100
+                    END
+                )::float
+            FROM latest WHERE rn = 1
             """
         ),
         {"aid": agent_id},
@@ -139,109 +274,25 @@ async def _agent_benchmark_score(
     return float(row[0]) if row and row[0] is not None else None
 
 
-async def _population_for_source(
-    session: AsyncSession, source: SignalSource
-) -> tuple[float, float]:
-    """Mean + stddev across the latest reading per admitted agent."""
+async def _agent_kind(session: AsyncSession, agent_id: UUID) -> str:
     r = await session.execute(
-        text(
-            """
-            WITH latest AS (
-                SELECT agent_id, value,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY agent_id ORDER BY captured_at DESC
-                       ) AS rn
-                FROM signals
-                WHERE source = CAST(:src AS signal_source)
-            )
-            SELECT avg(value)::float, stddev_pop(value)::float
-            FROM latest
-            JOIN agents a ON a.id = latest.agent_id
-            WHERE rn = 1 AND a.eligibility_status = 'admitted'
-            """
-        ),
-        {"src": source.value},
+        text("SELECT entity_kind FROM agents WHERE id = :id"),
+        {"id": agent_id},
     )
-    mean, std = r.first() or (0.0, 0.0)
-    return float(mean or 0.0), float(std or 0.0)
+    row = r.first()
+    return (row[0] if row and row[0] else "application")
 
 
-async def _benchmark_population(
-    session: AsyncSession,
-) -> tuple[float | None, float | None]:
+async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict | None:
     r = await session.execute(
-        text(
-            """
-            WITH latest AS (
-                SELECT agent_id, benchmark_id, score,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY agent_id, benchmark_id
-                           ORDER BY captured_at DESC
-                       ) AS rn
-                FROM benchmark_results
-            ),
-            per_agent AS (
-                SELECT agent_id, avg(score) AS s FROM latest WHERE rn = 1 GROUP BY agent_id
-            )
-            SELECT avg(s)::float, stddev_pop(s)::float FROM per_agent
-            """
-        )
+        text("SELECT manipulation_flags FROM agents WHERE id = :id"),
+        {"id": agent_id},
     )
-    row = r.first() or (None, None)
-    return (
-        float(row[0]) if row[0] is not None else None,
-        float(row[1]) if row[1] is not None else None,
-    )
-
-
-async def population_stats(session: AsyncSession) -> PopulationStats:
-    sources = {*ADOPTION_SOURCES, *COMMUNITY_SOURCES, *MOMENTUM_SOURCES}
-    means: dict[SignalSource, float] = {}
-    stds: dict[SignalSource, float] = {}
-    for src in sources:
-        m, s = await _population_for_source(session, src)
-        means[src] = m
-        stds[src] = s
-    bm, bs = await _benchmark_population(session)
-    return PopulationStats(means=means, stds=stds, benchmark_mean=bm, benchmark_std=bs)
-
-
-# ---------------------------------------------------------------- math
-
-
-def _z(value: float, mean: float, std: float) -> float:
-    if std <= 0:
-        return 0.0
-    return (value - mean) / std
-
-
-def _scaled(z: float) -> float:
-    """Clamp z to [-3, +3] then map to [0, 100]."""
-    z = max(-3.0, min(3.0, z))
-    return (z + 3.0) / 6.0 * 100.0
-
-
-def _blend(values: list[float], weights: list[float] | None = None) -> float:
-    if not values:
-        return 0.0
-    if weights is None:
-        weights = [1.0] * len(values)
-    total_w = sum(weights)
-    if total_w == 0:
-        return 0.0
-    return sum(v * w for v, w in zip(values, weights, strict=True)) / total_w
-
-
-# --------------------------------------------------- per-pillar helpers
+    row = r.first()
+    return row[0] if row and row[0] else None
 
 
 def _excluded_sources(manipulation_flags: dict | None) -> set[SignalSource]:
-    """Translate manipulation_flags into the set of signal sources to skip.
-
-    ``ingestion/integrity.py`` writes flag rules keyed by name. We map
-    each rule to the upstream signals it implicates so the recompute
-    excludes exactly those readings for this agent today.
-    """
     if not manipulation_flags:
         return set()
     out: set[SignalSource] = set()
@@ -262,165 +313,103 @@ def _manipulation_resistance(manipulation_flags: dict | None) -> float:
     if not manipulation_flags:
         return 1.0
     n = len(manipulation_flags)
-    # Each active flag knocks ~25% off confidence, never below 0.1.
     return max(0.1, 1.0 - 0.25 * n)
 
 
-# ---------------------------------------------------------------- pillars
+# ----------------------------------------------------------- pillar calc
 
 
-async def _adoption(
+async def _pillar_value(
     session: AsyncSession,
     agent_id: UUID,
-    pop: PopulationStats,
+    pillar: str,
+    sources: list[SignalSource],
     excluded: set[SignalSource],
-) -> tuple[float, dict[str, Any]]:
-    inputs: dict[str, Any] = {}
-    contribs: list[float] = []
-    for src in ADOPTION_SOURCES:
-        if src in excluded:
-            inputs[src.value] = "excluded"
-            continue
-        v = await _latest_value(session, agent_id, src)
-        if v is None:
-            inputs[src.value] = None
-            continue
-        z = _z(v, pop.means[src], pop.stds[src])
-        scaled = _scaled(z)
-        inputs[src.value] = {"value": v, "z": z, "scaled": scaled}
-        contribs.append(scaled)
-    return _blend(contribs), inputs
-
-
-async def _quality(
-    session: AsyncSession,
-    agent_id: UUID,
-    pop: PopulationStats,
+    is_momentum: bool,
 ) -> tuple[float | None, dict[str, Any]]:
-    """Mean z-score across all benchmarks the agent appears on."""
-    score = await _agent_benchmark_score(session, agent_id)
-    if score is None or pop.benchmark_mean is None or pop.benchmark_std is None:
-        return None, {"raw": score, "rated": False}
-    z = _z(score, pop.benchmark_mean, pop.benchmark_std)
-    return _scaled(z), {"raw": score, "z": z, "rated": True}
+    """Compute one pillar.
 
-
-async def _momentum(
-    session: AsyncSession,
-    agent_id: UUID,
-    excluded: set[SignalSource],
-) -> tuple[float, dict[str, Any]]:
-    """7d + 30d rate-of-change blend over adoption signals."""
+    Returns (score, inputs) where score is None if no contributing
+    signal had a reading (the pillar is Unrated for this agent).
+    inputs records each source we consulted with its raw value, the
+    scaled contribution, and any reason it was skipped.
+    """
     inputs: dict[str, Any] = {}
-    contribs: list[float] = []
-    weights: list[float] = []
-    for src in MOMENTUM_SOURCES:
+    contributions: list[float] = []
+
+    for src in sources:
         if src in excluded:
-            inputs[src.value] = "excluded"
+            inputs[src.value] = {"status": "excluded"}
             continue
-        now_v = await _latest_value(session, agent_id, src)
-        v_7d = await _value_at(session, agent_id, src, days_ago=7)
-        v_30d = await _value_at(session, agent_id, src, days_ago=30)
-        if now_v is None:
-            inputs[src.value] = None
+
+        if pillar == "quality" and src == SignalSource.BENCHMARK_SCORE:
+            # Quality is special: the score lives in benchmark_results,
+            # not the signals table.
+            value = await _agent_benchmark_score(session, agent_id)
+            if value is None:
+                inputs[src.value] = {"status": "no_data"}
+                continue
+            contrib = scaled(value, src)
+            inputs[src.value] = {
+                "raw": value,
+                "scaled": contrib,
+                "anchor": "benchmark_max_score-normalized",
+            }
+            contributions.append(contrib)
             continue
-        roc_7 = _rate_of_change(now_v, v_7d)
-        roc_30 = _rate_of_change(now_v, v_30d)
-        # Map a ROC to [0, 100]: 0% growth -> 50; +100% -> 100; -50% -> 0.
-        contrib_7 = _roc_scaled(roc_7) if roc_7 is not None else None
-        contrib_30 = _roc_scaled(roc_30) if roc_30 is not None else None
-        # 60/40 blend of 7d:30d when both are present, else the available one.
-        if contrib_7 is None and contrib_30 is None:
-            inputs[src.value] = {"roc_7d": None, "roc_30d": None}
+
+        if is_momentum:
+            now = await _latest_value(session, agent_id, src)
+            if now is None:
+                inputs[src.value] = {"status": "no_data"}
+                continue
+            then = await _value_at(session, agent_id, src, days_ago=7)
+            if then is None:
+                # Signal arrived in the last 7 days. Small positive bias.
+                contrib = 60.0
+                inputs[src.value] = {
+                    "now": now,
+                    "then": None,
+                    "scaled": contrib,
+                    "note": "newly arrived signal",
+                }
+            else:
+                contrib = scaled_roc(now, then)
+                inputs[src.value] = {
+                    "now": now,
+                    "then": then,
+                    "roc": (now - then) / max(then, 1.0),
+                    "scaled": contrib,
+                }
+            contributions.append(contrib)
             continue
-        if contrib_7 is not None and contrib_30 is not None:
-            value = 0.6 * contrib_7 + 0.4 * contrib_30
-        else:
-            value = contrib_7 if contrib_7 is not None else contrib_30
+
+        # Default path: latest reading scaled against its anchor.
+        value = await _latest_value(session, agent_id, src)
+        if value is None:
+            inputs[src.value] = {"status": "no_data"}
+            continue
+        contrib = scaled(value, src)
         inputs[src.value] = {
-            "now": now_v,
-            "v_7d": v_7d,
-            "v_30d": v_30d,
-            "roc_7d": roc_7,
-            "roc_30d": roc_30,
-            "scaled": value,
+            "raw": value,
+            "scaled": contrib,
+            "anchor": ANCHORS.get(src),
         }
-        contribs.append(value)  # type: ignore[arg-type]
-        weights.append(1.0)
-    if not contribs:
-        # Neutral 50 when we have no momentum data (don't punish brand-new agents).
-        return 50.0, {"reason": "no_momentum_data"}
-    return _blend(contribs, weights), inputs
+        contributions.append(contrib)
+
+    if not contributions:
+        return None, inputs
+    return sum(contributions) / len(contributions), inputs
 
 
-async def _community(
-    session: AsyncSession,
-    agent_id: UUID,
-    pop: PopulationStats,
-    excluded: set[SignalSource],
-) -> tuple[float, dict[str, Any]]:
-    inputs: dict[str, Any] = {}
-    contribs: list[float] = []
-    for src in COMMUNITY_SOURCES:
-        if src in excluded:
-            inputs[src.value] = "excluded"
-            continue
-        v = await _latest_value(session, agent_id, src)
-        if v is None:
-            inputs[src.value] = None
-            continue
-        z = _z(v, pop.means[src], pop.stds[src])
-        scaled = _scaled(z)
-        inputs[src.value] = {"value": v, "z": z, "scaled": scaled}
-        contribs.append(scaled)
-    return _blend(contribs) if contribs else 50.0, inputs
+# ----------------------------------------------------------- public
 
 
-def _rate_of_change(now: float | None, then: float | None) -> float | None:
-    if now is None or then is None or then <= 0:
-        return None
-    return (now - then) / then
-
-
-def _roc_scaled(roc: float) -> float:
-    """Map ROC to [0, 100] with 0% -> 50."""
-    # +/- 100% caps the scale. 0 -> 50, +1.0 -> 100, -1.0 -> 0, beyond clamps.
-    return max(0.0, min(100.0, 50.0 + roc * 50.0))
-
-
-# ---------------------------------------------------------------- headline
-
-
-def _headline(
-    pillars: PillarScores, settings: Settings
-) -> float:
-    """Weighted blend; redistribute quality's weight if unrated."""
-    weights = {
-        "adoption": settings.weight_adoption,
-        "quality": settings.weight_quality,
-        "momentum": settings.weight_momentum,
-        "community": settings.weight_community,
-    }
-    if pillars.quality is None:
-        # Spread quality's weight pro-rata across the other three.
-        spare = weights["quality"]
-        weights["quality"] = 0.0
-        non_zero = [k for k in ("adoption", "momentum", "community")]
-        scaler = sum(weights[k] for k in non_zero)
-        if scaler > 0:
-            for k in non_zero:
-                weights[k] += spare * (weights[k] / scaler)
-
-    parts = [
-        weights["adoption"] * pillars.adoption,
-        weights["quality"] * (pillars.quality or 0.0),
-        weights["momentum"] * pillars.momentum,
-        weights["community"] * pillars.community,
-    ]
-    return float(sum(parts))
-
-
-# ---------------------------------------------------------------- public
+async def population_stats(session: AsyncSession) -> PopulationStats:
+    """Compatibility shim. The new formula doesn't need population
+    stats — every signal is scaled against an absolute anchor — but
+    the recompute pipeline still passes a stats object around."""
+    return PopulationStats()
 
 
 async def compute_for_agent(
@@ -433,24 +422,21 @@ async def compute_for_agent(
     flags = await _agent_flags(session, agent_id)
     excluded = _excluded_sources(flags)
     resistance = _manipulation_resistance(flags)
+    kind = await _agent_kind(session, agent_id)
+    pillar_map = _pillar_sources(kind)
 
-    # Foundation models score against a different population — the
-    # signals that matter for an LLM (context length, price, modality,
-    # whether it's frontier-tier) are wholly different from the
-    # GitHub/HF/Reddit signals that drive application-agent scores.
-    # We dispatch on entity_kind here rather than tangle both paths in
-    # one signal pipeline, which would require ENUM migrations and
-    # poison the population stats with apples-to-oranges values.
-    kind, payload = await _agent_kind_and_payload(session, agent_id)
-    if kind == "foundation_model":
-        return await _compute_foundation_model(
-            session, agent_id, payload, resistance, settings
-        )
-
-    adoption, adoption_in = await _adoption(session, agent_id, pop, excluded)
-    quality, quality_in = await _quality(session, agent_id, pop)
-    momentum, momentum_in = await _momentum(session, agent_id, excluded)
-    community, community_in = await _community(session, agent_id, pop, excluded)
+    adoption, adoption_in = await _pillar_value(
+        session, agent_id, "adoption", pillar_map["adoption"], excluded, False
+    )
+    quality, quality_in = await _pillar_value(
+        session, agent_id, "quality", pillar_map["quality"], excluded, False
+    )
+    momentum, momentum_in = await _pillar_value(
+        session, agent_id, "momentum", pillar_map["momentum"], excluded, True
+    )
+    community, community_in = await _pillar_value(
+        session, agent_id, "community", pillar_map["community"], excluded, False
+    )
 
     pillars = PillarScores(
         adoption=adoption,
@@ -458,8 +444,9 @@ async def compute_for_agent(
         momentum=momentum,
         community=community,
         manipulation_resistance=resistance,
-        agent_score=0.0,
+        agent_score=None,
         inputs={
+            "kind": kind,
             "adoption": adoption_in,
             "quality": quality_in,
             "momentum": momentum_in,
@@ -472,269 +459,40 @@ async def compute_for_agent(
     return pillars
 
 
-async def _agent_kind_and_payload(
-    session: AsyncSession, agent_id: UUID
-) -> tuple[str, dict[str, Any] | None]:
-    """Pull entity_kind plus the original discovery payload (if present)."""
-    r = await session.execute(
-        text(
-            """
-            SELECT a.entity_kind, dc.raw_payload
-            FROM agents a
-            LEFT JOIN discovery_candidates dc
-                ON dc.promoted_to_agent_id = a.id
-            WHERE a.id = :id
-            ORDER BY dc.found_at DESC NULLS LAST
-            LIMIT 1
-            """
-        ),
-        {"id": agent_id},
-    )
-    row = r.first()
-    if row is None:
-        return "application", None
-    return row[0] or "application", row[1]
+def _headline(pillars: PillarScores, settings: Settings) -> float | None:
+    """Weight-blended mean of non-null pillars. None if all are null."""
+    weights = {
+        "adoption": settings.weight_adoption,
+        "quality": settings.weight_quality,
+        "momentum": settings.weight_momentum,
+        "community": settings.weight_community,
+    }
+    contributions: list[tuple[float, float]] = []
+    for key in ("adoption", "quality", "momentum", "community"):
+        value = getattr(pillars, key)
+        if value is None:
+            continue
+        contributions.append((weights[key], value))
+    if not contributions:
+        return None
+    total_w = sum(w for w, _ in contributions)
+    if total_w <= 0:
+        return None
+    return sum(w * v for w, v in contributions) / total_w
 
 
-# ---------------------------------------------------------------- FM scoring
-
-
-# Frontier-tier providers — these have stronger reputational quality than
-# wrappers / fine-tunes / regional clones. The list is conservative on
-# purpose; readers can argue with the choice but the formula is documented.
-_FRONTIER_PROVIDERS = {"openai", "anthropic", "google", "meta-llama", "mistralai"}
-
-
-async def _compute_foundation_model(
-    session: AsyncSession,
-    agent_id: UUID,
-    payload: dict[str, Any] | None,
-    resistance: float,
-    settings: Settings,
-) -> PillarScores:
-    """Score a foundation model from its OpenRouter metadata, blended
-    with whatever real signals have arrived for it.
-
-    The four pillars map to LLM-relevant axes:
-      - adoption  : context length (longer context = wider use cases),
-                    boosted by HN mention volume when present
-      - quality   : real Open LLM Leaderboard benchmark when available;
-                    falls back to provider-tier × multimodal heuristic
-      - momentum  : 7d ROC of HN + Bluesky mentions (real signal); falls
-                    back to slug-based recency heuristic when no signals
-                    have landed yet
-      - community : pricing accessibility, boosted by Bluesky mention rate
-
-    Signals get blended in only when present — the formula degrades
-    gracefully to the metadata-only path for FMs that haven't picked
-    up any traffic yet."""
-    payload = payload or {}
-    ctx = payload.get("context_length") or 0
-    in_price = payload.get("input_price_per_million")
-    out_price = payload.get("output_price_per_million")
-    modality = (payload.get("modality") or "").lower()
-    or_id = (payload.get("openrouter_id") or "").lower()
-    provider = or_id.split("/", 1)[0] if "/" in or_id else ""
-
-    # Real signals — present for some FMs, absent for others. We pull
-    # the latest reading and (where applicable) a 7d-prior reading so
-    # Momentum can be a real rate-of-change rather than a slug guess.
-    hn_now = await _latest_value(session, agent_id, SignalSource.HN_MENTIONS_7D)
-    hn_prior = await _value_at(
-        session, agent_id, SignalSource.HN_MENTIONS_7D, days_ago=7
-    )
-    bsky_now = await _latest_value(
-        session, agent_id, SignalSource.BLUESKY_MENTIONS_7D
-    )
-    bsky_prior = await _value_at(
-        session, agent_id, SignalSource.BLUESKY_MENTIONS_7D, days_ago=7
-    )
-    benchmark = await _agent_benchmark_score(session, agent_id)
-
-    # Adoption — bigger context windows let people build bigger things
-    # with the model. Map: 4k→10, 32k→30, 128k→55, 200k→70, 1M→95.
-    if ctx <= 0:
-        adoption = 30.0
-    elif ctx >= 1_000_000:
-        adoption = 95.0
-    elif ctx >= 200_000:
-        adoption = 70.0 + (ctx - 200_000) / 800_000 * 25.0
-    elif ctx >= 128_000:
-        adoption = 55.0 + (ctx - 128_000) / 72_000 * 15.0
-    elif ctx >= 32_000:
-        adoption = 30.0 + (ctx - 32_000) / 96_000 * 25.0
-    elif ctx >= 4_000:
-        adoption = 10.0 + (ctx - 4_000) / 28_000 * 20.0
-    else:
-        adoption = 5.0
-    # Real-signal nudge: +0.5 per HN mention, capped at +10. Keeps the
-    # context-length signal dominant but lets buzzy launches move.
-    if hn_now and hn_now > 0:
-        adoption = min(100.0, adoption + min(10.0, hn_now * 0.5))
-
-    # Quality — real benchmark first, heuristic only as fallback.
-    if benchmark is not None:
-        # Open LLM Leaderboard "Average ⬆️" is already 0–100 scaled.
-        # Clamp so a runaway leaderboard doesn't blow past the cap.
-        quality = max(0.0, min(100.0, float(benchmark)))
-        quality_source = "open-llm-leaderboard"
-    else:
-        quality = 35.0 if provider in _FRONTIER_PROVIDERS else 40.0
-        quality_source = "heuristic"
-    if quality_source == "heuristic":
-        # Boosts/penalties only apply when there's no real benchmark.
-        # If a model is on the Open LLM Leaderboard the Average score
-        # is the truth; we don't bend it on top of itself.
-        if provider in _FRONTIER_PROVIDERS:
-            quality += 35.0
-        if "image" in modality or "vision" in modality:
-            quality += 5.0
-        if "free" in or_id:
-            quality -= 5.0
-    quality = max(0.0, min(100.0, quality))
-
-    # Momentum — real signal first, slug heuristic as fallback.
-    #
-    # When we have HN or Bluesky mention data, momentum is the rate of
-    # change in those mentions over the past 7 days. That's a real,
-    # data-driven number that moves week to week. When neither signal
-    # has landed yet, we fall back to the version-slug heuristic so a
-    # brand-new model still gets a sane starting score.
-    momentum_inputs: dict[str, Any] = {}
-    momentum_components: list[float] = []
-    if hn_now is not None and hn_prior is not None and hn_prior > 0:
-        roc = (hn_now - hn_prior) / hn_prior
-        momentum_components.append(_roc_scaled(roc))
-        momentum_inputs["hn_mentions_7d"] = {
-            "now": hn_now,
-            "prior": hn_prior,
-            "roc": roc,
-        }
-    elif hn_now is not None and hn_now > 0:
-        # No prior reading yet, but the model is already getting
-        # mentioned. Treat that as a moderate positive signal.
-        momentum_components.append(60.0)
-        momentum_inputs["hn_mentions_7d"] = {"now": hn_now, "prior": None}
-    if bsky_now is not None and bsky_prior is not None and bsky_prior > 0:
-        roc = (bsky_now - bsky_prior) / bsky_prior
-        momentum_components.append(_roc_scaled(roc))
-        momentum_inputs["bluesky_mentions_7d"] = {
-            "now": bsky_now,
-            "prior": bsky_prior,
-            "roc": roc,
-        }
-    elif bsky_now is not None and bsky_now > 0:
-        momentum_components.append(60.0)
-        momentum_inputs["bluesky_mentions_7d"] = {"now": bsky_now, "prior": None}
-
-    if momentum_components:
-        momentum = sum(momentum_components) / len(momentum_components)
-        momentum_source = "signals"
-    else:
-        # Slug fallback. Same handwavy heuristic as before — kept so
-        # FMs that haven't picked up any traffic don't all collapse to
-        # a single neutral value.
-        momentum = 50.0
-        if any(tag in or_id for tag in (":free", "free")):
-            momentum -= 5.0
-        for sig in ("5.3", "5.4", "5.5", "v5", "next", "preview", "latest", "pro"):
-            if sig in or_id:
-                momentum += 8.0
-                break
-        if "image" in modality or "audio" in modality or "vision" in modality:
-            momentum += 5.0
-        momentum_source = "heuristic"
-    momentum = max(0.0, min(100.0, momentum))
-
-    # Community — cheaper = wider community access. Map blended
-    # input+output price ($/M tokens) to [0, 100]:
-    #   $0     -> 95   (free)
-    #   $0.50  -> 85
-    #   $2     -> 65
-    #   $10    -> 40
-    #   $50    -> 20
-    #   $200+  -> 5
-    blended = None
-    if in_price is not None and out_price is not None:
-        blended = (float(in_price) + float(out_price)) / 2.0
-    elif in_price is not None:
-        blended = float(in_price)
-    if blended is None:
-        community = 50.0
-    elif blended <= 0:
-        community = 95.0
-    elif blended <= 0.5:
-        community = 85.0
-    elif blended <= 2.0:
-        community = 65.0 + (2.0 - blended) / 1.5 * 20.0
-    elif blended <= 10.0:
-        community = 40.0 + (10.0 - blended) / 8.0 * 25.0
-    elif blended <= 50.0:
-        community = 20.0 + (50.0 - blended) / 40.0 * 20.0
-    else:
-        community = 5.0
-    # Real-signal nudge on community: a high Bluesky mention count is
-    # a proxy for how broad the user base is, beyond what the price
-    # alone tells us. +0.3 per mention, capped at +10.
-    if bsky_now and bsky_now > 0:
-        community = min(100.0, community + min(10.0, bsky_now * 0.3))
-    community = max(0.0, min(100.0, community))
-
-    pillars = PillarScores(
-        adoption=adoption,
-        quality=quality,
-        momentum=momentum,
-        community=community,
-        manipulation_resistance=resistance,
-        agent_score=0.0,
-        inputs={
-            "adoption": {
-                "context_length": ctx,
-                "hn_mentions_7d": hn_now,
-                "scaled": adoption,
-            },
-            "quality": {
-                "source": quality_source,
-                "benchmark_average": benchmark,
-                "provider": provider,
-                "frontier": provider in _FRONTIER_PROVIDERS,
-                "modality": modality,
-                "scaled": quality,
-            },
-            "momentum": {
-                "source": momentum_source,
-                "openrouter_id": or_id,
-                "scaled": momentum,
-                **momentum_inputs,
-            },
-            "community": {
-                "input_price_per_million": in_price,
-                "output_price_per_million": out_price,
-                "blended_price": blended,
-                "bluesky_mentions_7d": bsky_now,
-                "scaled": community,
-            },
-        },
-    )
-    pillars.agent_score = _headline(pillars, settings)
-    return pillars
-
-
-async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict | None:
-    r = await session.execute(
-        text("SELECT manipulation_flags FROM agents WHERE id = :id"),
-        {"id": agent_id},
-    )
-    row = r.first()
-    return row[0] if row and row[0] else None
-
-
-# --------------------------------------------------------- persist + batch
+# ----------------------------------------------------------- persist
 
 
 async def persist_score(
     session: AsyncSession, agent_id: UUID, pillars: PillarScores
-) -> UUID:
+) -> UUID | None:
+    """Insert a row in scores. Returns the new row id, or None if the
+    agent is fully Unrated (no pillars + no headline)."""
+    if pillars.agent_score is None:
+        # Don't write null-headline rows; they'd pollute the
+        # 24h-delta computations and the chart.
+        return None
     r = await session.execute(
         text(
             """
@@ -761,22 +519,27 @@ async def persist_score(
     return r.scalar_one()
 
 
+# ----------------------------------------------------------- batch
+
+
 async def recompute_agents(
     session: AsyncSession,
     agent_ids: Iterable[UUID],
     redis_client: Any,
     settings: Settings | None = None,
 ) -> dict[str, int]:
-    """Recompute one batch of agents using shared population stats."""
     settings = settings or get_settings()
     pop = await population_stats(session)
 
     written = 0
     rank_changes = 0
+    unrated = 0
     for aid in agent_ids:
-        # Snapshot the prior headline for change detection.
         prior = await _prior_headline(session, aid)
         pillars = await compute_for_agent(session, aid, pop, settings)
+        if pillars.agent_score is None:
+            unrated += 1
+            continue
         await persist_score(session, aid, pillars)
         written += 1
 
@@ -785,8 +548,15 @@ async def recompute_agents(
             await _emit_score_changed(session, redis_client, aid, prior, pillars)
 
     await session.commit()
-    log.info("scoring: recomputed %d agents (%d notable changes)", written, rank_changes)
-    return {"recomputed": written, "notable_changes": rank_changes}
+    log.info(
+        "scoring: recomputed %d (notable %d, unrated %d)",
+        written, rank_changes, unrated,
+    )
+    return {
+        "recomputed": written,
+        "notable_changes": rank_changes,
+        "unrated": unrated,
+    }
 
 
 async def _prior_headline(session: AsyncSession, agent_id: UUID) -> float | None:
@@ -805,7 +575,7 @@ async def _prior_headline(session: AsyncSession, agent_id: UUID) -> float | None
 
 
 def _significant_change(prior: float, now: float) -> bool:
-    return abs(now - prior) >= 1.0  # >=1 point on the 0-100 scale
+    return abs(now - prior) >= 1.0
 
 
 async def _emit_score_changed(

@@ -25,6 +25,7 @@ class SignalSource(str, enum.Enum):
     BLUESKY_MENTIONS_7D = "bluesky_mentions_7d"
     STACKOVERFLOW_QUESTIONS_7D = "stackoverflow_questions_7d"
     PRODUCTHUNT_UPVOTES = "producthunt_upvotes"
+    GITHUB_MENTIONS_7D = "github_mentions_7d"
 
 
 class EventKind(str, enum.Enum):

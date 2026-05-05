@@ -86,7 +86,7 @@ export default function WatchlistPage() {
                   );
                 }
                 return (
-                  <tr key={a.slug} className="border-b border-border last:border-b-0">
+                  <tr key={`${a.slug}-${a.id}`} className="border-b border-border last:border-b-0">
                     <td className="px-3 py-2">
                       <Link
                         href={`/agents/${a.slug}`}

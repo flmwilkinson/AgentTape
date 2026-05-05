@@ -81,7 +81,7 @@ export default function DiscoveryPage() {
         )}
         {merged.map((a) => (
           <li
-            key={a.slug}
+            key={`${a.slug}-${a.id}`}
             className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-md border border-border bg-card px-3 py-3 md:gap-4 md:px-4"
           >
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hidden sm:inline">

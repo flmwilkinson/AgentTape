@@ -22,6 +22,7 @@ from ingestion.sources import (
     GithubCommits7dIngestor,
     GithubContributorsIngestor,
     GithubForksIngestor,
+    GithubMentions7dIngestor,
     GithubStarsIngestor,
     HFDownloads30dIngestor,
     HFLikesIngestor,
@@ -56,6 +57,7 @@ MEDIUM: list[type[Ingestor]] = [
     PyPIMonthlyIngestor,
     MCPRegistryListedIngestor,
     StackOverflowQuestions7dIngestor,
+    GithubMentions7dIngestor,
 ]
 
 SLOW: list[type[Ingestor]] = [
