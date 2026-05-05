@@ -8,6 +8,7 @@ import {
   CTAButtonRow,
   CTAPanel,
   H2,
+  IndexSnapshot,
   Lede,
   ModelCard,
   PersonaCards,
@@ -25,7 +26,6 @@ import {
   TickerTable,
   TradeoffTable,
 } from "@/components/article-blocks";
-import { LiveIndexSnapshot } from "@/components/live-index-snapshot";
 
 // Articles registry.
 //
@@ -356,14 +356,24 @@ const codingAgents2026: Article = {
           </code>{" "}
           tag — the underlying engines that builders point harnesses at,
           not the editors wrapping them. Equal-weight v1, rebalances Mondays
-          at 03:00 UTC. The numbers below come live from the index right now.
+          at 03:00 UTC. The numbers below are the index as of 5 May 2026;
+          the live tape is one click away.
         </p>
       </Prose>
 
-      <LiveIndexSnapshot
+      <IndexSnapshot
         index_slug="code-25"
         caption="CODE-25 · Composite"
-        limit={6}
+        composite={52.3}
+        delta_label="▲ vs 30d"
+        rows={[
+          { rank: 1, name: "Gemini 2.5 Pro Preview 05-06", score: 76.4 },
+          { rank: 2, name: "GPT-5.3-Codex", score: 68.8 },
+          { rank: 3, name: "GPT-5", score: 68.2 },
+          { rank: 4, name: "everything-claude-code", score: 66.0 },
+          { rank: 5, name: "dify", score: 63.1 },
+          { rank: 6, name: "hermes-agent", score: 56.8 },
+        ]}
       />
 
       <Closer>
