@@ -8,7 +8,6 @@ import {
   CTAButtonRow,
   CTAPanel,
   H2,
-  IndexSnapshot,
   Lede,
   ModelCard,
   PersonaCards,
@@ -26,6 +25,7 @@ import {
   TickerTable,
   TradeoffTable,
 } from "@/components/article-blocks";
+import { LiveIndexSnapshot } from "@/components/live-index-snapshot";
 
 // Articles registry.
 //
@@ -349,29 +349,21 @@ const codingAgents2026: Article = {
       <H2>How CODE-25 ranks them right now</H2>
       <Prose>
         <p>
-          The list above is a snapshot. CODE-25 is the moving picture. The
-          index holds the top 25 application agents tagged{" "}
+          The list above is a snapshot of how the editors stack up. CODE-25
+          is the moving picture: the top 25 admitted agents carrying a{" "}
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
             code-generation
-          </code>
-          : the engines that builders point harnesses at, not the editors
-          that wrap them. Equal-weight v1, rebalances Mondays at 03:00 UTC.
+          </code>{" "}
+          tag — the underlying engines that builders point harnesses at,
+          not the editors wrapping them. Equal-weight v1, rebalances Mondays
+          at 03:00 UTC. The numbers below come live from the index right now.
         </p>
       </Prose>
 
-      <IndexSnapshot
+      <LiveIndexSnapshot
         index_slug="code-25"
         caption="CODE-25 · Composite"
-        composite={52.7}
-        delta_label="▲ vs 30d"
-        rows={[
-          { rank: 1, name: "Gemini 2.5 Pro Preview 05-06", score: 76.4 },
-          { rank: 2, name: "GPT-5.3-Codex", score: 68.8 },
-          { rank: 3, name: "GPT-5", score: 68.2 },
-          { rank: 4, name: "everything-claude-code", score: 65.9, delta: 4.1 },
-          { rank: 5, name: "dify", score: 63.0, delta: 5.46 },
-          { rank: 6, name: "hermes-agent", score: 62.4, delta: 6.2 },
-        ]}
+        limit={6}
       />
 
       <Closer>
@@ -380,11 +372,12 @@ const codingAgents2026: Article = {
         answer.
       </Closer>
 
-      <CTAButtonRow
-        items={[
-          { label: "Open the live CODE-25 index", href: "/indexes/code-25" },
-          { label: "Compare any two head-to-head", href: "/compare" },
-        ]}
+      <CTAPanel
+        tag="Live Index"
+        title={<>The CODE-25, <em>tracked daily</em></>}
+        body="Stars, benchmarks, mentions and merge rates all shift week to week. The CODE-25 index is the live tape: which coding engine is gaining momentum on AgentTape this week, which has stalled, and which just entered the basket on Monday's rebalance."
+        href="/indexes/code-25"
+        cta_label="View the CODE-25"
       />
     </>
   ),
@@ -440,6 +433,8 @@ const fmRanking: Article = {
           aren't quoted here.
         </p>
       </Prose>
+
+      <SectionDivider number="I" label="Closed-source frontier" />
 
       <ModelCard
         rank={1}
@@ -552,6 +547,8 @@ const fmRanking: Article = {
         200K tokens is a different number, and it's the one that actually
         matters.
       </PullQuote>
+
+      <SectionDivider number="II" label="Open-weight challengers" />
 
       <ModelCard
         rank={5}
@@ -685,11 +682,12 @@ const fmRanking: Article = {
         that pick one model and stop.
       </Closer>
 
-      <CTAButtonRow
-        items={[
-          { label: "Run head-to-head agent evals", href: "/compare" },
-          { label: "View the FM-50 index", href: "/indexes/fm-50" },
-        ]}
+      <CTAPanel
+        tag="Live Index"
+        title={<>The FM-50, <em>tracked daily</em></>}
+        body="Foundation models reshuffle every time a new release lands or a benchmark refreshes. The FM-50 is the live tape — context windows, pricing, modality, and Open LLM Leaderboard scores ranked into one composite that moves with the field."
+        href="/indexes/fm-50"
+        cta_label="View the FM-50"
       />
     </>
   ),

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
+import { BackLink } from "@/components/back-link";
 import { IndexHistoryChart } from "@/components/index-history-chart";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
@@ -69,6 +70,7 @@ export default async function IndexDetailPage({
       />
       <div className="border-b border-border bg-card">
         <div className="container py-10">
+          <BackLink href="/indexes" label="All indexes" className="mb-4" />
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             Index
           </div>

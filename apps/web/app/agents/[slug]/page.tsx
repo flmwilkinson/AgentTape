@@ -7,6 +7,7 @@ import { formatScore, relativeTime } from "@/lib/format";
 import { AgentBreakdownChart } from "@/components/agent-breakdown-chart";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
+import { BackLink } from "@/components/back-link";
 import { FmFactsPanel } from "@/components/fm-facts-panel";
 import { PillarExplanations } from "@/components/pillar-explanations";
 import { ScoreContributors } from "@/components/score-contributors";
@@ -78,6 +79,13 @@ export default async function AgentPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
+      <div className="container pt-4">
+        <BackLink
+          href={agent.entity_kind === "foundation_model" ? "/models" : "/"}
+          label={agent.entity_kind === "foundation_model" ? "Models" : "Floor"}
+        />
+      </div>
 
       <AgentLiveHeader agent={agent} />
 

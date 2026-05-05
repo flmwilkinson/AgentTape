@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { BackLink } from "@/components/back-link";
 import { ARTICLES, ARTICLE_BY_SLUG } from "@/lib/articles";
 
 export function generateStaticParams() {
@@ -60,6 +61,8 @@ export default async function ArticlePage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
+      <BackLink href="/articles" label="All articles" className="mb-6" />
 
       <header className="mb-10 border-b border-border pb-8">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">

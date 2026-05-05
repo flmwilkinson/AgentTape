@@ -443,7 +443,9 @@ async def compute_for_agent(
     # poison the population stats with apples-to-oranges values.
     kind, payload = await _agent_kind_and_payload(session, agent_id)
     if kind == "foundation_model":
-        return await _compute_foundation_model(payload, resistance, settings)
+        return await _compute_foundation_model(
+            session, agent_id, payload, resistance, settings
+        )
 
     adoption, adoption_in = await _adoption(session, agent_id, pop, excluded)
     quality, quality_in = await _quality(session, agent_id, pop)
@@ -504,23 +506,28 @@ _FRONTIER_PROVIDERS = {"openai", "anthropic", "google", "meta-llama", "mistralai
 
 
 async def _compute_foundation_model(
+    session: AsyncSession,
+    agent_id: UUID,
     payload: dict[str, Any] | None,
     resistance: float,
     settings: Settings,
 ) -> PillarScores:
-    """Score a foundation model from its OpenRouter metadata.
+    """Score a foundation model from its OpenRouter metadata, blended
+    with whatever real signals have arrived for it.
 
     The four pillars map to LLM-relevant axes:
-      - adoption  : context length (longer context = wider use cases)
-      - quality   : provider tier × pricing (frontier provider, sane price)
-      - momentum  : recency proxy from version slug + multimodal bonus
-      - community : pricing accessibility (cheaper = more people use it)
+      - adoption  : context length (longer context = wider use cases),
+                    boosted by HN mention volume when present
+      - quality   : real Open LLM Leaderboard benchmark when available;
+                    falls back to provider-tier × multimodal heuristic
+      - momentum  : 7d ROC of HN + Bluesky mentions (real signal); falls
+                    back to slug-based recency heuristic when no signals
+                    have landed yet
+      - community : pricing accessibility, boosted by Bluesky mention rate
 
-    All values land in [0, 100]. None of these depend on time-series data
-    yet, so the same model gets the same score across recomputes — that's
-    fine; once we add benchmark-leaderboard ingestion these become real
-    deltas. The point of this path is to stop every FM landing on 25.0.
-    """
+    Signals get blended in only when present — the formula degrades
+    gracefully to the metadata-only path for FMs that haven't picked
+    up any traffic yet."""
     payload = payload or {}
     ctx = payload.get("context_length") or 0
     in_price = payload.get("input_price_per_million")
@@ -528,6 +535,21 @@ async def _compute_foundation_model(
     modality = (payload.get("modality") or "").lower()
     or_id = (payload.get("openrouter_id") or "").lower()
     provider = or_id.split("/", 1)[0] if "/" in or_id else ""
+
+    # Real signals — present for some FMs, absent for others. We pull
+    # the latest reading and (where applicable) a 7d-prior reading so
+    # Momentum can be a real rate-of-change rather than a slug guess.
+    hn_now = await _latest_value(session, agent_id, SignalSource.HN_MENTIONS_7D)
+    hn_prior = await _value_at(
+        session, agent_id, SignalSource.HN_MENTIONS_7D, days_ago=7
+    )
+    bsky_now = await _latest_value(
+        session, agent_id, SignalSource.BLUESKY_MENTIONS_7D
+    )
+    bsky_prior = await _value_at(
+        session, agent_id, SignalSource.BLUESKY_MENTIONS_7D, days_ago=7
+    )
+    benchmark = await _agent_benchmark_score(session, agent_id)
 
     # Adoption — bigger context windows let people build bigger things
     # with the model. Map: 4k→10, 32k→30, 128k→55, 200k→70, 1M→95.
@@ -545,33 +567,83 @@ async def _compute_foundation_model(
         adoption = 10.0 + (ctx - 4_000) / 28_000 * 20.0
     else:
         adoption = 5.0
+    # Real-signal nudge: +0.5 per HN mention, capped at +10. Keeps the
+    # context-length signal dominant but lets buzzy launches move.
+    if hn_now and hn_now > 0:
+        adoption = min(100.0, adoption + min(10.0, hn_now * 0.5))
 
-    # Quality — frontier provider gets a 35-point boost; everyone else
-    # starts at 40. Multimodal earns +5 (visions/audio expand the
-    # surface), free models earn -5 (free-tier signals "marketing or
-    # fine-tune" more often than not).
-    quality = 35.0 if provider in _FRONTIER_PROVIDERS else 40.0
-    if provider in _FRONTIER_PROVIDERS:
-        quality += 35.0
-    if "image" in modality or "vision" in modality:
-        quality += 5.0
-    if "free" in or_id:
-        quality -= 5.0
+    # Quality — real benchmark first, heuristic only as fallback.
+    if benchmark is not None:
+        # Open LLM Leaderboard "Average ⬆️" is already 0–100 scaled.
+        # Clamp so a runaway leaderboard doesn't blow past the cap.
+        quality = max(0.0, min(100.0, float(benchmark)))
+        quality_source = "open-llm-leaderboard"
+    else:
+        quality = 35.0 if provider in _FRONTIER_PROVIDERS else 40.0
+        quality_source = "heuristic"
+    if quality_source == "heuristic":
+        # Boosts/penalties only apply when there's no real benchmark.
+        # If a model is on the Open LLM Leaderboard the Average score
+        # is the truth; we don't bend it on top of itself.
+        if provider in _FRONTIER_PROVIDERS:
+            quality += 35.0
+        if "image" in modality or "vision" in modality:
+            quality += 5.0
+        if "free" in or_id:
+            quality -= 5.0
     quality = max(0.0, min(100.0, quality))
 
-    # Momentum — proxy via version-number heuristics and multimodality.
-    # "5", "5.3", "v3", "next" suggest a recent flagship; older 2.x /
-    # 7B / instruct-only scores lower. This is admittedly handwavy and
-    # will get replaced once we ingest a benchmark-leaderboard signal.
-    momentum = 50.0
-    if any(tag in or_id for tag in (":free", "free")):
-        momentum -= 5.0
-    for sig in ("5.3", "5.4", "5.5", "v5", "next", "preview", "latest", "pro"):
-        if sig in or_id:
-            momentum += 8.0
-            break
-    if "image" in modality or "audio" in modality or "vision" in modality:
-        momentum += 5.0
+    # Momentum — real signal first, slug heuristic as fallback.
+    #
+    # When we have HN or Bluesky mention data, momentum is the rate of
+    # change in those mentions over the past 7 days. That's a real,
+    # data-driven number that moves week to week. When neither signal
+    # has landed yet, we fall back to the version-slug heuristic so a
+    # brand-new model still gets a sane starting score.
+    momentum_inputs: dict[str, Any] = {}
+    momentum_components: list[float] = []
+    if hn_now is not None and hn_prior is not None and hn_prior > 0:
+        roc = (hn_now - hn_prior) / hn_prior
+        momentum_components.append(_roc_scaled(roc))
+        momentum_inputs["hn_mentions_7d"] = {
+            "now": hn_now,
+            "prior": hn_prior,
+            "roc": roc,
+        }
+    elif hn_now is not None and hn_now > 0:
+        # No prior reading yet, but the model is already getting
+        # mentioned. Treat that as a moderate positive signal.
+        momentum_components.append(60.0)
+        momentum_inputs["hn_mentions_7d"] = {"now": hn_now, "prior": None}
+    if bsky_now is not None and bsky_prior is not None and bsky_prior > 0:
+        roc = (bsky_now - bsky_prior) / bsky_prior
+        momentum_components.append(_roc_scaled(roc))
+        momentum_inputs["bluesky_mentions_7d"] = {
+            "now": bsky_now,
+            "prior": bsky_prior,
+            "roc": roc,
+        }
+    elif bsky_now is not None and bsky_now > 0:
+        momentum_components.append(60.0)
+        momentum_inputs["bluesky_mentions_7d"] = {"now": bsky_now, "prior": None}
+
+    if momentum_components:
+        momentum = sum(momentum_components) / len(momentum_components)
+        momentum_source = "signals"
+    else:
+        # Slug fallback. Same handwavy heuristic as before — kept so
+        # FMs that haven't picked up any traffic don't all collapse to
+        # a single neutral value.
+        momentum = 50.0
+        if any(tag in or_id for tag in (":free", "free")):
+            momentum -= 5.0
+        for sig in ("5.3", "5.4", "5.5", "v5", "next", "preview", "latest", "pro"):
+            if sig in or_id:
+                momentum += 8.0
+                break
+        if "image" in modality or "audio" in modality or "vision" in modality:
+            momentum += 5.0
+        momentum_source = "heuristic"
     momentum = max(0.0, min(100.0, momentum))
 
     # Community — cheaper = wider community access. Map blended
@@ -601,6 +673,11 @@ async def _compute_foundation_model(
         community = 20.0 + (50.0 - blended) / 40.0 * 20.0
     else:
         community = 5.0
+    # Real-signal nudge on community: a high Bluesky mention count is
+    # a proxy for how broad the user base is, beyond what the price
+    # alone tells us. +0.3 per mention, capped at +10.
+    if bsky_now and bsky_now > 0:
+        community = min(100.0, community + min(10.0, bsky_now * 0.3))
     community = max(0.0, min(100.0, community))
 
     pillars = PillarScores(
@@ -611,21 +688,30 @@ async def _compute_foundation_model(
         manipulation_resistance=resistance,
         agent_score=0.0,
         inputs={
-            "adoption": {"context_length": ctx, "scaled": adoption},
+            "adoption": {
+                "context_length": ctx,
+                "hn_mentions_7d": hn_now,
+                "scaled": adoption,
+            },
             "quality": {
+                "source": quality_source,
+                "benchmark_average": benchmark,
                 "provider": provider,
                 "frontier": provider in _FRONTIER_PROVIDERS,
                 "modality": modality,
                 "scaled": quality,
             },
             "momentum": {
+                "source": momentum_source,
                 "openrouter_id": or_id,
                 "scaled": momentum,
+                **momentum_inputs,
             },
             "community": {
                 "input_price_per_million": in_price,
                 "output_price_per_million": out_price,
                 "blended_price": blended,
+                "bluesky_mentions_7d": bsky_now,
                 "scaled": community,
             },
         },

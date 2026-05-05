@@ -28,14 +28,27 @@ interface SignalChartProps {
   className?: string;
 }
 
+// Hue-spaced palette so adjacent series in the legend are easy to
+// tell apart on the chart. Deliberately doesn't reuse the
+// gain/loss/neutral tokens because two of those (loss + primary)
+// were rendering as visually-similar reds in dark mode.
 const PALETTE = [
-  "hsl(var(--primary))",
-  "hsl(var(--gain))",
-  "hsl(var(--loss))",
-  "hsl(var(--neutral))",
-  "hsl(217 91% 60%)",
-  "hsl(38 92% 50%)",
+  "hsl(217 91% 60%)",  // blue
+  "hsl(142 71% 45%)",  // green
+  "hsl(38 92% 50%)",   // amber
+  "hsl(280 75% 60%)",  // violet
+  "hsl(348 83% 58%)",  // rose
+  "hsl(176 64% 42%)",  // teal
+  "hsl(28 80% 52%)",   // orange
+  "hsl(199 89% 48%)",  // sky
 ];
+
+// Series colour is bound to the source name — not the array index —
+// so toggling visibility doesn't reshuffle which line is which colour.
+function colorFor(source: string, allSources: string[]): string {
+  const i = allSources.indexOf(source);
+  return PALETTE[(i < 0 ? 0 : i) % PALETTE.length];
+}
 
 export function SignalChart({
   series,
@@ -57,12 +70,14 @@ export function SignalChart({
     return row;
   });
 
+  const allSources = series.map((s) => s.source);
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex flex-wrap gap-2 text-xs">
-        {series.map((s, i) => {
+        {series.map((s) => {
           const on = active.includes(s.source);
-          const color = PALETTE[i % PALETTE.length];
+          const color = colorFor(s.source, allSources);
           return (
             <button
               key={s.source}
@@ -116,14 +131,17 @@ export function SignalChart({
                 fontSize: 12,
               }}
               labelFormatter={(t) => new Date(t).toLocaleString()}
+              cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "3 3" }}
+              isAnimationActive={false}
             />
-            {series.map((s, i) =>
+            {series.map((s) =>
               active.includes(s.source) ? (
                 <Line
                   key={s.source}
                   type="monotone"
                   dataKey={s.source}
-                  stroke={PALETTE[i % PALETTE.length]}
+                  name={s.source.replace(/_/g, " ")}
+                  stroke={colorFor(s.source, allSources)}
                   strokeWidth={1.75}
                   dot={false}
                   isAnimationActive={false}

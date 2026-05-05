@@ -7,15 +7,11 @@ import { cn } from "@/lib/utils";
 import { api, type SignalSeries } from "@/lib/api-client";
 import { SignalChart } from "@/components/signal-chart";
 
-// Time-series chart + "Show Your Work" CSV download. We pre-pick a
-// sensible default set of overlays from what's available so the chart
-// has something on it on first paint.
-const DEFAULT_VISIBLE = [
-  "github_stars",
-  "hf_downloads_30d",
-  "hn_mentions_7d",
-  "benchmark_score",
-];
+// Time-series chart + "Show Your Work" CSV download. Every signal we
+// have data for becomes a visible series on first paint — the user
+// asked why some weren't showing up; the answer was that the panel
+// hid them behind toggles. Toggle-off remains available for noise
+// reduction; default-on is the right answer.
 
 interface Props {
   slug: string;
@@ -33,11 +29,10 @@ export function AgentSignalPanel({ slug, initial, entityKind }: Props) {
   });
 
   const sources = useMemo(() => series.map((s) => s.source), [series]);
+  // Every available signal lights up by default. Users toggle off for
+  // noise reduction; nothing should be hidden on first paint.
   const [active, setActive] = useState<string[]>(() =>
-    initial
-      .filter((s) => DEFAULT_VISIBLE.includes(s.source))
-      .map((s) => s.source) ||
-    initial.slice(0, 2).map((s) => s.source),
+    initial.map((s) => s.source),
   );
 
   // Foundation models score from OpenRouter metadata (context, price,

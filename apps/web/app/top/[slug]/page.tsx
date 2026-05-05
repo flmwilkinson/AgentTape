@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
+import { BackLink } from "@/components/back-link";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 
@@ -194,6 +195,8 @@ export default async function SectorLandingPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
+      <BackLink href="/" label="Floor" className="-mb-2" />
 
       <header>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">

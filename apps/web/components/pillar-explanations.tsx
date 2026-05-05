@@ -1,5 +1,16 @@
 import type { AgentDetail, SignalSeries } from "@/lib/api-client";
 
+// Latest value of a given source from the signal series payload.
+function latest(signals: SignalSeries[], source: string): number | null {
+  const s = signals.find((x) => x.source === source);
+  if (!s || s.points.length === 0) return null;
+  const sorted = [...s.points].sort(
+    (a, b) =>
+      new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
+  );
+  return sorted[0]?.value ?? null;
+}
+
 // "Why is each pillar what it is?" — surfaces the formula behind the
 // four pillar scores so the agent page is self-explanatory rather
 // than a black box. The logic mirrors what scoring/compute.py does
@@ -20,6 +31,11 @@ interface Props {
   agent: AgentDetail;
   signals: SignalSeries[];
 }
+
+// Open LLM Leaderboard match — when present, Quality is real benchmark
+// data, not the heuristic. Surfaced via the agent.facts dict on FMs.
+const HF_LEADERBOARD_NOTE =
+  "Open LLM Leaderboard composite (Average ⬆️ across IFEval, BBH, MATH, GPQA, MUSR, MMLU-PRO).";
 
 const ADOPTION_SOURCES = [
   "github_stars",
@@ -64,12 +80,18 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export function PillarExplanations({ agent, signals }: Props) {
   if (agent.entity_kind === "foundation_model") {
-    return <FoundationModelExplanation agent={agent} />;
+    return <FoundationModelExplanation agent={agent} signals={signals} />;
   }
   return <ApplicationExplanation agent={agent} signals={signals} />;
 }
 
-function FoundationModelExplanation({ agent }: { agent: AgentDetail }) {
+function FoundationModelExplanation({
+  agent,
+  signals,
+}: {
+  agent: AgentDetail;
+  signals: SignalSeries[];
+}) {
   const facts = (agent.facts ?? {}) as {
     openrouter_id?: string;
     context_length?: number;
@@ -88,30 +110,54 @@ function FoundationModelExplanation({ agent }: { agent: AgentDetail }) {
       ? (facts.input_price_per_million + facts.output_price_per_million) / 2
       : facts.input_price_per_million ?? null;
 
+  // Real signals that may have been ingested for this FM. When
+  // present, they explain the score; when absent, the metadata-only
+  // reasoning takes over.
+  const hnNow = latest(signals, "hn_mentions_7d");
+  const bskyNow = latest(signals, "bluesky_mentions_7d");
+  const benchmarkNow = latest(signals, "benchmark_score");
+
   const rows: { pillar: string; score: number | null | undefined; rule: string }[] = [
     {
       pillar: "Adoption",
       score: agent.score?.adoption,
-      rule: ctx
-        ? `${formatTokens(ctx)} context window — bigger context = wider use cases.`
-        : "No context length on file.",
+      rule: [
+        ctx ? `${formatTokens(ctx)} context window` : null,
+        hnNow != null && hnNow > 0
+          ? `${formatCount(hnNow)} HN mentions in 7d`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" + ") || "No context length on file.",
     },
     {
       pillar: "Quality",
       score: agent.score?.quality,
-      rule: [
-        isFrontier ? "Frontier-tier provider" : "Non-frontier provider",
-        modality.includes("image") || modality.includes("vision")
-          ? "+ multimodal"
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" "),
+      rule:
+        benchmarkNow != null
+          ? `${benchmarkNow.toFixed(1)} on the Open LLM Leaderboard composite (Average across IFEval / BBH / MATH / GPQA / MUSR / MMLU-PRO).`
+          : [
+              isFrontier ? "Frontier-tier provider" : "Non-frontier provider",
+              modality.includes("image") || modality.includes("vision")
+                ? "+ multimodal"
+                : null,
+              " · heuristic until benchmark data lands.",
+            ]
+              .filter(Boolean)
+              .join(" "),
     },
     {
       pillar: "Momentum",
       score: agent.score?.momentum,
-      rule: "Heuristic from version slug + multimodal bonus. Replaced by real benchmark deltas once the Open LLM Leaderboard sync has run a few times.",
+      rule:
+        hnNow != null || bskyNow != null
+          ? `7d rate-of-change in mentions: ${[
+              hnNow != null ? `HN ${formatCount(hnNow)}` : null,
+              bskyNow != null ? `Bluesky ${formatCount(bskyNow)}` : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}.`
+          : "Slug-based recency heuristic — replaced by real mention deltas once HN / Bluesky pick the model up.",
     },
     {
       pillar: "Community",
