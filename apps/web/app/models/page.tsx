@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
+import { CompareTrayToggle } from "@/components/compare-tray";
 import { Dropdown } from "@/components/dropdown";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
@@ -298,7 +299,10 @@ export default function ModelsPage() {
                       {m.score?.momentum?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <WatchToggle slug={m.slug} size="sm" />
+                      <div className="inline-flex items-center gap-1.5">
+                        <CompareTrayToggle slug={m.slug} />
+                        <WatchToggle slug={m.slug} size="sm" />
+                      </div>
                     </td>
                   </tr>
                 );

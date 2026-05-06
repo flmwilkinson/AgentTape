@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
+import { CompareTrayLauncher } from "@/components/compare-tray";
 import { NavDesktop } from "@/components/nav-desktop";
 import { NavMobile } from "@/components/nav-mobile";
 import { NavMobileTop } from "@/components/nav-mobile-top";
@@ -50,6 +51,7 @@ export default function RootLayout({
             {/* Bottom nav adds 4rem space on mobile so content isn't covered. */}
             <main className="pb-16 md:pb-0">{children}</main>
             <NavMobile />
+            <CompareTrayLauncher />
           </QueryProvider>
         </ThemeProvider>
       </body>

@@ -29,6 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/top/mcp-servers",
     "/articles",
     "/sectors",
+    "/developers",
   ].map((path) => ({
     url: `${SITE}${path}`,
     lastModified: now,

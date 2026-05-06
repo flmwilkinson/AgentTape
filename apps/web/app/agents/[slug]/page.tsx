@@ -4,6 +4,7 @@ import { Download, ExternalLink, Github } from "lucide-react";
 import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
+import { AgentBadgeSnippet } from "@/components/agent-badge-snippet";
 import { AgentLiveHeader } from "@/components/agent-live-header";
 import { AgentSignalPanel } from "@/components/agent-signal-panel";
 import { BackLink } from "@/components/back-link";
@@ -143,6 +144,9 @@ export default async function AgentPage({
             sits below the breakdown for readers who want to see the
             unscaled numbers and download the CSV. */}
         <AgentSignalPanel slug={slug} initial={signals} entityKind={agent.entity_kind} />
+
+        {/* Embeddable badge for the agent's author. */}
+        <AgentBadgeSnippet slug={slug} />
 
         {/* Benchmarks */}
         {benchmarks.length > 0 && (

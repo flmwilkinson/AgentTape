@@ -49,6 +49,15 @@ export default function ComparePage() {
       enabled: slugs.length > 0,
     })),
   });
+  // Per-agent signals so the verdict block can name which raw signal
+  // is doing the work behind each pillar.
+  const signalQueries = useQueries({
+    queries: slugs.map((slug) => ({
+      queryKey: ["agent-signals", slug, "30d"],
+      queryFn: () => api.agentSignals(slug, { window: "30d" }),
+      enabled: slugs.length > 0,
+    })),
+  });
 
   // Suggestions when /compare opens with no slugs.
   const { data: suggestions } = useQuery({
@@ -249,6 +258,20 @@ export default function ComparePage() {
             .filter((a): a is NonNullable<typeof a> => Boolean(a))}
         />
       )}
+
+      {/* Verdicts — one line per pillar that names the driving
+          signal AND its values per agent. Answers "Momentum in
+          what?" rather than just "X wins Momentum". */}
+      {slugs.length >= 2 && (
+        <DrivingSignalVerdicts
+          agents={detailQueries
+            .map((q) => q.data)
+            .filter((a): a is NonNullable<typeof a> => Boolean(a))}
+          signalsByAgent={Object.fromEntries(
+            slugs.map((slug, i) => [slug, signalQueries[i]?.data ?? []]),
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -346,6 +369,191 @@ function ScorecardMatrix({
         Highest value per row in the primary colour. "—" means the
         pillar is Unrated for that agent.
       </p>
+    </section>
+  );
+}
+
+// ----------------------------------------------------------- verdicts
+
+const PILLAR_SOURCES_APP: Record<string, string[]> = {
+  adoption: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "stackoverflow_questions_7d", "producthunt_upvotes"],
+  quality: ["benchmark_score"],
+  momentum: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d"],
+  community: ["github_contributors", "github_forks", "hn_points_7d", "reddit_points_7d", "bluesky_mentions_7d", "hf_likes"],
+};
+const PILLAR_SOURCES_FM: Record<string, string[]> = {
+  adoption: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_stars", "github_mentions_7d"],
+  quality: ["benchmark_score"],
+  momentum: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_mentions_7d"],
+  community: ["hf_likes", "github_contributors", "bluesky_mentions_7d", "reddit_points_7d"],
+};
+const SIGNAL_LABEL: Record<string, string> = {
+  github_stars: "GitHub stars",
+  github_forks: "GitHub forks",
+  github_contributors: "Contributors",
+  github_mentions_7d: "GitHub mentions (7d)",
+  hf_downloads_30d: "HF downloads (30d)",
+  hf_likes: "HF likes",
+  npm_weekly: "npm weekly",
+  pypi_monthly: "PyPI monthly",
+  hn_mentions_7d: "HN mentions (7d)",
+  hn_points_7d: "HN points (7d)",
+  reddit_mentions_7d: "Reddit mentions (7d)",
+  reddit_points_7d: "Reddit points (7d)",
+  bluesky_mentions_7d: "Bluesky mentions (7d)",
+  stackoverflow_questions_7d: "Stack Overflow (7d)",
+  producthunt_upvotes: "Product Hunt upvotes",
+  benchmark_score: "Benchmark score",
+  arxiv_citations: "arXiv citations",
+};
+
+function fmtCount(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (a >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2);
+}
+
+function latestValue(
+  signals: Array<{ source: string; points: { captured_at: string; value: number }[] }>,
+  source: string,
+): number | null {
+  const s = signals.find((x) => x.source === source);
+  if (!s || s.points.length === 0) return null;
+  // points are captured ascending by query default; take the last.
+  return s.points[s.points.length - 1].value;
+}
+
+function DrivingSignalVerdicts({
+  agents,
+  signalsByAgent,
+}: {
+  agents: Array<{
+    slug: string;
+    name: string;
+    entity_kind: string;
+    score: {
+      adoption: number | null;
+      quality: number | null;
+      momentum: number | null;
+      community: number | null;
+    };
+  }>;
+  signalsByAgent: Record<
+    string,
+    Array<{ source: string; points: { captured_at: string; value: number }[] }>
+  >;
+}) {
+  if (agents.length < 2) return null;
+
+  const PILLAR_KEYS = ["adoption", "quality", "momentum", "community"] as const;
+  const PILLAR_LABELS: Record<(typeof PILLAR_KEYS)[number], string> = {
+    adoption: "Adoption",
+    quality: "Quality",
+    momentum: "Momentum",
+    community: "Community",
+  };
+
+  return (
+    <section>
+      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        Why each pillar moves
+      </div>
+      <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        {PILLAR_KEYS.map((pillar) => {
+          // Pick the agent that wins this pillar by score.
+          const ranked = [...agents].sort(
+            (a, b) =>
+              (b.score?.[pillar] ?? -Infinity) -
+              (a.score?.[pillar] ?? -Infinity),
+          );
+          const winner = ranked[0];
+          const winnerScore = winner.score?.[pillar];
+          if (winnerScore == null) {
+            return (
+              <li key={pillar} className="px-4 py-3 text-sm">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground w-24">
+                    {PILLAR_LABELS[pillar]}
+                  </span>
+                  <span className="text-muted-foreground">
+                    Unrated for every agent in this comparison.
+                  </span>
+                </div>
+              </li>
+            );
+          }
+
+          // Find the highest-value source across all agents for the
+          // pillar — that's the "driving" signal that explains why
+          // someone wins. Falls back to "no underlying signals
+          // contributed" when nothing concrete is on file.
+          const isFM = winner.entity_kind === "foundation_model";
+          const sources = isFM
+            ? PILLAR_SOURCES_FM[pillar]
+            : PILLAR_SOURCES_APP[pillar];
+
+          let driving: { source: string; total: number } | null = null;
+          for (const src of sources) {
+            let total = 0;
+            let any = false;
+            for (const a of agents) {
+              const v = latestValue(signalsByAgent[a.slug] ?? [], src);
+              if (v != null) {
+                total += v;
+                any = true;
+              }
+            }
+            if (!any) continue;
+            if (driving == null || total > driving.total) {
+              driving = { source: src, total };
+            }
+          }
+
+          return (
+            <li key={pillar} className="px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground w-24">
+                  {PILLAR_LABELS[pillar]}
+                </span>
+                <span className="font-medium">
+                  {winner.name} wins
+                </span>
+                <span className="num text-xs text-muted-foreground">
+                  {winnerScore.toFixed(1)} vs{" "}
+                  {ranked
+                    .slice(1)
+                    .map((a) => a.score?.[pillar]?.toFixed(1) ?? "—")
+                    .join(", ")}
+                </span>
+              </div>
+              {driving ? (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <span className="font-mono uppercase tracking-wider text-foreground/70">
+                    Driving signal
+                  </span>{" "}
+                  · {SIGNAL_LABEL[driving.source] ?? driving.source}:{" "}
+                  {agents
+                    .map((a) => {
+                      const v = latestValue(
+                        signalsByAgent[a.slug] ?? [],
+                        driving!.source,
+                      );
+                      return `${a.name} ${v == null ? "—" : fmtCount(v)}`;
+                    })
+                    .join(" · ")}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  No raw signals for this pillar are on file yet —
+                  the score is a fallback.
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

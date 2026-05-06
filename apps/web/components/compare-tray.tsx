@@ -1,0 +1,169 @@
+"use client";
+
+import Link from "next/link";
+import { GitCompare, Plus, X, Check } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import {
+  COMPARE_TRAY_MAX,
+  toggleCompareTray,
+  clearCompareTray,
+  removeFromCompareTray,
+  useCompareTray,
+} from "@/lib/compare-tray";
+
+// Compare tray — a floating, persistent shortlist anchor in the
+// bottom-right corner. Click any agent's "+" button anywhere on the
+// site, the drawer pops up showing what's selected. The shortlist
+// survives navigation and reload via localStorage.
+
+export function CompareTrayLauncher() {
+  const slugs = useCompareTray();
+  const [open, setOpen] = useState(false);
+
+  if (slugs.length === 0) return null;
+
+  const canCompare = slugs.length >= 2;
+
+  return (
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open compare tray"
+          className="fixed bottom-20 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-lg hover:bg-primary md:bottom-6"
+        >
+          <GitCompare className="h-4 w-4" />
+          Compare
+          <span className="ml-1 rounded-full bg-background/20 px-2 py-0.5 text-xs">
+            {slugs.length}
+          </span>
+        </button>
+      )}
+
+      {open && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card shadow-2xl md:bottom-6 md:right-6 md:left-auto md:inset-x-auto md:max-w-md md:rounded-md md:border"
+          role="dialog"
+          aria-label="Compare tray"
+        >
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Compare tray
+              </div>
+              <div className="text-sm font-medium">
+                {slugs.length} of {COMPARE_TRAY_MAX} selected
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <ul className="max-h-72 overflow-y-auto divide-y divide-border">
+            {slugs.map((slug) => (
+              <li
+                key={slug}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              >
+                <Link
+                  href={`/agents/${slug}`}
+                  className="min-w-0 flex-1 truncate hover:text-primary"
+                >
+                  {slug}
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => removeFromCompareTray(slug)}
+                  aria-label={`Remove ${slug}`}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+            <button
+              type="button"
+              onClick={clearCompareTray}
+              className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              Clear all
+            </button>
+            <Link
+              href={canCompare ? `/compare?slugs=${slugs.join(",")}` : "#"}
+              onClick={() => canCompare && setOpen(false)}
+              className={cn(
+                "ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium",
+                canCompare
+                  ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "pointer-events-none border-border text-muted-foreground",
+              )}
+              aria-disabled={!canCompare}
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+              {canCompare
+                ? `Compare ${slugs.length}`
+                : "Pick another to compare"}
+            </Link>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// "+" button to drop on any agent row or card. Auto-shows the
+// in/out state from localStorage; clicking toggles.
+export function CompareTrayToggle({
+  slug,
+  size = "sm",
+  className,
+}: {
+  slug: string;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const slugs = useCompareTray();
+  const inTray = slugs.includes(slug);
+  const full = slugs.length >= COMPARE_TRAY_MAX && !inTray;
+  const iconCls = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  return (
+    <button
+      type="button"
+      onClick={() => toggleCompareTray(slug)}
+      disabled={full}
+      aria-label={inTray ? "Remove from compare tray" : "Add to compare tray"}
+      title={
+        inTray
+          ? "In compare tray — click to remove"
+          : full
+            ? "Compare tray is full (5 max)"
+            : "Add to compare tray"
+      }
+      className={cn(
+        "inline-flex items-center justify-center rounded-md border transition-colors",
+        size === "sm" ? "h-6 w-6" : "h-7 w-7",
+        inTray
+          ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+          : full
+            ? "border-border text-muted-foreground/50 cursor-not-allowed"
+            : "border-border bg-card text-muted-foreground hover:bg-subtle hover:text-foreground",
+        className,
+      )}
+    >
+      {inTray ? (
+        <Check className={iconCls} strokeWidth={2.5} />
+      ) : (
+        <Plus className={iconCls} strokeWidth={2.25} />
+      )}
+    </button>
+  );
+}

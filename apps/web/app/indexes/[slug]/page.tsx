@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
+import { CompareTrayToggle } from "@/components/compare-tray";
 import { IndexHistoryChart } from "@/components/index-history-chart";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
@@ -184,7 +185,10 @@ export default async function IndexDetailPage({
                       {relativeTime(c.added_at)}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <WatchToggle slug={c.agent.slug} size="sm" />
+                      <div className="inline-flex items-center gap-1.5">
+                        <CompareTrayToggle slug={c.agent.slug} />
+                        <WatchToggle slug={c.agent.slug} size="sm" />
+                      </div>
                     </td>
                   </tr>
                 ))}
