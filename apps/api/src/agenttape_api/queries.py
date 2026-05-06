@@ -87,10 +87,19 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         if getattr(row, "rank_24h_ago", None) is not None
         else None
     )
-    raw_payload = getattr(row, "raw_payload", None)
+      raw_payload = getattr(row, "raw_payload", None)
     facts = _extract_facts(
         getattr(row, "entity_kind", "application"), raw_payload
     )
+    # Tags arrive as an array of "kind:value" strings from the SQL
+    # array_agg. Empty array if the agent has no tags.
+    tag_pairs = getattr(row, "tag_pairs", None) or []
+    tags_summary: list[dict[str, str]] = []
+    for pair in tag_pairs:
+        if not pair or ":" not in pair:
+            continue
+        kind, value = pair.split(":", 1)
+        tags_summary.append({"kind": kind, "value": value})
     return {
         "id": row.id,
         "slug": row.slug,
@@ -102,6 +111,7 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         "github_repo": row.github_repo,
         "entity_kind": getattr(row, "entity_kind", "application"),
         "facts": facts,
+        "tags": tags_summary,
         "score": {
             "agent_score": score_now,
             "adoption": float(row.adoption) if row.adoption is not None else None,
@@ -176,7 +186,13 @@ async def list_agents(
 
     sql = f"""
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
-               dc.raw_payload
+               dc.raw_payload,
+               (
+                   SELECT array_agg(t.kind::text || ':' || t.value)
+                   FROM agent_tags at_inner
+                   JOIN tags t ON t.id = at_inner.tag_id
+                   WHERE at_inner.agent_id = a.id
+               ) AS tag_pairs
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         LEFT JOIN LATERAL (

@@ -5,9 +5,8 @@ import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
 import { MoverChip } from "@/components/mover-chip";
-import { RankArrow } from "@/components/rank-arrow";
 import { SectorChart } from "@/components/sector-chart";
-import { WatchToggle } from "@/components/watch-toggle";
+import { SectorMembersPanel } from "@/components/sector-members-panel";
 
 // Sector detail — like an index page but rolled up by tag.
 //
@@ -103,76 +102,8 @@ export default async function SectorDetailPage({ params }: PageParams) {
         </div>
       </div>
 
-      <div className="container py-8 md:py-12 space-y-8">
-        <section>
-          <div className="mb-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Members
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {members.items.length} shown · ranked by AgentScore
-            </div>
-          </div>
-          <div className="overflow-x-auto rounded-md border border-border bg-card">
-            <table className="num w-full min-w-[640px] text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground">
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-right">Rank</th>
-                  <th className="px-3 py-2 text-left">Agent</th>
-                  <th className="px-3 py-2 text-right">24h</th>
-                  <th className="px-3 py-2 text-right">Score</th>
-                  <th className="px-3 py-2 text-right">Δ24h</th>
-                  <th className="px-3 py-2 w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.items.map((a, i) => (
-                  <tr key={a.id} className="border-b border-border last:border-b-0">
-                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                      #{a.score?.rank_now ?? i + 1}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link
-                        href={`/agents/${a.slug}`}
-                        className="font-sans font-medium hover:text-primary"
-                      >
-                        {a.name}
-                      </Link>
-                      {a.description && (
-                        <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          {a.description}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <RankArrow
-                        delta={a.score?.rank_delta_24h ?? null}
-                        rankNow={a.score?.rank_now ?? null}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold">
-                      {formatScore(a.score?.agent_score ?? null)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {a.score?.delta_24h != null ? (
-                        <MoverChip
-                          delta={a.score.delta_24h}
-                          unit="score"
-                          variant="outline"
-                        />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <WatchToggle slug={a.slug} size="sm" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      <div className="container py-8 md:py-12 space-y-8 pb-24 md:pb-12">
+        <SectorMembersPanel members={members.items} />
 
         <p className="hairline pt-6 text-xs text-muted-foreground">
           Browse all sectors at{" "}

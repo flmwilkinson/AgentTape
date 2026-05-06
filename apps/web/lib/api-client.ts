@@ -72,6 +72,9 @@ export type AgentSummary = {
   // Source-of-truth facts surfaced for foundation models (modality,
   // openrouter_id, context_length, pricing). {} for application agents.
   facts: Record<string, unknown>;
+  // Lightweight tag list. Always present on summaries (kind+value);
+  // detail responses additionally fill in display_name.
+  tags: { kind: string; value: string; display_name?: string }[];
   score: ScoreEnvelope;
 };
 

@@ -106,10 +106,59 @@ export default async function FloorPage() {
           </div>
         </section>
 
-        {/* Top by capability — the "I want a coding agent" entry point.
-            Three-per-rail keeps the page scannable; the row icons jump
-            straight to GitHub / homepage so the floor is one click from
-            something runnable. */}
+        {/* Find-an-agent shortcut — the buyer's primary entry point.
+            Big chips deep-link straight into the sector pages where
+            filters and multi-select compare live. Below it, the
+            capability rail keeps the top-3 visible for the impatient. */}
+        <section className="rounded-md border border-border bg-card p-5 md:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Find the right agent
+              </div>
+              <h2 className="editorial mt-1 text-2xl font-semibold leading-tight md:text-3xl">
+                What do you need an agent for?
+              </h2>
+            </div>
+            <Link
+              href="/search"
+              className="text-xs font-mono uppercase tracking-wider text-primary hover:underline"
+            >
+              Full search →
+            </Link>
+          </div>
+          <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+            Pick a capability to see the live ranking with filters for
+            license, deployment and maturity. Tick the agents you want
+            and compare up to five side by side.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[
+              { slug: "code-generation", label: "Coding" },
+              { slug: "browsing", label: "Browser" },
+              { slug: "rag", label: "RAG" },
+              { slug: "multi-agent", label: "Multi-agent" },
+              { slug: "research", label: "Research" },
+              { slug: "automation", label: "Automation" },
+              { slug: "tool-use", label: "Tool use" },
+              { slug: "vision", label: "Vision" },
+              { slug: "memory", label: "Memory" },
+              { slug: "voice", label: "Voice" },
+            ].map((c) => (
+              <Link
+                key={c.slug}
+                href={`/sectors/capability/${c.slug}`}
+                className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:border-primary/40 hover:bg-subtle"
+              >
+                {c.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Top by capability — keeps the "leading three stocks per
+            category" view available without forcing a click into a
+            sector page. */}
         <section>
           <SectionHead
             label="Top by capability"

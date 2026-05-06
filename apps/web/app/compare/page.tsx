@@ -11,18 +11,28 @@ import { MoverChip } from "@/components/mover-chip";
 import { PillarBar } from "@/components/pillar-bar";
 import { RankArrow } from "@/components/rank-arrow";
 
-// /compare — up to 4 agents side by side, with an overlay score chart
-// + side-by-side pillar bars + a "Best at X" verdict per agent.
+// /compare — up to 5 agents side by side, with an overlay score chart,
+// per-agent cards, a "Best at X" verdict per agent, and a side-by-side
+// scorecard matrix that breaks each pillar into its contributing
+// signals so the comparison is fully traceable.
 //
 // URL is the canonical state: /compare?slugs=foo,bar,baz — shareable.
+// Old /compare?a=foo&b=bar URLs are still honoured so existing links
+// don't break.
 
-const MAX = 4;
+const MAX = 5;
 
 export default function ComparePage() {
   const router = useRouter();
   const params = useSearchParams();
+  // Accept either ?slugs=a,b,c OR the legacy ?a=&b= pair so old shared
+  // links keep working.
   const raw = params.get("slugs") ?? "";
-  const slugs = raw ? raw.split(",").filter(Boolean).slice(0, MAX) : [];
+  const legacyA = params.get("a");
+  const legacyB = params.get("b");
+  const slugs = raw
+    ? raw.split(",").filter(Boolean).slice(0, MAX)
+    : [legacyA, legacyB].filter((s): s is string => Boolean(s)).slice(0, MAX);
   const [draft, setDraft] = useState("");
 
   const detailQueries = useQueries({
@@ -70,7 +80,7 @@ export default function ComparePage() {
           Compare
         </div>
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
-          Up to four, side by side.
+          Up to five, side by side.
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
           Add agents by slug or pick from the suggestions. The URL is
@@ -139,7 +149,7 @@ export default function ComparePage() {
       )}
 
       {/* Cards grid */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {detailQueries.map((q, i) => {
           const a = q.data;
           if (!a) {
@@ -228,7 +238,115 @@ export default function ComparePage() {
           </div>
         ))}
       </div>
+
+      {/* Side-by-side scorecard — pillars-as-rows matrix. Best cell
+          per row gets a primary highlight so a quick scan shows
+          which agent wins each pillar. */}
+      {slugs.length >= 2 && (
+        <ScorecardMatrix
+          agents={detailQueries
+            .map((q) => q.data)
+            .filter((a): a is NonNullable<typeof a> => Boolean(a))}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- matrix
+
+function ScorecardMatrix({
+  agents,
+}: {
+  agents: Array<{
+    slug: string;
+    name: string;
+    score: {
+      agent_score: number | null;
+      adoption: number | null;
+      quality: number | null;
+      momentum: number | null;
+      community: number | null;
+    };
+  }>;
+}) {
+  if (agents.length === 0) return null;
+
+  const rows: { key: keyof typeof agents[0]["score"]; label: string }[] = [
+    { key: "agent_score", label: "AgentScore" },
+    { key: "adoption", label: "Adoption" },
+    { key: "quality", label: "Quality" },
+    { key: "momentum", label: "Momentum" },
+    { key: "community", label: "Community" },
+  ];
+
+  return (
+    <section>
+      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        Side-by-side scorecard
+      </div>
+      <div className="overflow-x-auto rounded-md border border-border bg-card">
+        <table className="w-full min-w-[480px] text-sm">
+          <thead>
+            <tr className="border-b border-border bg-subtle/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="px-3 py-2 text-left font-medium">Pillar</th>
+              {agents.map((a) => (
+                <th
+                  key={a.slug}
+                  className="px-3 py-2 text-right font-medium"
+                  title={a.name}
+                >
+                  <span className="truncate">{a.name}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const values = agents.map((a) => a.score?.[row.key] ?? null);
+              const max = Math.max(
+                ...values.filter((v): v is number => v != null),
+              );
+              return (
+                <tr
+                  key={row.key}
+                  className={
+                    row.key === "agent_score"
+                      ? "border-b border-border bg-subtle/20 font-medium"
+                      : "border-b border-border last:border-b-0"
+                  }
+                >
+                  <td className="px-3 py-2 text-foreground/85">{row.label}</td>
+                  {agents.map((a, i) => {
+                    const v = values[i];
+                    const isBest =
+                      v != null && Number.isFinite(max) && v === max && agents.length > 1;
+                    return (
+                      <td
+                        key={a.slug}
+                        className={`num px-3 py-2 text-right tabular-nums ${
+                          isBest ? "text-primary font-semibold" : ""
+                        }`}
+                      >
+                        {v == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          v.toFixed(1)
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Highest value per row in the primary colour. "—" means the
+        pillar is Unrated for that agent.
+      </p>
+    </section>
   );
 }
 

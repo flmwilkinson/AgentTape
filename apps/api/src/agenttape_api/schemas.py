@@ -95,6 +95,10 @@ class AgentSummary(BaseModel):
     # can filter on modality / context / price client-side without a
     # separate endpoint. Empty dict for application agents.
     facts: dict[str, Any] = Field(default_factory=dict)
+    # Lightweight tag list ({kind, value} pairs) so listing surfaces
+    # can filter by license / deployment / maturity / capability
+    # without a per-row API roundtrip.
+    tags: list[dict[str, str]] = Field(default_factory=list)
 
 
 class AgentDetail(AgentSummary):
