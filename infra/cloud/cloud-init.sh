@@ -19,7 +19,8 @@
 set -euo pipefail
 
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
-SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTicL6RFS4U9pkecQzS072XxI7+4goAJM2KB96o+Un5 f.l.m.wilkinson@gmail.com"
+SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILI4iIW4o/7SM6Z54LC79C3ld8ytKEr2eK43LvEPqXsG agenttape-deploy"
+
 # ---------------------------------------------------------------- packages
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
@@ -27,15 +28,22 @@ apt-get install -y \
 	ca-certificates curl gnupg ufw fail2ban unattended-upgrades \
 	postgresql-client jq
 
-# Docker official repo
+# Docker official repo — distro-aware so this works on both
+# Ubuntu (codenames noble/jammy/…) and Debian (bookworm/bullseye/…).
+# A hard-coded "linux/debian" repo on an Ubuntu host tries to fetch a
+# `noble` package list that doesn't exist on Debian's server,
+# apt-get install fails, set -e aborts, and the deploy user never
+# gets created — which surfaces as SSH key-auth failure.
+. /etc/os-release
+DOCKER_DISTRO="${ID:-ubuntu}"   # "ubuntu" or "debian"
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | \
+curl -fsSL "https://download.docker.com/linux/${DOCKER_DISTRO}/gpg" | \
 	gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 echo \
 	"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-	https://download.docker.com/linux/debian \
-	$(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+	https://download.docker.com/linux/${DOCKER_DISTRO} \
+	${VERSION_CODENAME} stable" \
 	| tee /etc/apt/sources.list.d/docker.list >/dev/null
 apt-get update -y
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
