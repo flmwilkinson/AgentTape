@@ -30,15 +30,26 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AgentRow:
-    """The slice of agents needed by ingestors — anti-corruption layer."""
+    """The slice of agents needed by ingestors — anti-corruption layer.
+
+    ``package_names`` carries package-manager identifiers (``npm``,
+    ``pypi``, ``cargo``, ``dockerhub``) and ``facts`` holds the
+    JSONB-backed enrichment fields (FM modality, ``wikipedia_title``,
+    ``discord_invite_code``, …). Both are merge-extensible: adding a
+    new ingestor that reads ``package_names["dockerhub"]`` or
+    ``facts["wikipedia_title"]`` doesn't require a migration.
+    """
 
     id: UUID
     slug: str
+    name: str
     github_repo: str | None
     hf_org: str | None
     hf_model_ids: list[str] | None
-    package_names: dict[str, str] | None  # {"npm": "...", "pypi": "..."}
+    package_names: dict[str, str] | None
     arxiv_ids: list[str] | None
+    facts: dict[str, Any] | None
+    entity_kind: str
 
 
 @dataclass
@@ -232,14 +243,28 @@ async def _record_spike(
 
 
 async def load_admitted_agents(session: AsyncSession) -> list[AgentRow]:
-    """Load every admitted agent — the work-list for one ingestion pass."""
+    """Load every admitted agent — the work-list for one ingestion pass.
+
+    Facts are pulled from the most-recent ``discovery_candidates``
+    row's ``raw_payload`` rather than a column on agents (the schema
+    keeps facts denormalized in raw_payload so we don't have to
+    migrate every time a new fact-key shows up — Wikipedia title,
+    Discord invite code, OpenRouter id, etc. all read from there).
+    """
     rows = await session.execute(
         text(
             """
-            SELECT id, slug, github_repo, hf_org, hf_model_ids,
-                   package_names, arxiv_ids
-            FROM agents
-            WHERE eligibility_status = 'admitted'
+            SELECT a.id, a.slug, a.name, a.github_repo, a.hf_org,
+                   a.hf_model_ids, a.package_names, a.arxiv_ids,
+                   a.entity_kind,
+                   dc.raw_payload AS facts
+            FROM agents a
+            LEFT JOIN LATERAL (
+                SELECT raw_payload FROM discovery_candidates
+                WHERE promoted_to_agent_id = a.id
+                ORDER BY found_at DESC LIMIT 1
+            ) dc ON true
+            WHERE a.eligibility_status = 'admitted'
             """
         )
     )
@@ -249,11 +274,14 @@ async def load_admitted_agents(session: AsyncSession) -> list[AgentRow]:
             AgentRow(
                 id=r[0],
                 slug=r[1],
-                github_repo=r[2],
-                hf_org=r[3],
-                hf_model_ids=r[4],
-                package_names=r[5],
-                arxiv_ids=r[6],
+                name=r[2],
+                github_repo=r[3],
+                hf_org=r[4],
+                hf_model_ids=r[5],
+                package_names=r[6],
+                arxiv_ids=r[7],
+                entity_kind=r[8],
+                facts=r[9],
             )
         )
     return out

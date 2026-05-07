@@ -8,8 +8,11 @@ import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareTrayToggle } from "@/components/compare-tray";
 import { Dropdown } from "@/components/dropdown";
+import { MobileRankList, type MobileRankItem } from "@/components/mobile-rank-list";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { TableSkeleton } from "@/components/skeleton";
+import { ToggleGroup } from "@/components/toggle-group";
 import { WatchToggle } from "@/components/watch-toggle";
 
 // Foundation-model board.
@@ -197,11 +200,14 @@ export default function ModelsPage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
+        {/* Family / Modality have many options → Dropdown. The
+            three-option filters use ToggleGroup so the active choice
+            is always visible without a click. */}
         <Dropdown label="Family" value={family} onChange={setFamily} options={FAMILIES.map((f) => ({ value: f.v, label: f.label }))} triggerWidth="min-w-[140px]" />
-        <Dropdown label="Openness" value={openness} onChange={setOpenness} options={OPENNESS.map((o) => ({ value: o.v, label: o.label }))} />
         <Dropdown label="Modality" value={modality} onChange={setModality} options={MODALITIES.map((m) => ({ value: m.v, label: m.label }))} />
-        <Dropdown label="Pricing" value={tier} onChange={setTier} options={TIERS.map((t) => ({ value: t.v, label: t.label }))} />
-        <Dropdown label="Mode" value={reasoning} onChange={setReasoning} options={REASONING.map((r) => ({ value: r.v, label: r.label }))} />
+        <ToggleGroup label="Openness" value={openness} onChange={setOpenness} options={OPENNESS.map((o) => ({ v: o.v, label: o.label }))} />
+        <ToggleGroup label="Pricing" value={tier} onChange={setTier} options={TIERS.map((t) => ({ v: t.v, label: t.label }))} />
+        <ToggleGroup label="Mode" value={reasoning} onChange={setReasoning} options={REASONING.map((r) => ({ v: r.v, label: r.label }))} />
         {(family || tier || reasoning || modality || openness) && (
           <button
             type="button"
@@ -217,8 +223,12 @@ export default function ModelsPage() {
       </div>
 
       {isLoading ? (
-        <section className="rounded-md border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-          Loading models…
+        <section className="overflow-x-auto rounded-md border border-border bg-card">
+          <table className="num w-full min-w-[640px] text-sm">
+            <tbody>
+              <TableSkeleton rows={8} cols={6} />
+            </tbody>
+          </table>
         </section>
       ) : filtered.length === 0 ? (
         <section className="rounded-md border border-dashed border-border bg-card p-8 text-center">
@@ -227,7 +237,28 @@ export default function ModelsPage() {
           </p>
         </section>
       ) : (
-        <section className="overflow-x-auto rounded-md border border-border bg-card">
+        <>
+        <MobileRankList
+          items={filtered.map<MobileRankItem>((m, i) => {
+            const fam = familyOf(m.slug);
+            const mod = modalityOf(m.facts);
+            const labelBits: string[] = [fam];
+            if (OPEN_FAMILIES.has(fam)) labelBits.push("open");
+            if (isFree(m.name, m.slug)) labelBits.push("free");
+            if (isReasoning(m.name, m.slug)) labelBits.push("reasoning");
+            if (isMultimodal(mod)) labelBits.push("multimodal");
+            return {
+              slug: m.slug,
+              name: m.name,
+              label: labelBits.join(" · "),
+              rank: m.score?.rank_now ?? i + 1,
+              score: m.score?.agent_score ?? null,
+              delta24h: m.score?.delta_24h ?? null,
+              rankDelta24h: m.score?.rank_delta_24h ?? null,
+            };
+          })}
+        />
+        <section className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
           <table className="num w-full min-w-[640px] text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground">
               <tr className="border-b border-border">
@@ -239,7 +270,8 @@ export default function ModelsPage() {
                 <th className="px-3 py-2 text-right hidden md:table-cell">Adoption</th>
                 <th className="px-3 py-2 text-right hidden md:table-cell">Quality</th>
                 <th className="px-3 py-2 text-right hidden lg:table-cell">Momentum</th>
-                <th className="px-3 py-2 w-8"></th>
+                <th className="px-3 py-2 text-center w-12">Cmp</th>
+                <th className="px-3 py-2 text-center w-12">Watch</th>
               </tr>
             </thead>
             <tbody>
@@ -298,11 +330,11 @@ export default function ModelsPage() {
                     <td className="px-3 py-2 text-right hidden lg:table-cell">
                       {m.score?.momentum?.toFixed(1) ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        <CompareTrayToggle slug={m.slug} />
-                        <WatchToggle slug={m.slug} size="sm" />
-                      </div>
+                    <td className="px-3 py-2 text-center">
+                      <CompareTrayToggle slug={m.slug} />
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <WatchToggle slug={m.slug} size="sm" />
                     </td>
                   </tr>
                 );
@@ -310,6 +342,7 @@ export default function ModelsPage() {
             </tbody>
           </table>
         </section>
+        </>
       )}
     </div>
   );

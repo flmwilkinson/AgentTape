@@ -1,0 +1,328 @@
+export const meta = {
+  slug: "best-foundation-models-for-ai-agents-2026",
+  title: "The best foundation models for AI agents in 2026",
+  description:
+    "Eight models that ship agent workloads in production, ranked on the three failure modes humans don't notice: brittle tool calls, context that rots past 80K, and unit cost at ten million runs.",
+  published_at: "2026-05-05",
+  kind: "comparison",
+  keywords: [
+    "best llm for agents",
+    "claude vs gpt for agents",
+    "best foundation model 2026",
+    "agentbench leader",
+    "swe-bench foundation models",
+  ],
+};
+
+<Lede>
+The most important number on every flagship spec sheet is the
+context window. It is also the number that tells you the least about
+how the model will behave inside an agent. A 1M-token window with
+recall that collapses past 120K is a worse tool than a clean 200K
+window. The first thing to verify on any model you're evaluating is
+not the headline length — it's the depth at which the recall curve
+falls off.
+</Lede>
+
+<AxesGrid
+  items={[
+    {
+      label: "Tool-use reliability",
+      body: "BFCL v4 is the headline. The number that matters more is whether the model still calls tools correctly on turn 40 of a multi-hour run. Most don't.",
+    },
+    {
+      label: "Effective long-context recall",
+      body: "Run a needle-in-a-haystack at 50K, 120K, 200K, 500K. The cliff is usually well before the documented window.",
+    },
+    {
+      label: "Cost per successful task",
+      body: "Per-million-token pricing matters less than turns-to-success. A cheaper model that needs three retries isn't cheaper.",
+    },
+  ]}
+/>
+
+<Prose>
+Eight models that actually run agent workloads in production today,
+ordered against those three axes. Numbers come from public
+leaderboards (BFCL v4, SWE-bench Verified, MMLU-Pro, Open LLM)
+plus published price sheets. Vendor self-reports are flagged where
+they appear, not folded in.
+</Prose>
+
+<SectionDivider number="I" label="Closed-source frontier" />
+
+<ModelCard
+  rank={1}
+  name="Claude Opus 4.7"
+  maker="Anthropic"
+  badge="Top pick for agents"
+  tag={
+    <>
+      The model that has held its agent-harness lead since February.
+      87.6% on SWE-bench Verified. The reason it stays at the top
+      isn't the headline number — Codex is within three points — it's
+      what happens after a tool call fails. Opus tries another path.
+      Most others retry the same call with a small variation, fail
+      again, then drift. Routing the routine 70–80% of steps to
+      Sonnet 4.6 and reserving Opus for the recovery is the standard
+      production pattern at this point.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Multi-hour runs that have to recover from their own mistakes. Code edits that span ten or more files.",
+    },
+    {
+      label: "Where it costs you",
+      body: "$5/$25 per million in/out — roughly twice GPT-5.4. 200K context, not 1M. The 1M beta exists but isn't on the standard tier.",
+    },
+  ]}
+  stat={{ label: "SWE-bench Verified", value: "87.6%" }}
+/>
+
+<ModelCard
+  rank={2}
+  name="GPT-5.4 / GPT-5.3 Codex"
+  maker="OpenAI"
+  tag={
+    <>
+      The cost-quality default. GPT-5.4 at $2.50/$15 sits at roughly
+      half Opus pricing for general work; GPT-5.3 Codex hits 85% on
+      SWE-bench Verified and currently leads SWE-bench Pro at 56.8%.
+      The function-calling schema remains the cleanest in the
+      industry — every framework targets it first, which means
+      community-tested tool definitions are easier to find for OpenAI
+      than for anyone else. Drift past about fifty sequential tool
+      calls is the known failure mode.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Anything where you'd otherwise default to Opus and want to halve the bill. Single-turn tool calls. Broad framework support.",
+    },
+    {
+      label: "Where it costs you",
+      body: "Drift on long sequential runs. 270K context cap is generous but trails Gemini by an order of magnitude.",
+    },
+  ]}
+  stat={{ label: "SWE-bench Verified · Codex", value: "85%" }}
+/>
+
+<ModelCard
+  rank={3}
+  name="Gemini 3.1 Pro"
+  maker="Google"
+  tag={
+    <>
+      Two million tokens of usable context — the largest production
+      window any Tier-1 lab is shipping — plus a 90% cache discount on
+      repeated prompts that changes RAG economics in Gemini's favour.
+      The model is genuinely strong on long-document and long-video
+      reasoning. SWE-bench numbers around 78% trail the top two, and
+      function-calling has more sharp edges than OpenAI's: edge cases
+      around streaming and parallel calls are where most production
+      teams hit their first surprise.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "RAG over codebases that don't fit elsewhere. Hour-long video. Document corpora at the scale where chunking starts to lose meaning.",
+    },
+    {
+      label: "Where it costs you",
+      body: "Coding agent quality trails Claude and GPT. Function-calling reliability uneven enough to break some frameworks without retries.",
+    },
+  ]}
+  stat={{ label: "Context window", value: "2,000,000 tokens" }}
+/>
+
+<ModelCard
+  rank={4}
+  name="Kimi K2.6"
+  maker="Moonshot AI · open weights"
+  tag={
+    <>
+      The open-weights frontier challenger. Trillion-parameter MoE
+      with ~32B active, trained with PARL to coordinate large numbers
+      of tool calls across self-spawned sub-agents. Multi-tool runs
+      lasting many hours without context collapse have been
+      documented in the community — that endurance is what earns it
+      this rank, not the per-turn benchmarks (where it still trails
+      the closed labs by a few points on BFCL v4). Self-hosting needs
+      serious GPU. Vision is below Gemini.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Parallel agent swarms. Polyglot codebases. Frontier-class capability inside your own infrastructure.",
+    },
+    {
+      label: "Where it costs you",
+      body: "BFCL v4 trails closed labs by 4–6 points. Hosted latency on community endpoints is uneven. Self-hosting cost is real.",
+    },
+  ]}
+  stat={{ label: "Reported parallel tool calls per session", value: "~1,500" }}
+/>
+
+<PullQuote>
+Spec-sheet context is one number. Effective recall past 200K
+tokens is a different number. The first one sells; the second one
+ships.
+</PullQuote>
+
+<SectionDivider number="II" label="Open-weight challengers" />
+
+<ModelCard
+  rank={5}
+  name="DeepSeek V4"
+  maker="DeepSeek · open weights"
+  tag={
+    <>
+      The cheapest frontier-class reasoner per token by a wide
+      margin. 80.6% on SWE-bench Verified, a genuine 1M context, and
+      a reasoning-per-dollar number nothing else gets close to. The
+      tradeoff is latency: hosted endpoints run two to three times
+      slower than Claude on short tool loops, and self-hosting a
+      trillion-parameter model is a project, not an evening's work.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Math, science and dense reasoning where the bottleneck is the thinking, not the tool ergonomics. Background batch work where latency doesn't matter.",
+    },
+    {
+      label: "Where it costs you",
+      body: "Latency hurts on user-facing agents. Tool-use reliability is below the closed labs. Self-hosting GPU footprint is significant.",
+    },
+  ]}
+  stat={{ label: "MMLU-Pro", value: "92.8%" }}
+/>
+
+<ModelCard
+  rank={6}
+  name="Qwen 3.6 Plus"
+  maker="Alibaba · open weights"
+  tag={
+    <>
+      The multilingual default and the open-weights long-context
+      story. Qwen 3.6 ships a 1M window as actual open weights,
+      dominates Chinese-language coding, and Apache 2.0 covers the
+      smaller variants. The flagship uses Tongyi Qianwen rather than
+      Apache, which matters if your plan involves fine-tuning the
+      flagship rather than the smaller siblings — read the licence
+      before you commit a training run.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Multilingual agents. Long-context open-weights work where you need to fine-tune. Chinese-language code bases.",
+    },
+    {
+      label: "Where it costs you",
+      body: "English reasoning trails DeepSeek V4. Flagship licensing isn't Apache. Tooling ecosystem narrower than Llama's.",
+    },
+  ]}
+  stat={{ label: "SWE-bench Verified", value: "73–77%" }}
+/>
+
+<ModelCard
+  rank={7}
+  name="Llama 4 Maverick"
+  maker="Meta · open weights"
+  tag={
+    <>
+      Pick this when fine-tuning rights and ecosystem maturity outrank
+      peak agent capability. Every framework targets Llama first;
+      every cloud has a Llama endpoint; every fine-tuning library
+      assumes its tokenizer. On the specific question of agent
+      benchmarks, Kimi K2.6 and DeepSeek V4 have moved past it. On
+      the question of "what will my fine-tuning team have working by
+      Friday", Llama still wins.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "Enterprise fine-tuning programmes. The most permissive licence in the open-weights tier. Tooling depth.",
+    },
+    {
+      label: "Where it costs you",
+      body: "Agent benchmarks trail the open-weights leaders. Less interesting if you're not fine-tuning.",
+    },
+  ]}
+  stat={{ label: "LiveCodeBench", value: "43.4%" }}
+/>
+
+<ModelCard
+  rank={8}
+  name="Mistral Medium 3.5"
+  maker="Mistral · open weights"
+  tag={
+    <>
+      77.6% on SWE-bench Verified from a 128B dense model — efficient
+      per parameter, Apache 2.0, and the only frontier-tier lab
+      outside the US/China duopoly. If EU data sovereignty matters to
+      your buyer, the conversation tends to start and end here. Long
+      context past 128K is unreliable in our testing and in the
+      community threads, so size your RAG accordingly.
+    </>
+  }
+  splits={[
+    {
+      label: "Best at",
+      body: "EU data sovereignty stories. Dense efficiency. Apache fine-tuning without the US-China geopolitics conversation.",
+    },
+    {
+      label: "Where it costs you",
+      body: "BFCL v4 below Qwen and the closed labs. Long context above 128K isn't production-grade.",
+    },
+  ]}
+  stat={{ label: "SWE-bench Verified", value: "77.6%" }}
+/>
+
+## How to choose
+
+<ChooseGrid
+  items={[
+    {
+      heading: "When the agent has to work end-to-end",
+      body: "Claude Opus 4.7. The recovery behaviour is the differentiator. Pair with Sonnet 4.6 for routine steps to halve cost.",
+    },
+    {
+      heading: "When the bill matters more than the last 5%",
+      body: "GPT-5.4. Right answer for most teams not bottlenecked on the hardest tasks.",
+    },
+    {
+      heading: "When context is the actual bottleneck",
+      body: "Gemini 3.1 Pro. 2M tokens, the cache discount, and RAG-friendly economics. Verify your function-calling reliability on a real harness first.",
+    },
+    {
+      heading: "Self-hosting or budget-bound",
+      body: "Kimi K2.6 for long-running orchestration. DeepSeek V4 for reasoning per dollar. Llama 4 if fine-tuning is the actual job.",
+    },
+  ]}
+/>
+
+<Closer>
+The teams getting the most out of agents in 2026 aren't picking one
+model. The pattern that works: route hard reasoning to Opus 4.7,
+bulk tool calls to Sonnet 4.6 or GPT-5.4, RAG-over-corpus to Gemini,
+and long-running orchestration to Kimi K2.6. Single-model
+deployments leave a meaningful chunk of the available quality on
+the table — how big a chunk depends entirely on how mixed your
+workload is, and you'll only know once you've measured.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The FM-50, <em>tracked daily</em></>}
+  body="Foundation models reshuffle every time a new release lands or a benchmark refreshes. The FM-50 is the live tape — context windows, pricing, modality, and Open LLM Leaderboard scores ranked into one composite that moves with the field."
+  href="/indexes/fm-50"
+  cta_label="View the FM-50"
+/>

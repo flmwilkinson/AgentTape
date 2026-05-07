@@ -101,6 +101,34 @@ class AgentSummary(BaseModel):
     tags: list[dict[str, str]] = Field(default_factory=list)
 
 
+class RetentionBadge(BaseModel):
+    """Month-2 retention proxy.
+
+    ``ratio = current_score / score_30d_after_admission``. ``status``
+    bins the ratio into a one-word verdict so the UI can render a
+    "still growing" / "decay since launch" badge without re-running
+    the comparison client-side.
+    """
+
+    ratio: float
+    status: str  # one of: growing, holding, fading, decaying
+    score_now: float
+    score_at_30d: float
+    days_since_admission: int
+
+
+class OpenRouterRank(BaseModel):
+    """Position in the OpenRouter token-volume rank for foundation models.
+
+    ``rank`` is 1-indexed. ``total`` is how many FMs we have a recent
+    OpenRouter reading for, so the UI can render "8 of 47".
+    """
+
+    rank: int
+    total: int
+    tokens_30d: float
+
+
 class AgentDetail(AgentSummary):
     """The full /agents/:slug payload."""
 
@@ -116,6 +144,10 @@ class AgentDetail(AgentSummary):
     # Source-of-truth metadata not on the row itself (e.g. OpenRouter
     # context_length, pricing, modality for foundation models).
     facts: dict[str, Any] = Field(default_factory=dict)
+    # Derived badges — computed at request time (not persisted) so they
+    # never go stale. None means "not enough data to decide".
+    retention: RetentionBadge | None = None
+    openrouter_rank: OpenRouterRank | None = None
 
 
 class SimilarAgent(BaseModel):

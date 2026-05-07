@@ -1,0 +1,275 @@
+export const meta = {
+  slug: "bundling-apocalypse-standalone-ai-tools",
+  title:
+    "The bundling apocalypse — why most standalone AI tools will be dead by 2027",
+  description:
+    "Midjourney fell from the top 10 to #46. OpenAI shut down Sora after burning $15M a day for $2.1M in lifetime revenue. The map of which standalone AI tools survive the bundling pressure, and which categories get absorbed.",
+  published_at: "2026-05-06",
+  kind: "report",
+  keywords: [
+    "ai tool bundling",
+    "standalone ai tools dying",
+    "midjourney decline",
+    "sora shutdown",
+    "ai market consolidation",
+  ],
+};
+
+<Lede>
+In September 2023, when a16z published the first edition of its Top
+100 Gen AI Consumer Apps report, Midjourney sat in the top ten. It
+was the iconic AI product. Discord-only. Bootstrapped. The first
+thing most people pointed to when they wanted to show a non-technical
+friend what generative AI could actually do. By January 2026,
+Midjourney was at #46.
+</Lede>
+
+<StatGrid
+  items={[
+    {
+      label: "Midjourney rank trajectory",
+      name: "10 → 46",
+      detail: "Across six editions of a16z Top 100 (2023–2026)",
+    },
+    {
+      label: "ChatGPT WAU, January 2026",
+      name: "900M",
+      detail: "+500M YoY · 2.7× the second-place product",
+    },
+    {
+      label: "Notion paid AI attach rate",
+      name: "20 → 50%",
+      detail: "Twelve months. Half of revenue now AI-driven.",
+    },
+    {
+      label: "Sora downloads, Nov→Feb",
+      name: "−66%",
+      detail: "3.33M → 1.13M before shutdown announcement",
+    },
+  ]}
+/>
+
+<Prose>
+Midjourney didn't get worse over those three years. By most accounts
+the product is better now than it was at peak, and the team has
+continued shipping confident updates throughout. What happened to
+it is what tends to happen to almost every category of standalone
+AI eventually. ChatGPT and Gemini both built decent image generation
+directly into their default chat interfaces, and a lot of the people
+who had been paying for Midjourney to make Pixar-style portraits of
+their cat decided they didn't really need a separate subscription
+for that anymore.
+
+This is the bundling pattern in action, and image generation was
+just the first category to face it. Three more categories of
+standalone AI tool are due to face the same compression over the
+next eighteen months or so. For builders working in those
+categories the runway is shorter than most people realise. For
+anyone trying to track or bet on which AI tools will still matter
+in 2027, the survival map looks fairly different from the
+leaderboards everyone is currently optimising against.
+</Prose>
+
+<SectionDivider number="01" label="What the data actually shows" />
+
+<Prose>
+The cleanest picture of the bundling effect is in a16z's
+sixth-edition report, published in March 2026 using SimilarWeb data
+from January and Sensor Tower data for mobile. The headline number
+got most of the attention. ChatGPT now has 900 million weekly
+active users, up by 500 million in a single year. More than 10% of
+the global population uses it weekly.
+
+The follow-on numbers are more interesting. ChatGPT is 2.7× larger
+than the second-place product on web traffic, and 2.5× larger on
+mobile MAU. There hasn't been a category in modern consumer
+software where one product has dominated this hard since the early
+days of mobile, and unlike search, which had network effects on its
+side, this is happening because every query teaches ChatGPT
+something about the user. Memory and context compound. The longer
+someone uses one assistant, the higher their cost of switching.
+Sam Altman has hinted at a "Sign in with ChatGPT" identity layer;
+if it ships, the moat goes from deep to structural.
+
+Underneath the headlines, the more telling signal is in the
+creative-tools category. Three years ago, seven of the nine
+creative slots in the top 50 were image generators. Now there are
+three. The slots that opened up didn't disappear; they got
+refilled by video, music, and voice products, all in categories
+where the bundled solutions inside ChatGPT and Gemini still aren't
+quite good enough to absorb the use case.
+
+The threshold seems to sit somewhere around the point where a
+bundled version is good enough for everyday non-specialist use.
+Past that point, only the specialists with strong workflow
+opinions or community moats keep their seat at the table. Notion's
+paid AI attach rate climbing from 20% to over 50% in twelve
+months, with AI features now accounting for roughly half of total
+revenue, is the same dynamic told from the other side of the
+bundle. So is CapCut having 736 million monthly mobile users on an
+editor whose top features are AI background removal, auto-captions,
+and text-to-video. Canva built its entire growth engine around its
+Magic Suite. The old distinction between "AI tools" and "tools
+with AI features" has effectively collapsed, with the second group
+capturing most of the active usage.
+</Prose>
+
+<SectionDivider number="02" label="Sora is the canary that already died" />
+
+<Prose>
+If you wanted a clean test of whether a category was about to be
+bundled away, OpenAI's own video product was the experiment.
+
+Sora launched and immediately rocketed. Number one on the US App
+Store for twenty consecutive days. Faster to a million users than
+ChatGPT itself. A planned Disney partnership covering more than
+200 characters from the Marvel, Pixar, and Star Wars catalogues
+was announced in December 2025. Everything looked like it was
+working.
+
+On March 24, 2026, OpenAI announced the shutdown. The web and app
+versions went dark on April 26. The API will follow on
+September 24. The economics, once they leaked, explained
+everything.
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "Daily cost (peak)",
+      pick: "≈ $15 million",
+      why: "Each ten-second clip cost roughly $1.30 in compute. Forbes / Cantor Fitzgerald analyst estimate, March 2026.",
+    },
+    {
+      job: "Lifetime revenue",
+      pick: "≈ $2.1 million",
+      why: "Total in-app purchase revenue from launch through shutdown announcement, per Appfigures.",
+    },
+    {
+      job: "Burn-down ratio",
+      pick: "Lifetime revenue every 3.4 hours",
+      why: "Even using WSJ's more conservative $1M/day estimate, Sora burned its lifetime revenue every two days.",
+    },
+  ]}
+/>
+
+<PullQuote>
+OpenAI itself couldn't make a standalone consumer video tool work.
+The company with the best distribution, the most capital, and the
+closest relationship with the underlying compute layer concluded the
+GPUs were better spent inside ChatGPT.
+</PullQuote>
+
+<Prose>
+If OpenAI couldn't make that work for itself, the implication for
+everyone else operating with less capital and less distribution
+should be reasonably clear. Most consumer AI products launching
+today with a flashy demo and a $20-a-month price tag are solving
+the same equation Sora was solving, often without showing both
+sides of the math at the same time when they pitch.
+</Prose>
+
+<SectionDivider number="03" label="Four categories most exposed in the next 18 months" />
+
+<Prose>
+Walking through the consumer AI map with the bundling lens, four
+categories of standalone tool look most at risk through 2027.
+</Prose>
+
+<QuadGrid
+  title="Four categories under bundling pressure"
+  deck="Where the absorption lands hardest in the next eighteen months — and what the bundles already ate."
+  items={[
+    {
+      number: "01",
+      name: "Generic chatbots and AI assistants",
+      who: "Bundling risk: 5 of 5 — most exposed",
+      body: "Any product whose pitch is 'ChatGPT but for [vertical]' without owned distribution or proprietary data is in the most direct line of fire. The window for general-purpose-chatbot-but-specialised closed in late 2025.",
+    },
+    {
+      number: "02",
+      name: "Mid-market video generation",
+      who: "Bundling risk: 4 of 5",
+      body: "Sora is one data point. Kling, Veo, and Hailuo are consolidating the high end. Anything that isn't workflow-deep like Runway or quality-supreme like Veo will hit the same compute economics that killed Sora.",
+    },
+    {
+      number: "03",
+      name: "Basic voice cloning and TTS",
+      who: "Bundling risk: 3 of 5",
+      body: "ElevenLabs survives because of dubbing and pro-audio workflows. The tier below it (point-and-click 'type text get speech' tools) is being absorbed by ChatGPT voice mode and Gemini speech in real time.",
+    },
+    {
+      number: "04",
+      name: "Standalone code completion",
+      who: "Bundling risk: 4 of 5",
+      body: "Pure autocomplete is losing to integrated coding agents. Cursor, Claude Code, and the Devin family now do code review, agent execution, and full-loop development. Standalone copilots have nowhere to retreat to.",
+    },
+  ]}
+/>
+
+<SectionDivider number="04" label="Three patterns that survive bundling" />
+
+<Prose>
+The standalone AI tools that aren't just surviving but accelerating
+in 2026 tend to share three structural features. One of these is
+usually enough to keep a product alive through the bundling
+pressure. Two of them together starts to look like a real moat.
+</Prose>
+
+<ChooseGrid
+  items={[
+    {
+      heading: "Opinionated workflow ownership",
+      body: "Suno held its rank because it doesn't just generate music — it owns the loop from idea to lyric to mixed track to share, tuned to a specific creative culture. Examples: Suno, Runway, Cursor.",
+    },
+    {
+      heading: "Community lock-in",
+      body: "Civitai survives because the model marketplace is the product, not the foundation model under it. Hugging Face works at developer scale. Character.AI works because user-created characters are the moat. Examples: Civitai, Hugging Face, Character.AI.",
+    },
+    {
+      heading: "Agentic orchestration on multiple models",
+      body: "Manus, Lovable, OpenClaw, and the wave of horizontal agents from late 2025 onward sit in a category the foundation-model companies are structurally slower to build. Independents move faster on agency.",
+    },
+  ]}
+/>
+
+<SectionDivider number="05" label="What this means for tracking the market" />
+
+<Prose>
+Anyone running a leaderboard, an aggregator, or a tool directory
+has a measurement problem getting worse before it gets better. As
+a16z themselves noted, web traffic increasingly undercounts AI
+usage. A developer spending eight hours a day in Claude Code is
+invisible to SimilarWeb. A knowledge worker dictating every email
+through Wispr is invisible to app store rankings. The most-used
+AI products in 2027 may not show up on a leaderboard built around
+web sessions and downloads, because they will live inside other
+products.
+</Prose>
+
+<PullQuote>
+The metrics that matter for the next phase look different. Real-time
+usage signals from API aggregators. Attach rates inside bundled
+products. Retention curves rather than launch spikes. Migration
+patterns between tools.
+</PullQuote>
+
+<Closer>
+The graveyard at the bottom of the a16z list, where the companies
+that were in the top 50 in 2023 sit largely forgotten, is going to
+grow before it shrinks. That isn't really a story about AI failing,
+though. It's a story about the parts of AI that worked being
+absorbed into the few products with the distribution to absorb
+them, and almost everything else getting compressed against that
+wall. The bundling itself isn't really the question to be asking
+anymore. What matters is which part of the survival map you decide
+to position on while the absorption is still finishing.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>Track who's surviving on <em>AgentTape</em></>}
+  body="Stars get gamed, leaderboards get embedded out of, and bundles get thicker every quarter. AgentTape tracks AI tools on usage flow and sentiment — the signals that survive the absorption. Watch which standalone tools are gaining momentum this week, and which are being quietly compressed."
+  href="/indexes"
+  cta_label="View the live indexes"
+/>

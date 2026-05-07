@@ -51,8 +51,39 @@ export default async function SectorDetailPage({ params }: PageParams) {
     }).catch(() => null),
   ]);
 
+  // Empty sector — no admitted agents carry this tag yet. Render an
+  // explainer + a route back to /sectors instead of a hard 404. Bad
+  // 404s look like a broken site to users who clicked from a chip.
   if (!members || members.items.length === 0) {
-    notFound();
+    return (
+      <article>
+        <div className="border-b border-border bg-card">
+          <div className="container py-10">
+            <BackLink href="/sectors" label="All sectors" className="mb-4" />
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              Sector · {kind}
+            </div>
+            <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl">
+              {pretty(value)}
+            </h1>
+            <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+              No admitted agents are tagged{" "}
+              <span className="font-mono">{kind}:{value}</span> yet. The
+              discovery service tags agents as it admits them — check
+              back, or browse the sectors that already have members.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/sectors"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Browse sectors with members →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
   }
 
   const composite =

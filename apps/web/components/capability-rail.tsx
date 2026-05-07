@@ -3,29 +3,34 @@ import { ArrowUpRight, Github, Globe } from "lucide-react";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
+import { CAPABILITIES } from "@/lib/taxonomy";
 
 // "Top 3 per capability" rail for the floor page. Each row links into
 // the agent's ticker page; the icons jump straight to the external
 // source — GitHub / homepage / HF model page — so a reader can go
 // from the home page to the actual codebase in one click.
+//
+// Capabilities + their order come from lib/taxonomy.ts so this rail
+// stays aligned with /trending filters and the search combobox.
 
-type Capability = {
-  slug: string;
-  label: string;
-  blurb: string;
+const BLURBS: Record<string, string> = {
+  "code-generation": "Write code, review PRs, ship features.",
+  browsing: "Drive a real browser to do tasks for you.",
+  research: "Read, summarise, cite the literature.",
+  rag: "Retrieve from your data, then answer.",
+  "multi-agent": "Orchestrate teams of agents.",
+  automation: "Run repeated workflows on autopilot.",
+  "tool-use": "Call APIs, run code, use tools.",
+  memory: "Long-term recall across sessions.",
+  vision: "See images, charts, screenshots.",
+  voice: "Speak and listen in real time.",
 };
 
-// The capabilities surfaced here. Order is by perceived user-intent
-// (coding agents are the most-searched category by a wide margin) —
-// we don't want to bury what most readers came for.
-const RAILS: Capability[] = [
-  { slug: "code-generation", label: "Coding", blurb: "Write code, review PRs, ship features." },
-  { slug: "browsing", label: "Browser", blurb: "Drive a real browser to do tasks for you." },
-  { slug: "rag", label: "RAG", blurb: "Retrieve from your data, then answer." },
-  { slug: "multi-agent", label: "Multi-agent", blurb: "Orchestrate teams of agents." },
-  { slug: "research", label: "Research", blurb: "Read, summarise, cite the literature." },
-  { slug: "automation", label: "Automation", blurb: "Run repeated workflows on autopilot." },
-];
+const RAILS = CAPABILITIES.map((c) => ({
+  slug: c.slug,
+  label: c.label,
+  blurb: BLURBS[c.slug] ?? "",
+}));
 
 export async function CapabilityRail() {
   // Six small tag-filtered queries in parallel — total round-trip is
@@ -62,7 +67,7 @@ export async function CapabilityRail() {
               <div className="text-xs text-muted-foreground">{cap.blurb}</div>
             </div>
             <Link
-              href={`/search?kind=capability&value=${cap.slug}`}
+              href={`/sectors/capability/${cap.slug}`}
               className="text-[10px] font-mono uppercase tracking-wider text-primary hover:underline"
             >
               All →

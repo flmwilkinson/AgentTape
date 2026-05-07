@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +13,31 @@ import { SearchCombobox } from "@/components/search-combobox";
 // URL-as-state: ?q=...&mode=text|vibe&kind=...&value=...
 // Filter URLs are shareable.
 
+// Next 15 requires useSearchParams to live below a Suspense boundary
+// so the build can statically render the rest of the route. We wrap
+// the inner component here; the outer default export is the Suspense
+// shell that satisfies the pre-render check.
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<SearchSkeleton />}>
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchSkeleton() {
+  return (
+    <div className="container py-8 md:py-12">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        Search
+      </div>
+      <div className="mt-2 h-10 w-72 animate-pulse rounded-md bg-muted" />
+      <div className="mt-6 h-9 w-full max-w-md animate-pulse rounded-md bg-muted" />
+    </div>
+  );
+}
+
+function SearchPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const q = params.get("q") ?? "";
@@ -35,9 +60,14 @@ export default function SearchPage() {
     router.replace(`/search?${cur.toString()}`);
   }
 
+  // Unified search query. With a query string, we hit /search and
+  // include the tag filter so text + facet combine on one request.
+  // Without a query string, we hit /agents with a tag filter so the
+  // sidebar still drives a result list — same UI, two backends.
   const { data: searchData, isLoading: searching } = useQuery({
-    queryKey: ["search", q, mode],
-    queryFn: () => api.search(q, mode, 30),
+    queryKey: ["search", q, mode, kind, value],
+    queryFn: () =>
+      api.search(q, mode, 30, kind && value ? { kind, value } : null),
     enabled: q.length > 0,
   });
   const { data: filterData } = useQuery({

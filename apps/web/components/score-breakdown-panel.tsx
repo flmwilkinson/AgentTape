@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { api, type AgentDetail, type SignalSeries } from "@/lib/api-client";
+import { Sparkline } from "@/components/sparkline";
 
 // One panel that does what three did:
 //
@@ -37,16 +38,14 @@ const WINDOWS = [
 ] as const;
 type Window = (typeof WINDOWS)[number]["v"];
 
-// Pillar colours kept in lock-step with components/signal-chart.tsx —
-// the signals chart fans out shades within each pillar's hue family,
-// and these middle shades are the canonical "this pillar is X colour"
-// reference. Reading both charts side-by-side, the same colour means
-// the same pillar.
+// Pillar colours come from --pillar-* CSS tokens (globals.css). Same
+// values feed pillar-bar, signal-chart and this chart — so reading any
+// two of them side-by-side, the same colour means the same pillar.
 const PILLAR_COLORS = {
-  adoption: "hsl(217 80% 55%)",   // blue
-  quality: "hsl(142 65% 48%)",    // green
-  momentum: "hsl(358 70% 60%)",   // red
-  community: "hsl(215 22% 55%)",  // slate
+  adoption: "hsl(var(--pillar-adoption))",
+  quality: "hsl(var(--pillar-quality))",
+  momentum: "hsl(var(--pillar-momentum))",
+  community: "hsl(var(--pillar-community))",
 } as const;
 
 const SERIES = [
@@ -77,19 +76,79 @@ const ANCHORS: Record<string, number> = {
   stackoverflow_questions_7d: 5,
   producthunt_upvotes: 100,
   arxiv_citations: 100,
+  // Migration 0007 anchors — keep in lock-step with scoring/compute.py.
+  docker_pulls_30d: 100_000,
+  crates_downloads_90d: 10_000,
+  github_releases_90d: 6,
+  github_issue_close_rate_30d: 100,
+  wikipedia_views_30d: 100_000,
+  discord_members: 5_000,
+  google_trends_score: 30,
+  // Migration 0008 anchors.
+  openrouter_token_volume_30d: 1_000_000_000,
+  github_first_response_hours_30d: 24,
 };
 
 const APPLICATION_PILLARS = {
-  adoption: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "mcp_registry_listed", "stackoverflow_questions_7d", "producthunt_upvotes"],
-  quality: ["benchmark_score"],
-  momentum: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d"],
-  community: ["github_contributors", "github_forks", "hn_points_7d", "reddit_points_7d", "bluesky_mentions_7d", "hf_likes"],
+  adoption: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "mcp_registry_listed",
+    "stackoverflow_questions_7d",
+    "producthunt_upvotes",
+    "docker_pulls_30d",
+    "crates_downloads_90d",
+  ],
+  quality: [
+    "benchmark_score",
+    "github_issue_close_rate_30d",
+    "github_first_response_hours_30d",
+  ],
+  momentum: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_releases_90d",
+    "google_trends_score",
+  ],
+  community: [
+    "github_contributors",
+    "github_forks",
+    "hn_points_7d",
+    "reddit_points_7d",
+    "bluesky_mentions_7d",
+    "hf_likes",
+    "discord_members",
+  ],
 };
 
 const FOUNDATION_MODEL_PILLARS = {
-  adoption: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_stars", "github_mentions_7d"],
+  adoption: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_stars",
+    "github_mentions_7d",
+    "wikipedia_views_30d",
+    "openrouter_token_volume_30d",
+  ],
   quality: ["benchmark_score"],
-  momentum: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_mentions_7d"],
+  momentum: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_mentions_7d",
+    "google_trends_score",
+    "openrouter_token_volume_30d",
+  ],
   community: ["hf_likes", "github_contributors", "bluesky_mentions_7d", "reddit_points_7d"],
 };
 
@@ -99,6 +158,10 @@ const SOURCE_LABELS: Record<string, string> = {
   github_commits_7d: "Commits (7d)",
   github_contributors: "Contributors",
   github_mentions_7d: "GitHub mentions (7d)",
+  github_releases_90d: "GitHub releases (90d)",
+  github_issue_close_rate_30d: "Issue close rate (30d)",
+  github_first_response_hours_30d: "Median first-response hours (30d)",
+  openrouter_token_volume_30d: "OpenRouter tokens (30d)",
   hf_downloads_30d: "HF downloads (30d)",
   hf_likes: "HF likes",
   hf_trending_rank: "HF trending rank",
@@ -112,6 +175,11 @@ const SOURCE_LABELS: Record<string, string> = {
   bluesky_mentions_7d: "Bluesky mentions (7d)",
   stackoverflow_questions_7d: "SO questions (7d)",
   producthunt_upvotes: "Product Hunt upvotes",
+  docker_pulls_30d: "Docker Hub pulls",
+  crates_downloads_90d: "Crates.io downloads (90d)",
+  wikipedia_views_30d: "Wikipedia views (30d)",
+  discord_members: "Discord members",
+  google_trends_score: "Google Trends",
   benchmark_score: "Benchmark score",
   arxiv_citations: "arXiv citations",
 };
@@ -188,6 +256,21 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
 
   // Latest reading per signal source + 24h-old reading for delta.
   const sigState = useMemo(() => buildSignalState(signals), [signals]);
+
+  // Time-series of raw values per source — fuels the per-signal
+  // sparkline that replaces the old standalone /signals chart panel.
+  // Sorted by capture time so the sparkline reads left-to-right.
+  const sigSeriesBySource = useMemo(() => {
+    const out = new Map<string, number[]>();
+    for (const s of signals) {
+      const sorted = [...(s.points ?? [])].sort(
+        (a, b) =>
+          new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime(),
+      );
+      out.set(s.source, sorted.map((p) => p.value));
+    }
+    return out;
+  }, [signals]);
 
   const applicabilityFn = (s: string) => applicabilityFor(s, agent);
   const rows: PillarRow[] = [
@@ -348,37 +431,47 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                     ) : (
                       <>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {r.contributing.map((c) => (
-                            <div
-                              key={c.source}
-                              className="rounded-sm border border-border bg-card px-3 py-2"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-foreground/85">
-                                  {SOURCE_LABELS[c.source] ?? c.source}
-                                </span>
-                                {c.delta24h != null && c.delta24h !== 0 && (
-                                  <span
-                                    className={cn(
-                                      "font-mono text-xs",
-                                      c.delta24h > 0 ? "text-gain" : "text-loss",
-                                    )}
-                                  >
-                                    {c.delta24h > 0 ? "+" : ""}
-                                    {c.delta24hPctLabel}
+                          {r.contributing.map((c) => {
+                            const series = sigSeriesBySource.get(c.source) ?? [];
+                            return (
+                              <div
+                                key={c.source}
+                                className="rounded-sm border border-border bg-card px-3 py-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-foreground/85">
+                                    {SOURCE_LABELS[c.source] ?? c.source}
                                   </span>
-                                )}
+                                  {c.delta24h != null && c.delta24h !== 0 && (
+                                    <span
+                                      className={cn(
+                                        "font-mono text-xs",
+                                        c.delta24h > 0 ? "text-gain" : "text-loss",
+                                      )}
+                                    >
+                                      {c.delta24h > 0 ? "+" : ""}
+                                      {c.delta24hPctLabel}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-1 flex items-baseline justify-between text-xs text-muted-foreground">
+                                  <span className="num">
+                                    {c.raw_label}
+                                  </span>
+                                  <span className="num">
+                                    → {c.scaled_label}
+                                  </span>
+                                </div>
+                                <Sparkline
+                                  values={series}
+                                  width={220}
+                                  height={28}
+                                  className="mt-1.5 w-full"
+                                  strokeWidth={1.25}
+                                />
                               </div>
-                              <div className="mt-1 flex items-baseline justify-between text-xs text-muted-foreground">
-                                <span className="num">
-                                  {c.raw_label}
-                                </span>
-                                <span className="num">
-                                  → {c.scaled_label}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                         <p className="mt-3 font-mono text-[11px] text-muted-foreground">
                           Pillar = mean of {r.contributing.length}{" "}

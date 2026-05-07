@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { ARTICLES } from "@/lib/articles";
+import { ARTICLES, type ArticleMeta } from "@/lib/articles";
+import { ArticlesIndex } from "@/components/articles-index";
 
 export const metadata: Metadata = {
   title: "Articles — AgentTape",
@@ -9,63 +9,21 @@ export const metadata: Metadata = {
   alternates: { canonical: "/articles" },
 };
 
+// Server component shell. Pulls just the metadata off each Article
+// (excluding the heavy `body` JSX) so the client filter doesn't ship
+// every article's full body in the page bundle. The body is only ever
+// hydrated on the article-detail route anyway.
 export default function ArticlesIndexPage() {
-  return (
-    <article className="container py-10 md:py-14 max-w-4xl space-y-10">
-      <header>
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          Articles
-        </div>
-        <h1 className="editorial mt-2 text-4xl font-semibold leading-tight md:text-5xl md:leading-[1.05]">
-          Field notes from the floor.
-        </h1>
-        <p className="editorial mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-          Deep dives and ranked guides written against the same live data
-          that drives the indexes. Use them to choose well and stay current.
-        </p>
-      </header>
-
-      {ARTICLES.length === 0 ? (
-        <section className="rounded-md border border-dashed border-border bg-card px-6 py-10 text-center">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            No articles yet
-          </div>
-          <p className="editorial mt-3 max-w-prose mx-auto text-base leading-relaxed text-muted-foreground">
-            Articles ship as they're written.
-          </p>
-        </section>
-      ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-card">
-          {ARTICLES.map((a) => (
-            <li key={a.slug}>
-              <Link
-                href={`/articles/${a.slug}`}
-                className="block px-5 py-5 hover:bg-subtle"
-              >
-                <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {new Date(a.published_at).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                  {a.author && (
-                    <>
-                      <span className="mx-2 text-muted-foreground/40">·</span>
-                      {a.author}
-                    </>
-                  )}
-                </div>
-                <div className="mt-1 text-lg font-medium leading-snug">
-                  {a.title}
-                </div>
-                <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-                  {a.description}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
-  );
+  const meta: ArticleMeta[] = ARTICLES.map((a) => ({
+    slug: a.slug,
+    title: a.title,
+    description: a.description,
+    published_at: a.published_at,
+    author: a.author,
+    keywords: a.keywords,
+    kind: a.kind,
+    external_href: a.external_href,
+    live: a.live,
+  }));
+  return <ArticlesIndex articles={meta} />;
 }

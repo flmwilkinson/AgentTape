@@ -38,11 +38,14 @@ def _agent(**overrides: Any) -> AgentRow:
     base = dict(
         id=uuid.uuid4(),
         slug="example-agent",
+        name="Example Agent",
         github_repo="example/agent",
         hf_org=None,
         hf_model_ids=None,
         package_names=None,
         arxiv_ids=None,
+        facts=None,
+        entity_kind="application",
     )
     base.update(overrides)
     return AgentRow(**base)

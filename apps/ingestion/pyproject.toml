@@ -16,6 +16,7 @@ dependencies = [
     "tenacity>=9.0.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
+    "pytrends>=4.9.2",
     "opentelemetry-sdk>=1.27.0",
     "opentelemetry-exporter-otlp-proto-http>=1.27.0",
     "opentelemetry-instrumentation-fastapi>=0.48b0",

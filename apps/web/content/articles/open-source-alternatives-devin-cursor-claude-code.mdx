@@ -1,0 +1,329 @@
+export const meta = {
+  slug: "open-source-alternatives-devin-cursor-claude-code",
+  title: "Open-source alternatives to Devin, Cursor and Claude Code",
+  description:
+    "Five self-hosted AI coding agents — who runs each one, which proprietary product it actually replaces, and the specific places it falls short of the closed equivalent.",
+  published_at: "2026-05-05",
+  kind: "comparison",
+  keywords: [
+    "open source devin",
+    "self-hosted ai coding agent",
+    "opendevin vs devin",
+    "alternatives to cursor",
+    "open source claude code",
+  ],
+};
+
+<Lede>
+The reasons to look at self-hosted agents in 2026 aren't usually
+ideological. Devin still bills per seat. Cursor has changed its
+pricing structure twice in twelve months. Claude Code lives entirely
+inside one vendor's API and is priced accordingly. None of that
+forces a switch on its own. A CFO running the numbers at 60+ seats,
+a compliance team that needs SBOMs for every component, or an
+air-gapped environment will each push the conversation in the same
+direction independently.
+</Lede>
+
+<TickerTable
+  caption="Live · OSS coding agents"
+  asof="Stars as of 05 May 2026"
+  rows={[
+    { symbol: "OPENHANDS", stars: "72.6K", license: "MIT", default_model: "BYO via LiteLLM", replaces: "Devin", trend: "up" },
+    { symbol: "CLINE", stars: "~58K", license: "Apache 2.0", default_model: "BYO key", replaces: "Cursor agent", trend: "up" },
+    { symbol: "AIDER", stars: "~41K", license: "Apache 2.0", default_model: "Claude / DeepSeek / GPT", replaces: "Claude Code", trend: "up" },
+    { symbol: "TABBY", stars: "~33K", license: "Apache 2.0", default_model: "Qwen2.5-Coder / StarCoder", replaces: "Copilot (self-hosted)", trend: "up" },
+    { symbol: "CONTINUE", stars: "~31K", license: "Apache 2.0", default_model: "BYO key", replaces: "Cursor in-IDE", trend: "up" },
+    { symbol: "SWE-AGENT", stars: "research", license: "MIT", default_model: "Claude / GPT (any)", replaces: "Devin (headless)" },
+  ]}
+/>
+
+<Prose>
+Five tools, one section each, with the part that matters: the
+specific places each one falls short of the closed-source product
+it claims to replace. None of these are perfect substitutes. They
+each give up something to get what they're giving you.
+</Prose>
+
+<SectionDivider number="01" label="Autonomous agent" />
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      OpenHands
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Formerly OpenDevin · All-Hands-AI
+    </div>
+    <p>
+      The All-Hands-AI team rebranded the OpenDevin project last year
+      and the main repo now sits at 72,607 stars under MIT. The
+      architecture is unchanged: an autonomous agent that plans,
+      edits, runs tests, browses the web, and opens PRs from inside
+      a sandboxed Docker container. The hosted free tier defaults to
+      a Minimax model; the published numbers people actually quote
+      come from runs against Claude Sonnet 4.5, where SWE-Bench
+      Verified lands around 77%.
+    </p>
+    <p>
+      <strong>Who self-hosts it.</strong> Teams with hard data
+      residency rules, engineers who want to read the agent's own
+      planner before trusting it with a credit card's worth of API
+      calls, and anyone with enough scale that per-seat pricing has
+      become the budget conversation rather than a footnote.
+    </p>
+    <p>
+      <strong>Where it falls short.</strong> Setup is real DevOps
+      work — sandboxing, container limits, network egress rules —
+      and getting any of those wrong is how you end up with an agent
+      that hangs or burns through context. A single SWE-bench-style
+      fix costs $0.50–$3 against a frontier model, so what you save
+      on the wrapper you'll spend on inference. The exchange is
+      worthwhile at scale; below about 20 active developers, the
+      math is harder.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="OpenHands"
+    badge="OSS"
+    rows={[
+      { key: "Stars", value: "72.6K", big: true },
+      { key: "License", value: "MIT" },
+      { key: "Default", value: "Any LiteLLM" },
+      { key: "Replaces", value: "Devin" },
+      { key: "Falls short", value: "DevOps lift" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="02" label="Terminal pair programmer" />
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Aider
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Apache 2.0 · ~41K stars · 5.3M+ PyPI installs
+    </div>
+    <p>
+      Aider is a terminal pair programmer that edits your local git
+      repo and auto-commits every change. The repo map is built on
+      tree-sitter, the diffs are surgical, and every edit becomes a
+      real git commit you can review or revert with the tools your
+      team already uses for code review. That last property is why
+      Aider sticks where it sticks — the audit trail isn't a
+      proprietary log file, it's `git log`.
+    </p>
+    <p>
+      It targets Claude 3.7 Sonnet, DeepSeek R1 and Chat V3, the
+      OpenAI o-series and GPT-4o cleanly, and connects to most of
+      the rest via LiteLLM. Local models work if you're willing to
+      live with the latency.
+    </p>
+    <p>
+      <strong>Where it falls short.</strong> Aider only edits files.
+      It can't run shell commands, install packages, or execute
+      tests on its own. For a fire-and-forget loop you need
+      OpenHands. For a precise, reviewable tool that respects your
+      git history, nothing in this list is closer to what a careful
+      senior engineer would write themselves.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Aider"
+    badge="CLI · GIT"
+    rows={[
+      { key: "Stars", value: "~41K", big: true },
+      { key: "License", value: "Apache 2.0" },
+      { key: "Default", value: "Sonnet / DeepSeek" },
+      { key: "Replaces", value: "Claude Code" },
+      { key: "Falls short", value: "No shell exec" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="03" label="Research-grade fixer" />
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      SWE-agent
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Princeton + Stanford · MIT · NeurIPS 2024
+    </div>
+    <p>
+      SWE-agent is the academic project that put open source on the
+      SWE-bench leaderboard, with the entire harness configured in a
+      single YAML file. The smaller mini-SWE-agent variant lands
+      above 74% on Verified in roughly a hundred lines of Python —
+      the kind of result that makes the codebase itself worth
+      reading once before you commit to building on top of anything
+      heavier. Default model is bring-your-own; Claude, GPT and
+      anything LiteLLM speaks all work.
+    </p>
+    <p>
+      <strong>Best for.</strong> Running headless against a queue of
+      GitHub issues. Benchmarking. Building your own agent on top of
+      a clean baseline whose decisions are all visible.
+    </p>
+    <p>
+      <strong>Weak for.</strong> Day-to-day "help me with this file"
+      coding. There's no chat polish, no IDE integration, no
+      onboarding wizard. The documentation expects you to read the
+      source. That's a feature for one audience and a wall for
+      another.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="SWE-agent"
+    badge="research"
+    rows={[
+      { key: "Bench", value: "74%", big: true },
+      { key: "License", value: "MIT" },
+      { key: "Origin", value: "Princeton / Stanford" },
+      { key: "Replaces", value: "Devin (headless)" },
+      { key: "Falls short", value: "No daily UX" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="04" label="IDE-native" />
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Continue and Cline
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      VS Code &amp; JetBrains extensions · Apache 2.0
+    </div>
+    <p>
+      Cursor's pitch is a VS Code fork with AI baked in. The
+      open-source answer is the inverse: keep stock VS Code, add the
+      same primitives via extensions. Continue (~31k stars) handles
+      autocomplete and chat across VS Code and JetBrains and is
+      model-agnostic against Claude, GPT-4o or a local Ollama
+      target. Cline (~58k stars across its Roo Code and Kilo Code
+      forks) is the agentic extension closest to Cursor's agent
+      mode, with the Plan/Act split that makes it noticeably safer
+      to leave running while you're in another window.
+    </p>
+    <p>
+      <strong>Where they fall short.</strong> The editor itself is
+      stock VS Code. You don't get Cursor's tab-completion model or
+      the same end-to-end latency. If those specific UX wins are
+      what you currently pay Cursor for, no extension closes that
+      gap — you're trading editor polish for model freedom and a
+      lower bill, and that's the whole exchange.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Cline / Continue"
+    badge="VS Code"
+    rows={[
+      { key: "Cline ★", value: "~58K", big: true },
+      { key: "Continue ★", value: "~31K" },
+      { key: "License", value: "Apache 2.0" },
+      { key: "Replaces", value: "Cursor" },
+      { key: "Falls short", value: "No custom editor" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="05" label="Team server" />
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Tabby
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      ~33K stars · Apache 2.0 (open-core) · Docker-native
+    </div>
+    <p>
+      Tabby is the only tool here designed first for an air-gapped
+      team server rather than a single laptop. It ships as a Docker
+      container with admin panel, LDAP auth, per-user API keys, and
+      usage analytics built in — the things you'd otherwise have to
+      bolt onto OpenHands yourself.
+    </p>
+    <p>
+      Defaults are open-weight coders: StarCoder, Qwen2.5-Coder,
+      DeepSeek Coder. A single A100 80GB running Qwen2.5-Coder 32B at
+      4-bit quantization will serve roughly 15–25 concurrent
+      developers using Tabby's request queueing — the exact number
+      depends on completion length and how aggressive your users are
+      with chat.
+    </p>
+    <p>
+      <strong>Replaces.</strong> GitHub Copilot for completion, plus
+      a basic chat panel.
+    </p>
+    <p>
+      <strong>Doesn't replace.</strong> Cursor's agent mode or
+      Devin-style autonomy. Tabby is autocomplete plus chat, served
+      well, behind your firewall. It's not an engineer.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Tabby"
+    badge="On-prem"
+    rows={[
+      { key: "Stars", value: "~33K", big: true },
+      { key: "License", value: "Apache 2.0" },
+      { key: "Default", value: "Qwen2.5-Coder" },
+      { key: "Replaces", value: "Copilot" },
+      { key: "Falls short", value: "No agent mode" },
+    ]}
+  />
+</Section>
+
+<PullQuote>
+The OSS-vs-closed argument collapses four very different reasons
+into one. The buyer for "vendor lock-in" and the buyer for "data
+residency" are not the same person and shouldn't be sold the same
+tool.
+</PullQuote>
+
+<QuadGrid
+  title={<>Why <em>OSS</em>, really</>}
+  deck="Match the reason to the audience and the right tool falls out. Run the wrong reason against the right buyer and the procurement meeting goes sideways."
+  items={[
+    {
+      number: "01",
+      name: "Vendor lock-in",
+      who: "Platform engineering · multi-year roadmaps",
+      body: "OSS lets you swap the model when prices move or a vendor pivots. The model-agnostic tools — Aider, OpenHands, Continue — are what this argument actually wants.",
+    },
+    {
+      number: "02",
+      name: "Audit and IP",
+      who: "Legal · security review",
+      body: "When you need to prove which code touched a third-party model and what the model saw, OpenHands and Aider give you the paper trail at the byte level. Closed agents structurally cannot.",
+    },
+    {
+      number: "03",
+      name: "Data residency",
+      who: "EU public sector · healthcare · defence",
+      body: "A regulatory line, not a preference. Tabby and self-hosted OpenHands are the two options that satisfy strict on-prem and air-gap requirements end-to-end.",
+    },
+    {
+      number: "04",
+      name: "Cost",
+      who: "Engineering finance · 40+ seats",
+      body: (
+        <>
+          A single A100 80GB at $1.04/hour runs around{" "}
+          <strong>$750/month</strong>, broadly comparable to
+          forty Copilot Business seats at $19. Below ~40 developers,
+          Copilot is genuinely the cheaper option.
+        </>
+      ),
+    },
+  ]}
+/>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The OSS-50, <em>tracked daily</em></>}
+  body="Star counts, benchmarks, pricing — all of it shifts week to week. The leaderboard is where you check which open-source agent is gaining momentum on AgentTape this week, and which is quietly losing ground."
+  href="/indexes/oss-50"
+  cta_label="View the OSS-50"
+/>

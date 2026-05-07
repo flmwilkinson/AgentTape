@@ -1,0 +1,255 @@
+export const meta = {
+  slug: "github-stars-fake-evaluating-ai-tools",
+  title: "GitHub stars are lying to you — a better way to pick AI tools",
+  description:
+    "A peer-reviewed 2026 study found six million fake GitHub stars across 15,835 repositories. Even the honest stars are pointing at the wrong thing. The signals that actually predict AI tool adoption.",
+  published_at: "2026-05-06",
+  kind: "report",
+  keywords: [
+    "github stars fake",
+    "evaluate ai tools",
+    "ai tool adoption metrics",
+    "starscout study",
+    "how to pick ai tools",
+  ],
+};
+
+<Lede>
+A network called Stargazers Ghost was, until GitHub purged most of it
+in 2024, one of the largest malware-delivery operations on the platform.
+It worked by farming stars on legitimate-looking repositories, building
+credibility, and quietly swapping the code for information-stealing
+malware. The stars were bought from the same vendors that startups use
+before fundraises.
+</Lede>
+
+<StatGrid
+  items={[
+    {
+      label: "Suspected fake stars",
+      name: "6 million",
+      detail: "Across 15,835 repos · 2019–2024 (StarScout)",
+    },
+    {
+      label: "Growth in fake campaigns",
+      name: "100×",
+      detail: "Between 2022 and 2024",
+    },
+    {
+      label: "Repos affected, peak month",
+      name: "16%",
+      detail: "July 2024 — of all repos with star activity",
+    },
+    {
+      label: "GitHub deletion rate",
+      name: "91%",
+      detail: "Of flagged repositories, post-publication",
+    },
+  ]}
+/>
+
+<Prose>
+The Stargazers operation got purged, but the economy that supplied
+it kept running. A peer-reviewed study presented at ICSE 2026 by
+researchers from Carnegie Mellon, NC State, and Socket built a tool
+called StarScout, fed it twenty terabytes of GitHub event data
+covering 6.7 billion events between 2019 and 2024, and identified
+roughly six million stars they could attribute to inauthentic
+behaviour with high confidence. When they narrowed the dataset to
+repositories with at least 50 stars and a single-month spike where
+more than 10% of stars were fake, they still came back with 15,835
+repositories and 278,000 participating bot accounts.
+
+GitHub eventually deleted 91% of those repositories and 57% of the
+accounts, which is about as close as the platform has ever come to
+a public concession that the researchers were correct.
+
+Anyone who has picked an AI coding agent or an open-source model by
+sorting GitHub stars probably finds those numbers uncomfortable. The
+fake-star economy isn't really the bigger problem though. The bigger
+problem is that even the legitimate stars on GitHub are pointing at
+something quite different from what most people assume they're
+measuring.
+</Prose>
+
+<SectionDivider number="01" label="The fake-star economy is a service business" />
+
+<Prose>
+Buying GitHub stars has grown into something close to an actual
+service industry over the past three years. The CMU researchers
+documented a list of vendors openly selling stars by the thousand,
+sometimes bundled with watcher counts and forks for what the
+brochure copy describes as "natural growth." Some of these services
+market specifically to startups about to raise. Some bundle stars
+with malware delivery. Both categories have grown.
+</Prose>
+
+<ScoreBars
+  caption="Detected fake-star campaigns by year (indexed to the 2024 peak month)"
+  rows={[
+    { label: "2019 — ~30 repos", value: 1 },
+    { label: "2020 — ~60 repos", value: 2 },
+    { label: "2021 — ~150 repos", value: 5 },
+    { label: "2022 — ~310 repos", value: 10 },
+    { label: "2023 — ~1,400 repos", value: 44 },
+    { label: "2024 — 3,216 in July alone", value: 100 },
+  ]}
+  source="Source: He et al., 'Six Million Fake Stars on GitHub,' ICSE 2026 (arXiv 2412.13459)"
+/>
+
+<Prose>
+Detection improves; the LLM-generated bot comments improve faster.
+GitHub purges accounts; new ones surface within days. The most
+uncomfortable finding from the CMU study isn't the volume, though.
+It's that the manipulation doesn't even work for the people paying
+for it.
+</Prose>
+
+<PullQuote>
+Repositories with inflated stars get a short promotional bounce that
+lasts less than two months. After that, the dead weight of the fake
+stars actively suppresses organic discovery.
+</PullQuote>
+
+<Prose>
+The buyers are buying a problem.
+</Prose>
+
+<SectionDivider number="02" label="Even the honest stars are weak signals" />
+
+<Prose>
+Set aside the bots. Pretend every star on GitHub is a real human
+pressing a real button. The metric still doesn't say what most
+people think it says.
+
+GitHub stars don't really function as votes, even when they're real.
+They function more like bookmarks. The most-starred repositories on
+the platform are dominated by curated lists, free programming books,
+and system-design study guides. Useful stuff, undoubtedly, but the
+action being captured is "save this for later," not "this works in
+production." When a GitHub team member commented on this in a 2025
+community thread, they confirmed something the trending algorithm
+had implied for years: trending status is driven by velocity relative
+to a repo's normal, not absolute quality. A side project that gets
+19 stars in a day might fail to trend if 19 is its baseline. A new
+tool that picks up 8 stars from one viral tweet often will trend.
+
+The 2024 boom in AI coding agents made this acute. Several agent
+frameworks have GitHub star counts that imply heavy adoption
+alongside Discord servers that imply almost nobody is actually using
+them. Cursor's primary repository has fewer stars than several
+frameworks that almost no one ships to production with. The
+frameworks themselves often work fine; the problem is the metric
+being used to rank them against each other.
+</Prose>
+
+<SectionDivider number="03" label="What actually correlates with adoption" />
+
+<Prose>
+The signals worth tracking sit downstream of behaviour, not upstream
+of it. Almost none of them appear on the front page of a typical AI
+tool directory.
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "GitHub stars",
+      pick: "Weekly download volume",
+      why: "From PyPI, npm, or Hugging Face. Gameable, but harder to fake than stars and harder to sustain with marketing alone.",
+    },
+    {
+      job: "Twitter / launch buzz",
+      pick: "API call volume on aggregators",
+      why: "OpenRouter publishes real model usage from millions of dev requests. The chart looks almost nothing like benchmark rankings.",
+    },
+    {
+      job: "Benchmark scores",
+      pick: "Issue and commit cadence",
+      why: "Over a six-month window. The death of an AI tool shows up in its issue tracker months before the news.",
+    },
+    {
+      job: "Star-to-fork ratio",
+      pick: "Migration posts",
+      why: "Engineering blog entries that say 'we moved from X to Y' capture decisions made under budget pressure.",
+    },
+    {
+      job: "Hacker News upvotes on launch",
+      pick: "Long-form discussion depth",
+      why: "Five threads where developers argue about edge cases beat fifty drive-by mentions.",
+    },
+  ]}
+/>
+
+<Prose>
+The diagnostic worth running before any of these is the
+install-to-star ratio. A tool with 40,000 stars and 2,000 weekly
+installs is the fingerprint of something that gets discovered and
+abandoned. A tool with 4,000 stars and 80,000 weekly installs is,
+often, something companies are quietly running in production while
+their developers forget to click anything.
+</Prose>
+
+<SectionDivider number="04" label="The 2026 wrinkle: AI eats its own metrics" />
+
+<Prose>
+In Olivia Moore's January 2026 update to the a16z Top 100 Gen AI
+Consumer Apps report, she noted that an open-source agent project
+called OpenClaw went from a side project to 68,000 GitHub stars in
+a few weeks. By early March it had become the most-starred project
+on GitHub, surpassing both React and Linux.
+
+That comparison is broken at face value. React has been in
+production at tens of millions of organisations for over a decade.
+OpenClaw, when it took the top spot, still required terminal
+knowledge to install. A consumer-grade frame of reference would put
+React's actual user base orders of magnitude above OpenClaw's. Star
+counts compress that asymmetry to zero.
+</Prose>
+
+<PullQuote>
+As AI gets embedded inside Excel, Notion, Canva, and the rest of the
+productivity stack, the heaviest AI users register on no standalone
+metric at all. The most-used AI tools in 2027 won't be where the
+leaderboards are looking.
+</PullQuote>
+
+<SectionDivider number="05" label="A practical evaluation checklist" />
+
+<Prose>
+If you're picking an AI agent, framework, or coding tool, treat
+GitHub stars as a discovery filter and nothing more. Then run
+candidates through the checks below.
+</Prose>
+
+<ChecklistBox
+  tearout_label="Tear out — paste into your shortlist doc"
+  title="Field-tested due diligence"
+  items={[
+    <><strong>Pull seven-day download numbers</strong> from PyPI, npm, or Hugging Face. Lifetime totals are gameable. Recent velocity is harder to fake.</>,
+    <><strong>Read the most recent twenty issues</strong> on the repo. Look for response time, recent commits referencing them, and whether maintainers are still answering at all.</>,
+    <><strong>Find one production case study</strong> not written by the vendor. Engineering blog posts from named companies are worth more than any star count.</>,
+    <><strong>Read the negative Hacker News comments first.</strong> Critics tell you which edge cases real users hit. Fans rarely do.</>,
+    <><strong>Check the OpenRouter usage rank,</strong> if the tool sits behind it, instead of the benchmark rank. They diverge, often dramatically.</>,
+    <><strong>Look at second-month retention,</strong> not launch-spike numbers. Anyone can spike. Few survive month two.</>,
+  ]}
+/>
+
+<Closer>
+The CMU researchers ended their paper with a call for better
+popularity signals, and that call hasn't really been answered. In
+the meantime, every star on every leaderboard is doing some
+uncertain mixture of honest signal, repeated marketing budget, and
+laundered bot activity, and the work involved in picking AI tools
+well right now mostly comes down to building the habit of looking
+past that headline number and digging into the second-order signals
+underneath.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The CODE-25, <em>tracked daily</em></>}
+  body="Stars get gamed; usage doesn't. AgentTape's CODE-25 ranks AI coding agents on real-world signals — composite scores updated weekly from benchmark performance, install velocity, issue cadence, and aggregator usage data. The leaderboard alternative for the post-stars era."
+  href="/indexes/code-25"
+  cta_label="View the CODE-25"
+/>

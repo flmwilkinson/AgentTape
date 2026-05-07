@@ -10,16 +10,20 @@ import { cn } from "@/lib/utils";
 // Quality is special: when null we render the slot as an "Unrated"
 // hatch instead of a colored segment — the design rule "never 0".
 
+// Pillar colours come from --pillar-* CSS tokens defined in globals.css
+// so they stay in lock-step with the score-breakdown chart and the
+// per-signal chart. If you change the tokens, every pillar surface
+// updates automatically — never hardcode a pillar HSL.
 const PILLARS: {
   key: "adoption" | "quality" | "momentum" | "community";
   label: string;
   weight: number; // matches scoring service config defaults
   color: string;
 }[] = [
-  { key: "adoption", label: "Adoption", weight: 0.35, color: "hsl(var(--primary))" },
-  { key: "quality", label: "Quality", weight: 0.3, color: "hsl(var(--gain))" },
-  { key: "momentum", label: "Momentum", weight: 0.2, color: "hsl(var(--loss))" },
-  { key: "community", label: "Community", weight: 0.15, color: "hsl(var(--neutral))" },
+  { key: "adoption", label: "Adoption", weight: 0.35, color: "hsl(var(--pillar-adoption))" },
+  { key: "quality", label: "Quality", weight: 0.3, color: "hsl(var(--pillar-quality))" },
+  { key: "momentum", label: "Momentum", weight: 0.2, color: "hsl(var(--pillar-momentum))" },
+  { key: "community", label: "Community", weight: 0.15, color: "hsl(var(--pillar-community))" },
 ];
 
 interface Score {

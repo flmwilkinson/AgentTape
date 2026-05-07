@@ -6,7 +6,6 @@ import { api } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { AgentBadgeSnippet } from "@/components/agent-badge-snippet";
 import { AgentLiveHeader } from "@/components/agent-live-header";
-import { AgentSignalPanel } from "@/components/agent-signal-panel";
 import { BackLink } from "@/components/back-link";
 import { FmFactsPanel } from "@/components/fm-facts-panel";
 import { ScoreBreakdownPanel } from "@/components/score-breakdown-panel";
@@ -139,11 +138,6 @@ export default async function AgentPage({
         {agent.entity_kind === "foundation_model" && (
           <FmFactsPanel facts={agent.facts ?? {}} />
         )}
-
-        {/* Raw signal time-series — the "show your work" view that
-            sits below the breakdown for readers who want to see the
-            unscaled numbers and download the CSV. */}
-        <AgentSignalPanel slug={slug} initial={signals} entityKind={agent.entity_kind} />
 
         {/* Embeddable badge for the agent's author. */}
         <AgentBadgeSnippet slug={slug} />

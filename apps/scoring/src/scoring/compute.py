@@ -92,6 +92,31 @@ ANCHORS: dict[SignalSource, float] = {
     SignalSource.STACKOVERFLOW_QUESTIONS_7D: 5,
     SignalSource.PRODUCTHUNT_UPVOTES: 100,
     SignalSource.ARXIV_CITATIONS: 100,
+    # Migration 0007 — Priority A/B/C signals.
+    # Docker pull_count is lifetime cumulative; 100k is the inflection
+    # point for "self-hosted agents people are actually deploying".
+    SignalSource.DOCKER_PULLS_30D: 100_000,
+    SignalSource.CRATES_DOWNLOADS_90D: 10_000,
+    # GitHub releases per 90 days. 6 = "one every two weeks" = 50.
+    SignalSource.GITHUB_RELEASES_90D: 6,
+    # Issue close-rate signal is already pre-multiplied by 100, so
+    # 100 == 1:1 close-to-open which deserves the median 50 anchor.
+    SignalSource.GITHUB_ISSUE_CLOSE_RATE_30D: 100,
+    # Wikipedia 30d sum. 100k = a real public footprint (top FMs).
+    SignalSource.WIKIPEDIA_VIEWS_30D: 100_000,
+    SignalSource.DISCORD_MEMBERS: 5_000,
+    # Google Trends is 0–100 already; treat as already-scaled, anchor
+    # at 30 so a sustained mid-interest term (~30) reads as 50.
+    SignalSource.GOOGLE_TRENDS_SCORE: 30,
+    # Migration 0008.
+    # OpenRouter monthly token volume. The traffic distribution is
+    # extremely fat-tailed — top models clear hundreds of billions.
+    # 1B tokens is "real production usage but not a flagship" = 50.
+    SignalSource.OPENROUTER_TOKEN_VOLUME_30D: 1_000_000_000,
+    # github_first_response_hours_30d uses an INVERSE special case in
+    # scaled() — anchor here is the value-where-the-score-is-50.
+    # 24h ↔ 50 means "a one-day median response is the par baseline".
+    SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D: 24,
 }
 
 
@@ -110,6 +135,16 @@ def scaled(value: float, source: SignalSource) -> float:
             return 50.0
         # rank 1 → ~85, rank 10 → 50, rank 100 → ~0
         return max(0.0, min(100.0, 100.0 - 50.0 * math.log10(value) / math.log10(10)))
+    if source == SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D:
+        # Inverted: 0h ≈ 100 (instant), anchor 24h = 50, > 7d ≈ 0.
+        # Same log curve, mirrored — same maths as HF trending rank.
+        anchor = ANCHORS.get(source, 24.0)
+        if value <= 0:
+            return 100.0
+        return max(
+            0.0,
+            min(100.0, 100.0 - 50.0 * math.log10(value + 1) / math.log10(anchor + 1)),
+        )
     anchor = ANCHORS.get(source)
     if anchor is None:
         # Unknown signal — neutral score. Shouldn't happen if enums match.
@@ -142,8 +177,14 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.MCP_REGISTRY_LISTED,
         SignalSource.STACKOVERFLOW_QUESTIONS_7D,
         SignalSource.PRODUCTHUNT_UPVOTES,
+        SignalSource.DOCKER_PULLS_30D,
+        SignalSource.CRATES_DOWNLOADS_90D,
     ],
-    "quality": [SignalSource.BENCHMARK_SCORE],
+    "quality": [
+        SignalSource.BENCHMARK_SCORE,
+        SignalSource.GITHUB_ISSUE_CLOSE_RATE_30D,
+        SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D,
+    ],
     "momentum": [
         SignalSource.GITHUB_STARS,
         SignalSource.HF_DOWNLOADS_30D,
@@ -152,6 +193,8 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.HN_MENTIONS_7D,
         SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.GITHUB_RELEASES_90D,
+        SignalSource.GOOGLE_TRENDS_SCORE,
     ],
     "community": [
         SignalSource.GITHUB_CONTRIBUTORS,
@@ -160,6 +203,7 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.REDDIT_POINTS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
         SignalSource.HF_LIKES,
+        SignalSource.DISCORD_MEMBERS,
     ],
 }
 
@@ -171,6 +215,11 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.BLUESKY_MENTIONS_7D,
         SignalSource.GITHUB_STARS,
         SignalSource.GITHUB_MENTIONS_7D,
+        SignalSource.WIKIPEDIA_VIEWS_30D,
+        # OpenRouter token volume — best public proxy for "actual
+        # production traffic" on FMs. Routinely diverges from
+        # benchmark and HF download rankings.
+        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
     "quality": [SignalSource.BENCHMARK_SCORE],
     "momentum": [
@@ -179,6 +228,8 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
         SignalSource.GITHUB_MENTIONS_7D,
+        SignalSource.GOOGLE_TRENDS_SCORE,
+        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
     "community": [
         SignalSource.HF_LIKES,

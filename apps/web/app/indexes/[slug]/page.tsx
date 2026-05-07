@@ -6,6 +6,7 @@ import { formatScore, relativeTime } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
 import { CompareTrayToggle } from "@/components/compare-tray";
 import { IndexHistoryChart } from "@/components/index-history-chart";
+import { MobileRankList, type MobileRankItem } from "@/components/mobile-rank-list";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
@@ -110,7 +111,18 @@ export default async function IndexDetailPage({
         {/* Constituents */}
         <section>
           <SectionHead label="Constituents" hint={`${detail.members_count} agents`} />
-          <div className="overflow-x-auto rounded-md border border-border bg-card">
+          <MobileRankList
+            items={detail.constituents.map<MobileRankItem>((c, i) => ({
+              slug: c.agent.slug,
+              name: c.agent.name,
+              label: `weight ${(c.weight * 100).toFixed(2)}%`,
+              rank: c.agent.score?.rank_now ?? i + 1,
+              score: c.agent.score?.agent_score ?? null,
+              delta24h: c.agent.score?.delta_24h ?? null,
+              rankDelta24h: c.agent.score?.rank_delta_24h ?? null,
+            }))}
+          />
+          <div className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
             <table className="num w-full min-w-[640px] text-sm">
               <thead className="text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
@@ -121,14 +133,15 @@ export default async function IndexDetailPage({
                   <th className="px-3 py-2 text-right">Δ24h</th>
                   <th className="px-3 py-2 text-right hidden md:table-cell">Weight</th>
                   <th className="px-3 py-2 text-right hidden md:table-cell">Added</th>
-                  <th className="px-3 py-2 w-8"></th>
+                  <th className="px-3 py-2 text-center w-12">Cmp</th>
+                  <th className="px-3 py-2 text-center w-12">Watch</th>
                 </tr>
               </thead>
               <tbody>
                 {detail.constituents.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-6 text-center text-xs text-muted-foreground"
                     >
                       No agents in this index yet — index hasn't rebalanced.
@@ -162,18 +175,11 @@ export default async function IndexDetailPage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {c.agent.score?.delta_24h != null ? (
-                        <span
-                          className={
-                            c.agent.score.delta_24h > 0
-                              ? "text-gain"
-                              : c.agent.score.delta_24h < 0
-                                ? "text-loss"
-                                : "text-muted-foreground"
-                          }
-                        >
-                          {c.agent.score.delta_24h > 0 ? "+" : ""}
-                          {c.agent.score.delta_24h.toFixed(2)}
-                        </span>
+                        <MoverChip
+                          delta={c.agent.score.delta_24h}
+                          unit="score"
+                          variant="outline"
+                        />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -184,11 +190,11 @@ export default async function IndexDetailPage({
                     <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
                       {relativeTime(c.added_at)}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        <CompareTrayToggle slug={c.agent.slug} />
-                        <WatchToggle slug={c.agent.slug} size="sm" />
-                      </div>
+                    <td className="px-3 py-2 text-center">
+                      <CompareTrayToggle slug={c.agent.slug} />
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <WatchToggle slug={c.agent.slug} size="sm" />
                     </td>
                   </tr>
                 ))}

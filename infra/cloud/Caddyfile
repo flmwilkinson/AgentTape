@@ -1,0 +1,48 @@
+# Caddy reverse proxy — auto-HTTPS via Let's Encrypt.
+#
+# Hostnames map to docker-compose service names + ports. The compose
+# file no longer publishes those ports to the host; Caddy reaches them
+# over the internal docker network using the service DNS name.
+#
+# Vercel hosts agenttape.io itself; this file is only for the
+# api/realtime/discovery/ingestion/scoring subdomains. If you want
+# Caddy to also serve the marketing site, add an `agenttape.io { … }`
+# block, but Vercel's CDN is faster and free, so we keep them split.
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+api.agenttape.io {
+	import common
+	reverse_proxy api:8001
+}
+
+ws.agenttape.io {
+	# Realtime websocket service. Caddy auto-handles WS upgrades.
+	import common
+	reverse_proxy realtime:8002
+}
+
+discovery.agenttape.io {
+	import common
+	# Internal-only by default (not announced via DNS publicly), but
+	# routed if you wire the subdomain. Used for manual triggers /
+	# health probes.
+	reverse_proxy discovery:8003
+}
+
+ingestion.agenttape.io {
+	import common
+	reverse_proxy ingestion:8004
+}
+
+scoring.agenttape.io {
+	import common
+	reverse_proxy scoring:8005
+}

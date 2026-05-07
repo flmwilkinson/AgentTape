@@ -46,10 +46,16 @@ const SIGNAL_PILLAR: Record<string, Pillar> = {
   mcp_registry_listed: "adoption",
   stackoverflow_questions_7d: "adoption",
   producthunt_upvotes: "adoption",
+  docker_pulls_30d: "adoption",
+  crates_downloads_90d: "adoption",
+  wikipedia_views_30d: "adoption",
+  openrouter_token_volume_30d: "adoption",
 
   // quality — anything benchmark / citation shaped
   benchmark_score: "quality",
   arxiv_citations: "quality",
+  github_issue_close_rate_30d: "quality",
+  github_first_response_hours_30d: "quality",
 
   // momentum — mention velocity and recent activity
   hn_mentions_7d: "momentum",
@@ -57,6 +63,8 @@ const SIGNAL_PILLAR: Record<string, Pillar> = {
   bluesky_mentions_7d: "momentum",
   github_mentions_7d: "momentum",
   github_commits_7d: "momentum",
+  github_releases_90d: "momentum",
+  google_trends_score: "momentum",
 
   // community — relationships and discussion depth
   github_contributors: "community",
@@ -65,8 +73,14 @@ const SIGNAL_PILLAR: Record<string, Pillar> = {
   reddit_points_7d: "community",
   hf_likes: "community",
   hf_trending_rank: "community",
+  discord_members: "community",
 };
 
+// Per-pillar HSL fans for the *multi-line* chart. The base hue +
+// saturation match the --pillar-* tokens in globals.css; lightnesses
+// step around the token's base value so several signals sharing a
+// pillar stay distinguishable. Token base values: adoption 55, quality
+// 48, momentum 60, community 55 — keep the index-1 shade aligned.
 const PILLAR_HSL: Record<
   Pillar,
   { hue: number; saturation: number; lightnesses: number[] }

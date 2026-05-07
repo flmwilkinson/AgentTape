@@ -2,30 +2,40 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Tag as TagIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 
 // Debounced autocomplete combobox.
 //
 // On every keystroke (after 120 ms quiet), we hit /search/suggest
-// which returns up to 8 prefix-prioritised matches. Arrow keys move
-// between suggestions; Enter on a highlighted row jumps straight to
-// the agent, Enter on the input runs the full /search with the
-// current query.
+// which returns up to 8 mixed matches: agents whose name/slug or tags
+// contain the query, plus tag suggestions themselves. Arrow keys move
+// between suggestions; Enter on a highlighted row jumps to the agent
+// (or sector page for a tag), Enter on the input runs the full
+// /search with the current query.
 //
 // Two flavours are exported: SearchCombobox (full width, used in
 // the desktop nav header) and SearchComboboxMobile (slim, fits the
 // mobile top bar). They share the same internals.
 
-interface Suggestion {
+type AgentSuggestion = {
   kind: "agent";
   slug: string;
   name: string;
   entity_kind: string;
   description: string | null;
   agent_score: number | null;
-}
+};
+
+type TagSuggestion = {
+  kind: "tag";
+  tag_kind: string;
+  tag_value: string;
+  count: number;
+};
+
+type Suggestion = AgentSuggestion | TagSuggestion;
 
 interface Props {
   className?: string;
@@ -90,6 +100,18 @@ export function SearchCombobox({
     router.push(`/agents/${slug}`);
   }
 
+  function goSuggestion(s: Suggestion) {
+    if (s.kind === "agent") {
+      go(s.slug);
+      return;
+    }
+    // Tag suggestion → sector landing page for that capability/tag,
+    // which already shows members + filters + compare entry points.
+    setOpen(false);
+    if (!onEnter) setQ("");
+    router.push(`/sectors/${s.tag_kind}/${encodeURIComponent(s.tag_value)}`);
+  }
+
   function runFullSearch() {
     setOpen(false);
     const v = q.trim();
@@ -114,7 +136,7 @@ export function SearchCombobox({
       e.preventDefault();
       const s = suggestions[active];
       if (open && s) {
-        go(s.slug);
+        goSuggestion(s);
       } else {
         runFullSearch();
       }
@@ -142,6 +164,17 @@ export function SearchCombobox({
           }}
           onFocus={() => q.trim() && setOpen(true)}
           onKeyDown={onKeyDown}
+          // Password manager / form-fill extensions (LastPass, 1Password,
+          // Bitwarden, Roboform) inject fdprocessedid attributes on
+          // inputs between SSR and hydration. suppressHydrationWarning
+          // keeps React quiet about that injected attribute on this
+          // exact element. The data-* attributes politely ask the major
+          // managers not to bother in the first place.
+          suppressHydrationWarning
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           className={cn(
             "h-8 w-full rounded-md border border-border bg-card pl-8 pr-3 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary",
             inputClassName,
@@ -154,41 +187,59 @@ export function SearchCombobox({
           role="listbox"
           className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
         >
-          {suggestions.map((s, i) => (
-            <button
-              key={s.slug}
-              type="button"
-              role="option"
-              aria-selected={i === active}
-              onMouseEnter={() => setActive(i)}
-              onMouseDown={(e) => {
-                // mousedown beats the input's blur, so the click lands.
-                e.preventDefault();
-                go(s.slug);
-              }}
-              className={cn(
-                "block w-full border-b border-border px-3 py-2 text-left last:border-b-0 transition-colors",
-                i === active ? "bg-subtle" : "hover:bg-subtle/60",
-              )}
-            >
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm font-medium">{s.name}</span>
-                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                  {s.entity_kind === "foundation_model" ? "model" : "agent"}
-                </span>
-                {s.agent_score != null && (
-                  <span className="num ml-auto text-xs text-muted-foreground">
-                    {s.agent_score.toFixed(1)}
-                  </span>
+          {suggestions.map((s, i) => {
+            const key = s.kind === "agent" ? s.slug : `tag:${s.tag_kind}:${s.tag_value}`;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="option"
+                aria-selected={i === active}
+                onMouseEnter={() => setActive(i)}
+                onMouseDown={(e) => {
+                  // mousedown beats the input's blur, so the click lands.
+                  e.preventDefault();
+                  goSuggestion(s);
+                }}
+                className={cn(
+                  "block w-full border-b border-border px-3 py-2 text-left last:border-b-0 transition-colors",
+                  i === active ? "bg-subtle" : "hover:bg-subtle/60",
                 )}
-              </div>
-              {s.description && (
-                <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                  {s.description}
-                </div>
-              )}
-            </button>
-          ))}
+              >
+                {s.kind === "agent" ? (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-medium">{s.name}</span>
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                        {s.entity_kind === "foundation_model" ? "model" : "agent"}
+                      </span>
+                      {s.agent_score != null && (
+                        <span className="num ml-auto text-xs text-muted-foreground">
+                          {s.agent_score.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                    {s.description && (
+                      <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                        {s.description}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <TagIcon className="h-3 w-3 text-primary" />
+                    <span className="text-sm font-medium">{s.tag_value}</span>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {s.tag_kind}
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {s.count} {s.count === 1 ? "agent" : "agents"} →
+                    </span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
           <button
             type="button"
             onMouseDown={(e) => {

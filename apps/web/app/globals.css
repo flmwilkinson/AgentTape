@@ -45,6 +45,15 @@
     --loss-subtle: 358 84% 96%;
     --neutral: 220 8% 42%;
 
+    /* Pillar palette — single source of truth across pillar-bar,
+       score-breakdown chart, signal-chart, and any future surface that
+       needs to colour data by pillar. Hue families are spaced so the
+       four sit on a colourblind-safe arc. */
+    --pillar-adoption: 217 80% 55%;
+    --pillar-quality: 142 65% 48%;
+    --pillar-momentum: 358 70% 60%;
+    --pillar-community: 215 22% 55%;
+
     /* Editorial — warm neutral for the magazine-typography surfaces. */
     --editorial: 35 25% 97%;
 
@@ -82,6 +91,14 @@
     --loss-foreground: 222 18% 6%;
     --loss-subtle: 358 35% 16%;
     --neutral: 220 9% 64%;
+
+    /* Pillar palette — dark-mode tunings (lighter, slightly less
+       saturated) so the four pillars stay readable on the dark surface
+       without going neon. */
+    --pillar-adoption: 217 80% 65%;
+    --pillar-quality: 142 60% 55%;
+    --pillar-momentum: 358 80% 68%;
+    --pillar-community: 215 22% 65%;
 
     --editorial: 35 12% 12%;
 

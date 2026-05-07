@@ -43,6 +43,7 @@ app = FastAPI(title="AgentTape Ingestion", version="0.0.0", lifespan=lifespan)
 
 
 @app.get("/health")
+@app.get("/healthz")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "ingestion"}
 

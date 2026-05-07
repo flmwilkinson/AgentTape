@@ -1,9 +1,9 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { ChevronDown, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, Suspense, useState } from "react";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareChart } from "@/components/compare-chart";
@@ -22,7 +22,27 @@ import { RankArrow } from "@/components/rank-arrow";
 
 const MAX = 5;
 
+// Next 15 wants useSearchParams under a Suspense boundary so the rest
+// of the route can statically pre-render. The shell here is what
+// satisfies that requirement; the real component is below.
 export default function ComparePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-8 md:py-12">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Compare
+          </div>
+          <div className="mt-2 h-10 w-72 animate-pulse rounded-md bg-muted" />
+        </div>
+      }
+    >
+      <ComparePageInner />
+    </Suspense>
+  );
+}
+
+function ComparePageInner() {
   const router = useRouter();
   const params = useSearchParams();
   // Accept either ?slugs=a,b,c OR the legacy ?a=&b= pair so old shared
@@ -250,12 +270,17 @@ export default function ComparePage() {
 
       {/* Side-by-side scorecard — pillars-as-rows matrix. Best cell
           per row gets a primary highlight so a quick scan shows
-          which agent wins each pillar. */}
+          which agent wins each pillar. Clicking a pillar row drills
+          down into its underlying signals (GitHub stars, downloads,
+          etc.) so the verdict is fully traceable. */}
       {slugs.length >= 2 && (
         <ScorecardMatrix
           agents={detailQueries
             .map((q) => q.data)
             .filter((a): a is NonNullable<typeof a> => Boolean(a))}
+          signalsByAgent={Object.fromEntries(
+            slugs.map((slug, i) => [slug, signalQueries[i]?.data ?? []]),
+          )}
         />
       )}
 
@@ -278,30 +303,60 @@ export default function ComparePage() {
 
 // ---------------------------------------------------------------- matrix
 
+type ScorecardAgent = {
+  slug: string;
+  name: string;
+  entity_kind: string;
+  score: {
+    agent_score: number | null;
+    adoption: number | null;
+    quality: number | null;
+    momentum: number | null;
+    community: number | null;
+  };
+};
+
+type SignalSeries = Array<{
+  source: string;
+  points: { captured_at: string; value: number }[];
+}>;
+
 function ScorecardMatrix({
   agents,
+  signalsByAgent,
 }: {
-  agents: Array<{
-    slug: string;
-    name: string;
-    score: {
-      agent_score: number | null;
-      adoption: number | null;
-      quality: number | null;
-      momentum: number | null;
-      community: number | null;
-    };
-  }>;
+  agents: ScorecardAgent[];
+  signalsByAgent: Record<string, SignalSeries>;
 }) {
+  // Pillar rows can be expanded to show the underlying signals
+  // (GitHub stars, downloads, etc.) so a user who's curious *why*
+  // Foundation Model A wins Adoption can drill in without leaving
+  // the page. AgentScore is not expandable since it's an aggregate
+  // of all four pillars below it.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
   if (agents.length === 0) return null;
 
-  const rows: { key: keyof typeof agents[0]["score"]; label: string }[] = [
-    { key: "agent_score", label: "AgentScore" },
-    { key: "adoption", label: "Adoption" },
-    { key: "quality", label: "Quality" },
-    { key: "momentum", label: "Momentum" },
-    { key: "community", label: "Community" },
+  const rows: {
+    key: keyof ScorecardAgent["score"];
+    label: string;
+    expandable: boolean;
+  }[] = [
+    { key: "agent_score", label: "AgentScore", expandable: false },
+    { key: "adoption", label: "Adoption", expandable: true },
+    { key: "quality", label: "Quality", expandable: true },
+    { key: "momentum", label: "Momentum", expandable: true },
+    { key: "community", label: "Community", expandable: true },
   ];
+
+  function toggle(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <section>
@@ -330,36 +385,61 @@ function ScorecardMatrix({
               const max = Math.max(
                 ...values.filter((v): v is number => v != null),
               );
+              const isOpen = expanded.has(row.key);
               return (
-                <tr
-                  key={row.key}
-                  className={
-                    row.key === "agent_score"
-                      ? "border-b border-border bg-subtle/20 font-medium"
-                      : "border-b border-border last:border-b-0"
-                  }
-                >
-                  <td className="px-3 py-2 text-foreground/85">{row.label}</td>
-                  {agents.map((a, i) => {
-                    const v = values[i];
-                    const isBest =
-                      v != null && Number.isFinite(max) && v === max && agents.length > 1;
-                    return (
-                      <td
-                        key={a.slug}
-                        className={`num px-3 py-2 text-right tabular-nums ${
-                          isBest ? "text-primary font-semibold" : ""
-                        }`}
-                      >
-                        {v == null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          v.toFixed(1)
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
+                <Fragment key={row.key}>
+                  <tr
+                    className={
+                      row.key === "agent_score"
+                        ? "border-b border-border bg-subtle/20 font-medium"
+                        : "border-b border-border last:border-b-0"
+                    }
+                  >
+                    <td className="px-3 py-2 text-foreground/85">
+                      {row.expandable ? (
+                        <button
+                          type="button"
+                          onClick={() => toggle(row.key)}
+                          aria-expanded={isOpen}
+                          className="inline-flex items-center gap-1.5 text-foreground/85 hover:text-foreground"
+                        >
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                          />
+                          {row.label}
+                        </button>
+                      ) : (
+                        row.label
+                      )}
+                    </td>
+                    {agents.map((a, i) => {
+                      const v = values[i];
+                      const isBest =
+                        v != null && Number.isFinite(max) && v === max && agents.length > 1;
+                      return (
+                        <td
+                          key={a.slug}
+                          className={`num px-3 py-2 text-right tabular-nums ${
+                            isBest ? "text-primary font-semibold" : ""
+                          }`}
+                        >
+                          {v == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            v.toFixed(1)
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {row.expandable && isOpen && (
+                    <PillarSignalRows
+                      pillar={row.key as Exclude<keyof ScorecardAgent["score"], "agent_score">}
+                      agents={agents}
+                      signalsByAgent={signalsByAgent}
+                    />
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -367,24 +447,157 @@ function ScorecardMatrix({
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
         Highest value per row in the primary colour. "—" means the
-        pillar is Unrated for that agent.
+        pillar is Unrated for that agent. Click a pillar to drill into
+        its underlying signals.
       </p>
     </section>
+  );
+}
+
+// Expanded sub-rows for a pillar — one row per contributing signal.
+// A signal only appears if at least one agent has a reading for it.
+// Best cell in each row gets the primary colour, mirroring the parent
+// matrix.
+function PillarSignalRows({
+  pillar,
+  agents,
+  signalsByAgent,
+}: {
+  pillar: "adoption" | "quality" | "momentum" | "community";
+  agents: ScorecardAgent[];
+  signalsByAgent: Record<string, SignalSeries>;
+}) {
+  // Pick source list per kind. If the comparison mixes app agents and
+  // foundation models we union both lists so we don't accidentally
+  // hide a signal that one side has and the other doesn't.
+  const hasFM = agents.some((a) => a.entity_kind === "foundation_model");
+  const hasApp = agents.some((a) => a.entity_kind !== "foundation_model");
+  const sources = Array.from(
+    new Set([
+      ...(hasApp ? PILLAR_SOURCES_APP[pillar] : []),
+      ...(hasFM ? PILLAR_SOURCES_FM[pillar] : []),
+    ]),
+  );
+
+  const rows = sources
+    .map((source) => {
+      const values = agents.map((a) => latestValue(signalsByAgent[a.slug] ?? [], source));
+      const anyValue = values.some((v) => v != null);
+      return { source, values, anyValue };
+    })
+    .filter((r) => r.anyValue);
+
+  if (rows.length === 0) {
+    return (
+      <tr className="border-b border-border bg-subtle/10 text-xs">
+        <td
+          colSpan={agents.length + 1}
+          className="px-6 py-2 text-muted-foreground"
+        >
+          No raw signals on file for this pillar yet.
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <>
+      {rows.map(({ source, values }) => {
+        const max = Math.max(...values.filter((v): v is number => v != null));
+        return (
+          <tr
+            key={`${pillar}-${source}`}
+            className="border-b border-border bg-subtle/10 text-xs"
+          >
+            <td className="px-6 py-1.5 text-muted-foreground">
+              {SIGNAL_LABEL[source] ?? source}
+            </td>
+            {agents.map((a, i) => {
+              const v = values[i];
+              const isBest =
+                v != null && Number.isFinite(max) && v === max && agents.length > 1;
+              return (
+                <td
+                  key={a.slug}
+                  className={`num px-3 py-1.5 text-right tabular-nums ${
+                    isBest ? "text-primary font-medium" : ""
+                  }`}
+                >
+                  {v == null ? (
+                    <span className="text-muted-foreground/60">—</span>
+                  ) : (
+                    fmtCount(v)
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
 // ----------------------------------------------------------- verdicts
 
 const PILLAR_SOURCES_APP: Record<string, string[]> = {
-  adoption: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "stackoverflow_questions_7d", "producthunt_upvotes"],
-  quality: ["benchmark_score"],
-  momentum: ["github_stars", "hf_downloads_30d", "npm_weekly", "pypi_monthly", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d"],
-  community: ["github_contributors", "github_forks", "hn_points_7d", "reddit_points_7d", "bluesky_mentions_7d", "hf_likes"],
+  adoption: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "stackoverflow_questions_7d",
+    "producthunt_upvotes",
+    "docker_pulls_30d",
+    "crates_downloads_90d",
+  ],
+  quality: [
+    "benchmark_score",
+    "github_issue_close_rate_30d",
+    "github_first_response_hours_30d",
+  ],
+  momentum: [
+    "github_stars",
+    "hf_downloads_30d",
+    "npm_weekly",
+    "pypi_monthly",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_releases_90d",
+    "google_trends_score",
+  ],
+  community: [
+    "github_contributors",
+    "github_forks",
+    "hn_points_7d",
+    "reddit_points_7d",
+    "bluesky_mentions_7d",
+    "hf_likes",
+    "discord_members",
+  ],
 };
 const PILLAR_SOURCES_FM: Record<string, string[]> = {
-  adoption: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_stars", "github_mentions_7d"],
+  adoption: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_stars",
+    "github_mentions_7d",
+    "wikipedia_views_30d",
+    "openrouter_token_volume_30d",
+  ],
   quality: ["benchmark_score"],
-  momentum: ["hf_downloads_30d", "hn_mentions_7d", "reddit_mentions_7d", "bluesky_mentions_7d", "github_mentions_7d"],
+  momentum: [
+    "hf_downloads_30d",
+    "hn_mentions_7d",
+    "reddit_mentions_7d",
+    "bluesky_mentions_7d",
+    "github_mentions_7d",
+    "google_trends_score",
+    "openrouter_token_volume_30d",
+  ],
   community: ["hf_likes", "github_contributors", "bluesky_mentions_7d", "reddit_points_7d"],
 };
 const SIGNAL_LABEL: Record<string, string> = {
@@ -405,6 +618,15 @@ const SIGNAL_LABEL: Record<string, string> = {
   producthunt_upvotes: "Product Hunt upvotes",
   benchmark_score: "Benchmark score",
   arxiv_citations: "arXiv citations",
+  docker_pulls_30d: "Docker Hub pulls",
+  crates_downloads_90d: "Crates.io downloads (90d)",
+  github_releases_90d: "GitHub releases (90d)",
+  github_issue_close_rate_30d: "Issue close rate (30d)",
+  wikipedia_views_30d: "Wikipedia views (30d)",
+  discord_members: "Discord members",
+  google_trends_score: "Google Trends",
+  openrouter_token_volume_30d: "OpenRouter tokens (30d)",
+  github_first_response_hours_30d: "First-response hours (30d, median)",
 };
 
 function fmtCount(n: number): string {

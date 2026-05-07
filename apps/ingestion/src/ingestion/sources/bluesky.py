@@ -28,33 +28,61 @@ LOGIN_PATH = "/xrpc/com.atproto.server.createSession"
 
 
 class _BskyAuth:
-    """Tiny session cache so we don't hit createSession every fetch."""
+    """Session cache so we don't hit createSession every fetch.
+
+    On a successful login the JWT is cached for ~90 min (Bluesky tokens
+    last ~2h; we refresh early to absorb clock skew). On a 429 we
+    install a back-off so the next 5-minute fast-tier tick doesn't
+    immediately re-login and keep us locked out — Bluesky's rate-limit
+    window is short but punishes repeat hits hard, so a single bad
+    login can keep the source dark for hours unless we wait it out.
+    """
 
     def __init__(self) -> None:
         self.access_jwt: str | None = None
         self.expires_at: float = 0.0
+        # Earliest unix-time we're allowed to attempt another login.
+        # Bumped on 429 / network failure / non-200.
+        self.retry_after: float = 0.0
 
     async def get(self, http, handle: str, password: str) -> str | None:
-        if self.access_jwt and time.time() < self.expires_at - 60:
+        now = time.time()
+        if self.access_jwt and now < self.expires_at - 60:
             return self.access_jwt
+        if now < self.retry_after:
+            return None
         try:
             r = await http.post(
                 f"{PDS_BASE}{LOGIN_PATH}",
                 json={"identifier": handle, "password": password},
             )
         except Exception:  # noqa: BLE001
+            # Network blip — back off briefly, retry next tick.
+            self.retry_after = now + 5 * 60
+            return None
+        if r.status_code == 429:
+            # Hammered the rate limit. Wait an hour before trying
+            # again — without this the fast-tier scheduler retries
+            # every 5 min and keeps the limit window open forever.
+            self.retry_after = now + 60 * 60
+            log.warning(
+                "bluesky login rate-limited; backing off for 1h. body=%s",
+                r.text[:200],
+            )
             return None
         if r.status_code != 200:
+            # Auth or transient. Back off 15 min so a misconfigured
+            # password doesn't pin the scheduler at full retry rate.
+            self.retry_after = now + 15 * 60
             log.warning("bluesky login failed: %d %s", r.status_code, r.text[:200])
             return None
         try:
             data = r.json()
         except ValueError:
+            self.retry_after = now + 15 * 60
             return None
         self.access_jwt = data.get("accessJwt")
-        # Bluesky doesn't return expires_in; tokens last ~2h, refresh
-        # well before that to absorb clock skew.
-        self.expires_at = time.time() + 90 * 60
+        self.expires_at = now + 90 * 60
         return self.access_jwt
 
 

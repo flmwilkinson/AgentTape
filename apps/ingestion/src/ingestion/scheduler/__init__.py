@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -73,15 +74,32 @@ async def run_tier(
 
 
 def build_schedulers(settings: Settings | None = None) -> dict[str, AsyncIOScheduler]:
-    """One AsyncIOScheduler per tier. Caller is responsible for start/stop."""
+    """One AsyncIOScheduler per tier. Caller is responsible for start/stop.
+
+    Tiers listed in the comma-separated ``INGESTION_SKIP_TIERS`` env
+    var are not scheduled here at all. In cloud deployments we skip
+    ``slow`` so a host-driven systemd timer can run that tier as a
+    one-shot — APScheduler's misfire-grace model is fine for the 5
+    min and 1 h tiers but loses a daily run if the host sleeps past
+    the grace window.
+    """
     settings = settings or get_settings()
     schedulers: dict[str, AsyncIOScheduler] = {}
+
+    skip = {
+        s.strip().lower()
+        for s in os.environ.get("INGESTION_SKIP_TIERS", "").split(",")
+        if s.strip()
+    }
 
     plan = (
         (TierName.FAST, FAST, settings.fast_tier_seconds),
         (TierName.MEDIUM, MEDIUM, settings.medium_tier_seconds),
         (TierName.SLOW, SLOW, settings.slow_tier_seconds),
     )
+    plan = tuple(p for p in plan if p[0] not in skip)
+    if skip:
+        log.info("scheduler: skipping tiers %s (driven externally)", sorted(skip))
     # First fire offsets stagger the tiers so they don't all hammer
     # the DB at once on startup. FAST runs ~10 s after boot, MEDIUM
     # ~30 s, SLOW ~60 s. After the first fire each tier ticks on its

@@ -24,6 +24,7 @@ from typing import Any
 
 import redis.asyncio as redis_async
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sse_starlette.sse import EventSourceResponse
 
@@ -43,6 +44,17 @@ app = FastAPI(
     description="Live WebSocket + SSE fan-out from Redis pub/sub.",
 )
 
+# CORS — the SSE endpoints are accessed via fetch() from agenttape.io
+# (different origin to ws.agenttape.io). WebSocket connections have
+# their own Origin handshake and don't go through CORS, but the
+# /sse/* mirrors do. Public read-only stream — `*` is fine.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 
 # ---------------------------------------------------------------- meta
 
@@ -53,6 +65,7 @@ async def root() -> dict[str, str]:
 
 
 @app.get("/health", tags=["meta"])
+@app.get("/healthz", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "realtime"}
 

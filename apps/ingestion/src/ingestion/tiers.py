@@ -18,12 +18,19 @@ from ingestion.sources import (
     ArxivIngestor,
     BenchmarksIngestor,
     BlueskyMentions7dIngestor,
+    CratesDownloads90dIngestor,
+    DiscordMembersIngestor,
+    DockerHubPulls30dIngestor,
     FMLeaderboardsIngestor,
     GithubCommits7dIngestor,
     GithubContributorsIngestor,
+    GithubFirstResponseHours30dIngestor,
     GithubForksIngestor,
+    GithubIssueCloseRate30dIngestor,
     GithubMentions7dIngestor,
+    GithubReleases90dIngestor,
     GithubStarsIngestor,
+    GoogleTrendsScoreIngestor,
     HFDownloads30dIngestor,
     HFLikesIngestor,
     HFTrendingRankIngestor,
@@ -31,11 +38,13 @@ from ingestion.sources import (
     Ingestor,
     MCPRegistryListedIngestor,
     NPMWeeklyIngestor,
+    OpenRouterTokenVolume30dIngestor,
     ProductHuntUpvotesIngestor,
     PyPIMonthlyIngestor,
     RedditMentions7dIngestor,
     RedditPoints7dIngestor,
     StackOverflowQuestions7dIngestor,
+    WikipediaViews30dIngestor,
 )
 
 FAST: list[type[Ingestor]] = [
@@ -58,6 +67,18 @@ MEDIUM: list[type[Ingestor]] = [
     MCPRegistryListedIngestor,
     StackOverflowQuestions7dIngestor,
     GithubMentions7dIngestor,
+    # Migration 0007 — Priority A/B signal ingestors at the medium
+    # cadence. They're either GitHub-token-rate-bounded (releases,
+    # close-rate) or external API soft-rate (Docker, Crates, Discord).
+    DockerHubPulls30dIngestor,
+    CratesDownloads90dIngestor,
+    GithubReleases90dIngestor,
+    GithubIssueCloseRate30dIngestor,
+    DiscordMembersIngestor,
+    # OpenRouter token volume polled hourly — the rankings page
+    # itself only updates every few hours but a stable cadence
+    # gives the chart a clean tick.
+    OpenRouterTokenVolume30dIngestor,
 ]
 
 SLOW: list[type[Ingestor]] = [
@@ -66,6 +87,15 @@ SLOW: list[type[Ingestor]] = [
     ArxivIngestor,
     ProductHuntUpvotesIngestor,
     FMLeaderboardsIngestor,
+    # Wikipedia + Google Trends at slow tier — they don't move fast
+    # enough to justify hourly polling, and Trends has its own
+    # internal once-a-week gate.
+    WikipediaViews30dIngestor,
+    GoogleTrendsScoreIngestor,
+    # First-response-hours is per-issue API-heavy (one comments fetch
+    # per recent issue, capped at 30 issues × ~500 repos). Daily is
+    # plenty given the underlying medians don't move that fast.
+    GithubFirstResponseHours30dIngestor,
 ]
 
 

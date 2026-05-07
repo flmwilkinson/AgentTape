@@ -58,6 +58,16 @@ async def get_agent(
     detail = await queries.get_agent_by_slug(session, slug)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"agent {slug!r} not found")
+    # Derived badges — computed at request time and dropped onto the
+    # detail payload. None when there isn't enough data to decide
+    # (agent <60d old, no OpenRouter reading yet, etc.).
+    detail["retention"] = await queries.compute_retention_badge(
+        session, detail["id"]
+    )
+    if detail.get("entity_kind") == "foundation_model":
+        detail["openrouter_rank"] = await queries.compute_openrouter_rank(
+            session, detail["id"]
+        )
     return AgentDetail(**detail)
 
 

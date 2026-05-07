@@ -1,0 +1,229 @@
+export const meta = {
+  slug: "how-to-choose-ai-agent-2026",
+  title: "How to actually evaluate an AI agent in 2026",
+  description:
+    "A working evaluation flow for agents specifically — eval set construction, the four failure modes that don't show up in demos, and the contract clauses that matter when the vendor disappears.",
+  published_at: "2026-05-05",
+  kind: "guide",
+  keywords: [
+    "how to choose ai agent",
+    "ai agent buying guide",
+    "evaluate ai agents",
+    "ai agent rfp",
+  ],
+};
+
+<Lede>
+Buying an agent is unlike buying any other piece of software because
+the failure modes don't surface in demos. A chat tool that breaks
+breaks visibly. An agent that breaks writes plausible code that
+silently corrupts a migration, sends a polite reply that
+hallucinates a refund policy, or burns through $400 of API credit
+trying to fix a typo. The vendor's demo deck won't show you any of
+this. Your own eval set will.
+</Lede>
+
+<AxesGrid
+  items={[
+    {
+      label: "Where teams fail",
+      body: "Optimising on demo polish, then discovering the long tail in production at customer-facing scale.",
+    },
+    {
+      label: "What actually predicts success",
+      body: "A 50–200 case eval set built from your own logs, weighted toward the messy 20% of inputs that drive most of the failure cost.",
+    },
+    {
+      label: "What this guide is",
+      body: "Five steps in order. The order matters because each step makes the next cheaper to run.",
+    },
+  ]}
+/>
+
+<StepHeader number="01" eyebrow="Step One" title="Define the unit of work" />
+<Prose>
+Before talking to a vendor, write one sentence: *"This agent will
+turn X into Y, N times per week, with failure cost Z."* All four
+variables. If you can't fill in the failure cost, you're not ready
+to evaluate — every later decision (latency budget, oversight
+level, escalation rules) anchors on it.
+
+Then check whether an agent is the right shape for the bottleneck.
+A team producing 100+ PRs a week isn't slowed by autocomplete; it's
+slowed by review, and an agent that writes more PRs makes the
+problem worse. Support tickets that cluster around three intents
+don't need a general agent; they need three specific workflows. CRM
+hygiene that eats 40% of a sales rep's week is a data-entry
+problem, not an outreach problem. The agent's job description
+should match the actual constraint, not the adjacent one that's
+easier to demo.
+</Prose>
+
+<PullQuote>
+This step kills roughly half of agent purchases. The half it kills
+are the ones that wouldn't have shipped anyway.
+</PullQuote>
+
+<StepHeader number="02" eyebrow="Step Two" title="Pick the substrate before the surface" />
+<Prose>
+Every agent product is three layers stacked: a foundation model, a
+scaffold (memory, tools, planning, error recovery), and a UI. The
+marketing budget goes to the UI. The performance comes almost
+entirely from the layers underneath.
+
+Different jobs put load on different layers. Long-horizon coding
+agents are scaffold-bound — the model matters, but the planner and
+the tool surface matter more, which is why three frameworks pointing
+at the same Anthropic model can finish 17 issues apart on the same
+benchmark. Customer-facing agents are model-bound — latency under
+two seconds and tight refusal behaviour are mostly the model. RAG
+agents are context-bound — recall depth and cache pricing decide
+whether the unit economics work.
+
+Three questions to put to any vendor in the first call. Which model
+do you use today. Can I swap it. What happens to my deployment when
+that model is deprecated. Vendors who can't answer the third one
+haven't been in production long enough for it to matter to you yet.
+</Prose>
+
+<StepHeader
+  number="03"
+  eyebrow="Step Three"
+  title="Build the eval set before you watch any demo"
+/>
+<Prose>
+The most common failure pattern in agent evaluation: the vendor's
+demo looks brilliant, the deal closes, the agent ships, and the
+long tail of real inputs collapses it. The fix is mechanical. Build
+your own eval set first, run every shortlisted agent against it,
+ignore the demo.
+
+Pull 50 to 200 cases from production logs. Weight the sample toward
+the failure-prone 20% — ambiguous instructions, malformed inputs,
+cases where the right answer is to refuse, multi-step tasks that
+require asking a clarifying question rather than guessing. For
+coding agents, that means the tickets that took your humans more
+than two days. For support agents, the tickets that escalated. For
+research agents, the queries with no clean answer.
+
+Score each run against three rubrics rather than one: did it produce
+the right output, did it cost what was budgeted, and would a senior
+person sign off on the trace. The third rubric catches the cases
+where the answer is right but the reasoning is unsafe — a model
+that arrives at a correct refund decision via a fabricated policy
+quote will eventually arrive at a wrong one the same way.
+</Prose>
+
+<PullQuote>
+If a vendor will not let you run your own evals against their
+agent before you sign, the conversation should end there.
+</PullQuote>
+
+<Prose>
+Two weeks of structured prototyping should cost less than a month
+of the vendor's contract minimum. If the math doesn't work that
+way, the contract is the wrong shape and the negotiation hasn't
+started yet — most enterprise vendors will quietly waive the
+minimum for an evaluation period if you ask in writing.
+</Prose>
+
+<StepHeader number="04" eyebrow="Step Four" title="Score on four axes, expect to lose two" />
+<Prose>
+Most procurement processes pick one axis (usually cost or demo
+polish) and discover the others in production. The four that
+actually predict whether an agent ships and stays shipped:
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "Cost per successful task",
+      pick: "Dollars per task that didn't need rescue",
+      why: "High-volume, low-margin workflows. The headline price-per-token is irrelevant; what matters is turns-to-success on your inputs. A cheap model that retries three times isn't cheap.",
+    },
+    {
+      job: "Reliability under tail load",
+      pick: "End-to-end completion rate on the messy 20%",
+      why: "Customer-facing or revenue-critical work. Reliability on the easy 80% is uninformative — every agent in the shortlist will hit 95%+ there. The number that decides the contract is what happens on the other 20%.",
+    },
+    {
+      job: "Control surface",
+      pick: "Inspect, route, override, audit",
+      why: "Compliance regimes and multi-team rollouts. The question is whether you can answer 'why did the agent do that' six months later when someone asks. Usually requires step-level traces, not just chat logs.",
+    },
+    {
+      job: "Speed to first useful output",
+      pick: "Days, not quarters",
+      why: "Exploratory work and internal tools. Worth more than reliability for use cases where being wrong fast beats being right slowly — but only for those use cases.",
+    },
+  ]}
+/>
+
+<Prose>
+No agent in the current market wins all four. Cheap and fast
+usually loses control. Highly controlled and reliable usually loses
+speed-to-prototype. Pick the two the job actually needs and don't
+let the vendor talk you into measuring on the other two.
+</Prose>
+
+<CTAPanel
+  tag="The shortcut · AgentTape"
+  title={<>Use <em>AgentScore</em> as your shortlist filter</>}
+  body="AgentScore runs standardised evals across reliability, cost-per-success, latency, and tool-use accuracy on a published benchmark set, and produces one composite per agent. It cuts the field from twenty candidates to four or five in an afternoon. It does not replace your own eval set — that's still step three — but it gets you to step three faster."
+  href="/methodology"
+  cta_label="Read the methodology"
+/>
+
+<StepHeader number="05" eyebrow="Step Five" title="Negotiate the lock-in surfaces before you sign" />
+<Prose>
+Three places agent contracts lock you in. The prompts and tool
+definitions you write — usually portable, sometimes proprietary
+schema. The memory and conversation history accumulated over months
+of use — almost never portable in a useful format. The integrations
+wired into the rest of your stack — the most expensive surface to
+rebuild, and the one vendors are quietest about.
+
+Three clauses to negotiate before signing. First: data export in a
+documented format with a tested egress path, not a "we'll work with
+you on that" handshake. Second: bring-your-own-keys for the
+underlying model, so a 30% price hike on the wrapper doesn't pin
+you. Third: a dissolution clause covering what happens if the
+vendor is acquired, sunset, or pivots away from your use case in
+the next eighteen months — uncomfortable to ask, more uncomfortable
+to need.
+</Prose>
+
+<Prose>
+A vendor who refuses on all three is telling you something useful
+about how the relationship will feel in twelve months. A vendor who
+agrees to all three but pushes back on the specifics is having a
+real conversation with you, which is the one you want.
+</Prose>
+
+<ChecklistBox
+  tearout_label="Tear out — paste into your RFP doc"
+  title="Six-step pre-purchase checklist"
+  items={[
+    <><strong>Write the one-sentence job definition.</strong> Input, output, frequency, failure cost. If you can't write the failure cost, stop here.</>,
+    <><strong>Confirm the bottleneck.</strong> The agent should be aimed at the constraint, not the adjacent task that's easier to demo.</>,
+    <><strong>Pick on the substrate.</strong> Model and scaffold first; UI second. Get answers to "which model, can I swap, what happens at deprecation" in the first call.</>,
+    <><strong>Build the eval set before the demo.</strong> 50–200 real cases pulled from your logs, weighted to the failure-prone 20%. Score on output, cost, and trace-quality separately.</>,
+    <><strong>Score finalists on the four axes.</strong> Cost-per-success, tail reliability, control, speed. Pick the two the job needs and stop arguing about the others.</>,
+    <><strong>Negotiate the three lock-in clauses.</strong> Data export, model-swap, dissolution. In writing, before signing.</>,
+  ]}
+/>
+
+<Closer>
+The teams that are running agents successfully a year in are the
+ones that treated the buy as a measurement problem first and a
+procurement problem second. The eval set is the artefact that
+matters; everything else in this process is in service of building
+it well and using it honestly.
+</Closer>
+
+<CTAButtonRow
+  items={[
+    { label: "Run head-to-head agent evals", href: "/compare" },
+    { label: "Read the AgentScore methodology", href: "/methodology" },
+  ]}
+/>

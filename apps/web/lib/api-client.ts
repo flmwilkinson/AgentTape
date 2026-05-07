@@ -89,6 +89,19 @@ export type AgentDetail = AgentSummary & {
   manipulation_flags: Record<string, unknown> | null;
   tags: { kind: string; value: string; display_name: string }[];
   facts: Record<string, unknown>;
+  // Derived badges — null when not enough data yet.
+  retention: {
+    ratio: number;
+    status: "growing" | "holding" | "fading" | "decaying";
+    score_now: number;
+    score_at_30d: number;
+    days_since_admission: number;
+  } | null;
+  openrouter_rank: {
+    rank: number;
+    total: number;
+    tokens_30d: number;
+  } | null;
 };
 
 export type Page<T> = { items: T[]; total: number; limit: number; offset: number };
@@ -234,22 +247,41 @@ export const api = {
       cache: "no-store",
     }),
 
-  search: (q: string, mode: "text" | "vibe" = "text", limit = 20) =>
+  search: (
+    q: string,
+    mode: "text" | "vibe" = "text",
+    limit = 20,
+    tag?: { kind: string | null; value: string | null } | null,
+  ) =>
     apiFetch<SearchResult>("/search", {
-      searchParams: { q, mode, limit },
+      searchParams: {
+        q,
+        mode,
+        limit,
+        tag_kind: tag?.kind ?? undefined,
+        tag_value: tag?.value ?? undefined,
+      },
       cache: "no-store",
     }),
 
   searchSuggest: (q: string, limit = 8) =>
     apiFetch<
-      {
-        kind: "agent";
-        slug: string;
-        name: string;
-        entity_kind: string;
-        description: string | null;
-        agent_score: number | null;
-      }[]
+      (
+        | {
+            kind: "agent";
+            slug: string;
+            name: string;
+            entity_kind: string;
+            description: string | null;
+            agent_score: number | null;
+          }
+        | {
+            kind: "tag";
+            tag_kind: string;
+            tag_value: string;
+            count: number;
+          }
+      )[]
     >("/search/suggest", {
       searchParams: { q, limit },
       cache: "no-store",

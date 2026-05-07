@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareTrayToggle } from "@/components/compare-tray";
 import { Dropdown } from "@/components/dropdown";
+import { MobileRankList, type MobileRankItem } from "@/components/mobile-rank-list";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { TableSkeleton } from "@/components/skeleton";
+import { ToggleGroup } from "@/components/toggle-group";
 import { WatchToggle } from "@/components/watch-toggle";
 
 // /trending — biggest movers over a window with three orthogonal
@@ -90,13 +92,13 @@ export default function TrendingPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Toggle
+        <ToggleGroup
           label="Window"
           value={window}
           onChange={(v) => setWindow(v as (typeof WINDOWS)[number])}
           options={WINDOWS.map((w) => ({ v: w, label: w }))}
         />
-        <Toggle
+        <ToggleGroup
           label="Kind"
           value={kind}
           onChange={(v) => setKind(v as (typeof KINDS)[number]["v"])}
@@ -129,7 +131,20 @@ export default function TrendingPage() {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-border bg-card">
+      {!isLoading && list.length > 0 && (
+        <MobileRankList
+          items={list.map<MobileRankItem>((m) => ({
+            slug: m.agent.slug,
+            name: m.agent.name,
+            label: `${m.agent.entity_kind === "foundation_model" ? "model" : "agent"} · ${m.agent.discovered_via.replace(/_/g, " ")}`,
+            rank: m.agent.score?.rank_now ?? null,
+            score: m.score_now,
+            delta24h: m.delta,
+            rankDelta24h: m.agent.score?.rank_delta_24h ?? null,
+          }))}
+        />
+      )}
+      <div className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
         <table className="num w-full min-w-[640px] text-sm">
           <thead className="text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
@@ -139,20 +154,15 @@ export default function TrendingPage() {
               <th className="px-3 py-2 text-right">Score</th>
               <th className="px-3 py-2 text-right">Δ {window}</th>
               <th className="px-3 py-2 text-right hidden md:table-cell">Window start</th>
-              <th className="px-3 py-2 w-8"></th>
+              <th className="px-3 py-2 text-center w-12">Cmp</th>
+              <th className="px-3 py-2 text-center w-12">Watch</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <TableSkeleton rows={6} cols={8} />}
             {!isLoading && list.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
                   No movers match these filters in this window.
                 </td>
               </tr>
@@ -197,11 +207,11 @@ export default function TrendingPage() {
                     ? "—"
                     : formatScore(m.score_at_window_start)}
                 </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="inline-flex items-center gap-1.5">
-                    <CompareTrayToggle slug={m.agent.slug} />
-                    <WatchToggle slug={m.agent.slug} size="sm" />
-                  </div>
+                <td className="px-3 py-2 text-center">
+                  <CompareTrayToggle slug={m.agent.slug} />
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <WatchToggle slug={m.agent.slug} size="sm" />
                 </td>
               </tr>
             ))}
@@ -209,43 +219,6 @@ export default function TrendingPage() {
         </table>
       </div>
     </div>
-  );
-}
-
-function Toggle({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { v: string; label: string }[];
-}) {
-  return (
-    <label className="inline-flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="inline-flex rounded-md border border-border bg-card p-0.5">
-        {options.map((o) => (
-          <button
-            key={o.v}
-            type="button"
-            onClick={() => onChange(o.v)}
-            className={cn(
-              "rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors",
-              value === o.v
-                ? "bg-subtle text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </span>
-    </label>
   );
 }
 

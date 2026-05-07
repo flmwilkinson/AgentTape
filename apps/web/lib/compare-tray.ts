@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
+import { showToast } from "@/lib/toast";
 
 // Compare tray — a persistent shortlist of agent slugs the user is
 // building toward a comparison. Lives in localStorage so it survives
@@ -55,8 +56,16 @@ export function getCompareTray(): string[] {
 export function addToCompareTray(slug: string): void {
   const cur = read();
   if (cur.includes(slug)) return;
-  if (cur.length >= MAX) return;
+  if (cur.length >= MAX) {
+    showToast({
+      title: "Compare tray is full",
+      body: `You can compare up to ${MAX} agents at a time. Remove one first.`,
+      tone: -1,
+    });
+    return;
+  }
   write([...cur, slug]);
+  toastForAdd(slug, cur.length + 1);
 }
 
 export function removeFromCompareTray(slug: string): void {
@@ -71,9 +80,37 @@ export function toggleCompareTray(slug: string): boolean {
     write(cur.filter((s) => s !== slug));
     return false;
   }
-  if (cur.length >= MAX) return false;
+  if (cur.length >= MAX) {
+    showToast({
+      title: "Compare tray is full",
+      body: `You can compare up to ${MAX} agents at a time. Remove one first.`,
+      tone: -1,
+    });
+    return false;
+  }
   write([...cur, slug]);
+  toastForAdd(slug, cur.length + 1);
   return true;
+}
+
+// First-add toast: tells the user where to find the comparison view.
+// Subsequent adds get a quieter confirmation since they already know
+// the flow.
+function toastForAdd(slug: string, count: number): void {
+  if (count === 1) {
+    showToast({
+      title: `Added ${slug} to compare`,
+      body: "Pick another and click Compare in the top bar.",
+      tone: 1,
+    });
+  } else {
+    showToast({
+      title: `Added ${slug}`,
+      body: `${count} of ${MAX} in compare tray.`,
+      tone: 1,
+      durationMs: 1800,
+    });
+  }
 }
 
 export function clearCompareTray(): void {

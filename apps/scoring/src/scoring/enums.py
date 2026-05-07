@@ -25,6 +25,17 @@ class SignalSource(str, enum.Enum):
     STACKOVERFLOW_QUESTIONS_7D = "stackoverflow_questions_7d"
     PRODUCTHUNT_UPVOTES = "producthunt_upvotes"
     GITHUB_MENTIONS_7D = "github_mentions_7d"
+    # Migration 0007.
+    DOCKER_PULLS_30D = "docker_pulls_30d"
+    CRATES_DOWNLOADS_90D = "crates_downloads_90d"
+    GITHUB_RELEASES_90D = "github_releases_90d"
+    GITHUB_ISSUE_CLOSE_RATE_30D = "github_issue_close_rate_30d"
+    WIKIPEDIA_VIEWS_30D = "wikipedia_views_30d"
+    DISCORD_MEMBERS = "discord_members"
+    GOOGLE_TRENDS_SCORE = "google_trends_score"
+    # Migration 0008.
+    OPENROUTER_TOKEN_VOLUME_30D = "openrouter_token_volume_30d"
+    GITHUB_FIRST_RESPONSE_HOURS_30D = "github_first_response_hours_30d"
 
 
 class EventKind(str, enum.Enum):

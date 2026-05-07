@@ -7,6 +7,7 @@ import type { AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareTrayToggle } from "@/components/compare-tray";
 import { Dropdown } from "@/components/dropdown";
+import { MobileRankList, type MobileRankItem } from "@/components/mobile-rank-list";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
@@ -25,34 +26,63 @@ import { WatchToggle } from "@/components/watch-toggle";
 // are filtered out only when a non-empty value is selected. Missing
 // data never silently drops a row.
 
-const LICENSES = [
-  { value: "", label: "Any" },
-  { value: "mit", label: "MIT" },
-  { value: "apache-2.0", label: "Apache 2.0" },
-  { value: "bsd", label: "BSD" },
-  { value: "agpl", label: "AGPL" },
-  { value: "gpl", label: "GPL" },
-  { value: "mpl", label: "MPL" },
-  { value: "proprietary", label: "Proprietary" },
-];
+// Pretty labels for known tag values. Anything not in this map falls
+// back to a Title-Cased rendition of the slug-style value.
+const PRETTY: Record<string, string> = {
+  "mit": "MIT",
+  "apache-2.0": "Apache 2.0",
+  "agpl": "AGPL",
+  "gpl": "GPL",
+  "bsd": "BSD",
+  "mpl": "MPL",
+  "proprietary": "Proprietary",
+  "cli": "CLI",
+  "library": "Library",
+  "saas": "SaaS",
+  "ide-plugin": "IDE plugin",
+  "browser-extension": "Browser ext",
+  "mcp-server": "MCP server",
+  "self-hosted": "Self-hosted",
+  "stable": "Stable",
+  "beta": "Beta",
+  "experimental": "Experimental",
+};
 
-const DEPLOYMENTS = [
-  { value: "", label: "Any" },
-  { value: "cli", label: "CLI" },
-  { value: "library", label: "Library" },
-  { value: "saas", label: "SaaS" },
-  { value: "ide-plugin", label: "IDE plugin" },
-  { value: "browser-extension", label: "Browser ext" },
-  { value: "mcp-server", label: "MCP server" },
-  { value: "self-hosted", label: "Self-hosted" },
-];
+function prettyLabel(value: string): string {
+  return (
+    PRETTY[value] ??
+    value
+      .split("-")
+      .map((s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s))
+      .join(" ")
+  );
+}
 
-const MATURITIES = [
-  { value: "", label: "Any" },
-  { value: "stable", label: "Stable" },
-  { value: "beta", label: "Beta" },
-  { value: "experimental", label: "Experimental" },
-];
+// Build the filter options actually present in this sector's agents,
+// each with the count of matching agents. An option only appears if
+// at least one agent has it; that way users never select a filter
+// that empties the table.
+function deriveOptions(
+  members: AgentSummary[],
+  kind: string,
+): { value: string; label: string }[] {
+  const counts = new Map<string, number>();
+  for (const a of members) {
+    for (const t of a.tags ?? []) {
+      if (t.kind !== kind) continue;
+      counts.set(t.value, (counts.get(t.value) ?? 0) + 1);
+    }
+  }
+  if (counts.size === 0) return [];
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return [
+    { value: "", label: "Any" },
+    ...sorted.map(([value, n]) => ({
+      value,
+      label: `${prettyLabel(value)} · ${n}`,
+    })),
+  ];
+}
 
 interface Props {
   members: AgentSummary[];
@@ -72,6 +102,14 @@ export function SectorMembersPanel({ members }: Props) {
     else cur.delete(key);
     router.replace(`?${cur.toString()}`, { scroll: false });
   };
+
+  // Build dropdown options from the actual tag distribution in this
+  // sector. A dropdown only renders if there are at least two options
+  // (Any + one real value) — otherwise filtering by it would either
+  // be a no-op or empty the table on first click.
+  const licenseOpts = useMemo(() => deriveOptions(members, "license"), [members]);
+  const deploymentOpts = useMemo(() => deriveOptions(members, "deployment"), [members]);
+  const maturityOpts = useMemo(() => deriveOptions(members, "maturity"), [members]);
 
   // Filtering: an agent matches the filter if (a) the filter is empty
   // (Any) or (b) the agent has at least one tag with the matching
@@ -104,24 +142,30 @@ export function SectorMembersPanel({ members }: Props) {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        <Dropdown
-          label="License"
-          value={license}
-          onChange={(v) => setParam("license", v)}
-          options={LICENSES}
-        />
-        <Dropdown
-          label="Deployment"
-          value={deployment}
-          onChange={(v) => setParam("deployment", v)}
-          options={DEPLOYMENTS}
-        />
-        <Dropdown
-          label="Maturity"
-          value={maturity}
-          onChange={(v) => setParam("maturity", v)}
-          options={MATURITIES}
-        />
+        {licenseOpts.length >= 2 && (
+          <Dropdown
+            label="License"
+            value={license}
+            onChange={(v) => setParam("license", v)}
+            options={licenseOpts}
+          />
+        )}
+        {deploymentOpts.length >= 2 && (
+          <Dropdown
+            label="Deployment"
+            value={deployment}
+            onChange={(v) => setParam("deployment", v)}
+            options={deploymentOpts}
+          />
+        )}
+        {maturityOpts.length >= 2 && (
+          <Dropdown
+            label="Maturity"
+            value={maturity}
+            onChange={(v) => setParam("maturity", v)}
+            options={maturityOpts}
+          />
+        )}
         {anyFilter && (
           <button
             type="button"
@@ -135,19 +179,38 @@ export function SectorMembersPanel({ members }: Props) {
             Clear filters
           </button>
         )}
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          Tick <span className="font-mono">+</span> on any row to add it to your compare tray (up to 5).
+        </span>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-border bg-card">
+      <MobileRankList
+        items={filtered.map<MobileRankItem>((a, i) => {
+          const license = (a.tags ?? []).find((t) => t.kind === "license")?.value;
+          const deployment = (a.tags ?? []).find((t) => t.kind === "deployment")?.value;
+          return {
+            slug: a.slug,
+            name: a.name,
+            label: [license, deployment].filter(Boolean).join(" · ") || undefined,
+            rank: a.score?.rank_now ?? i + 1,
+            score: a.score?.agent_score ?? null,
+            delta24h: a.score?.delta_24h ?? null,
+            rankDelta24h: a.score?.rank_delta_24h ?? null,
+          };
+        })}
+      />
+
+      <div className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
         <table className="num w-full min-w-[680px] text-sm">
           <thead className="text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
-              <th className="px-3 py-2 w-9"></th>
+              <th className="px-3 py-2 text-center w-12">Cmp</th>
               <th className="px-3 py-2 text-right">Rank</th>
               <th className="px-3 py-2 text-left">Agent</th>
               <th className="px-3 py-2 text-right">24h</th>
               <th className="px-3 py-2 text-right">Score</th>
               <th className="px-3 py-2 text-right">Δ24h</th>
-              <th className="px-3 py-2 w-8"></th>
+              <th className="px-3 py-2 text-center w-12">Watch</th>
             </tr>
           </thead>
           <tbody>

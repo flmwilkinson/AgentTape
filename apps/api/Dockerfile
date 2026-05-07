@@ -12,6 +12,11 @@ WORKDIR /app
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
+# Bake alembic config + migrations into the image so the same image
+# can serve uvicorn AND run `alembic upgrade head` as a one-shot
+# migrate container in cloud deployments.
+COPY alembic.ini /app/alembic.ini
+COPY migrations /app/migrations
 
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 

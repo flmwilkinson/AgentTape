@@ -127,25 +127,153 @@ export function AgentLiveHeader({ agent }: Props) {
           />
         </div>
 
+        {(agent.retention || agent.openrouter_rank) && (
+          <DerivedBadges
+            retention={agent.retention}
+            openrouterRank={agent.openrouter_rank}
+          />
+        )}
+
         {agent.tags?.length > 0 && (
-          <div className="mt-6 flex flex-wrap gap-1.5">
-            {agent.tags.map((t) => (
-              <span
-                key={`${t.kind}:${t.value}`}
-                className={cn(
-                  "rounded-full border border-border bg-subtle px-2.5 py-0.5 text-[11px] text-muted-foreground",
-                )}
-                title={t.kind}
-              >
-                <span className="font-mono uppercase tracking-wider mr-1.5 text-muted-foreground/70">
-                  {t.kind}
-                </span>
-                {t.display_name}
-              </span>
-            ))}
-          </div>
+          <TagGroups tags={agent.tags} />
         )}
       </div>
+    </div>
+  );
+}
+
+// Derived-badge row. Sits above the tag chips. Carries the two
+// computed-at-request-time signals — month-2 retention proxy and
+// OpenRouter usage rank — neither of which is a stored signal value
+// but both are useful at-a-glance reads ("still growing 60d post-
+// launch" / "OpenRouter top 8 of 47") that benchmarks alone don't
+// surface.
+
+const RETENTION_TONE: Record<
+  "growing" | "holding" | "fading" | "decaying",
+  { tone: string; label: string; hint: string }
+> = {
+  growing: {
+    tone: "border-gain/40 bg-gain-subtle text-gain",
+    label: "Growing past launch",
+    hint: "Score now is at least 10% above the 30-day post-admission baseline.",
+  },
+  holding: {
+    tone: "border-border bg-subtle text-foreground/85",
+    label: "Holding",
+    hint: "Score now is within ±10% of the 30-day post-admission baseline.",
+  },
+  fading: {
+    tone: "border-border bg-subtle text-muted-foreground",
+    label: "Fading since launch",
+    hint: "Score now is 10–50% below the 30-day post-admission baseline.",
+  },
+  decaying: {
+    tone: "border-loss/40 bg-loss-subtle text-loss",
+    label: "Decaying since launch",
+    hint: "Score now is more than 50% below the 30-day post-admission baseline.",
+  },
+};
+
+function fmtTokens(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (a >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (a >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toString();
+}
+
+function DerivedBadges({
+  retention,
+  openrouterRank,
+}: {
+  retention: AgentDetail["retention"];
+  openrouterRank: AgentDetail["openrouter_rank"];
+}) {
+  return (
+    <div className="mt-6 flex flex-wrap gap-2">
+      {retention && (
+        <span
+          title={`${RETENTION_TONE[retention.status].hint} Score now ${retention.score_now.toFixed(1)} vs ${retention.score_at_30d.toFixed(1)} at +30d (admitted ${retention.days_since_admission}d ago).`}
+          className={cn(
+            "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+            RETENTION_TONE[retention.status].tone,
+          )}
+        >
+          {RETENTION_TONE[retention.status].label} ·{" "}
+          <span className="num">{retention.ratio.toFixed(2)}×</span>
+        </span>
+      )}
+      {openrouterRank && (
+        <span
+          title={`OpenRouter token volume (30d): ${fmtTokens(openrouterRank.tokens_30d)} tokens. Ranked among ${openrouterRank.total} foundation models with recent OpenRouter readings.`}
+          className="rounded-full border border-primary/40 bg-primary/5 px-2.5 py-0.5 text-[11px] font-medium text-primary"
+        >
+          OpenRouter <span className="num">#{openrouterRank.rank}</span>{" "}
+          <span className="text-muted-foreground">
+            of {openrouterRank.total}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Tag chips grouped by kind. The previous version stamped every chip
+// with its kind ("LICENSE mit", "DEPLOYMENT cli") which was visually
+// dense and made similar chips harder to scan. Grouping puts the
+// kind label once per group and lets the values themselves carry the
+// chip — much closer to how a reader expects metadata to render.
+const KIND_ORDER = ["capability", "deployment", "license", "maturity", "domain"];
+const KIND_LABEL: Record<string, string> = {
+  capability: "Capabilities",
+  deployment: "Deployment",
+  license: "License",
+  maturity: "Maturity",
+  domain: "Domain",
+};
+
+function TagGroups({
+  tags,
+}: {
+  tags: { kind: string; value: string; display_name: string }[];
+}) {
+  const grouped = new Map<
+    string,
+    { kind: string; value: string; display_name: string }[]
+  >();
+  for (const t of tags) {
+    if (!grouped.has(t.kind)) grouped.set(t.kind, []);
+    grouped.get(t.kind)!.push(t);
+  }
+  // Stable order: well-known kinds first, anything else after.
+  const orderedKinds = [
+    ...KIND_ORDER.filter((k) => grouped.has(k)),
+    ...[...grouped.keys()].filter((k) => !KIND_ORDER.includes(k)),
+  ];
+
+  return (
+    <div className="mt-6 space-y-2">
+      {orderedKinds.map((kind) => (
+        <div
+          key={kind}
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 mr-1">
+            {KIND_LABEL[kind] ?? kind}
+          </span>
+          {grouped.get(kind)!.map((t) => (
+            <span
+              key={`${t.kind}:${t.value}`}
+              className={cn(
+                "rounded-full border border-border bg-subtle px-2.5 py-0.5 text-[11px] text-foreground/85",
+              )}
+            >
+              {t.display_name}
+            </span>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

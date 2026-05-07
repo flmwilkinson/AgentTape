@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SearchCombobox } from "@/components/search-combobox";
+import { CompareNavLink } from "@/components/compare-tray";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 // Top nav. The product is a directory + index of AI-agent stocks; the
@@ -24,6 +25,11 @@ const NAV: { href: string; label: string }[] = [
 
 export function NavDesktop() {
   const pathname = usePathname();
+  // The /search page has its own bigger search input. Showing the
+  // nav-bar combobox there as well gives users two inputs that behave
+  // differently — confusing. Hide the small one when we're already on
+  // /search.
+  const onSearchPage = pathname.startsWith("/search");
   return (
     <header className="hidden md:block sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur">
       <div className="container flex h-14 items-center gap-6">
@@ -53,8 +59,10 @@ export function NavDesktop() {
             );
           })}
         </nav>
-        <SearchCombobox className="ml-auto w-64" />
+        {!onSearchPage && <SearchCombobox className="ml-auto w-64" />}
+        {onSearchPage && <div className="ml-auto" />}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <CompareNavLink />
           <Link
             href="/watchlist"
             className={cn(

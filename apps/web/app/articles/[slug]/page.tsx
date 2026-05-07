@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { BackLink } from "@/components/back-link";
 import { ARTICLES, ARTICLE_BY_SLUG } from "@/lib/articles";
 
 export function generateStaticParams() {
-  return ARTICLES.map((a) => ({ slug: a.slug }));
+  // Skip articles whose canonical URL lives elsewhere — pre-rendering
+  // /articles/this-week would shadow the dedicated server-rendered
+  // route, and /articles/inaugural-report would 404 (the body is null).
+  return ARTICLES.filter((a) => !a.external_href).map((a) => ({ slug: a.slug }));
 }
 
 export async function generateMetadata({
@@ -39,6 +42,13 @@ export default async function ArticlePage({
   const { slug } = await params;
   const a = ARTICLE_BY_SLUG[slug];
   if (!a) notFound();
+  // External-href articles (inaugural, weekly recap) live on their
+  // own route; if the user lands here, /articles/this-week is a
+  // sibling static route that takes precedence so this branch only
+  // triggers for the inaugural-report fallback.
+  if (a.external_href) {
+    redirect(a.external_href);
+  }
 
   // schema.org Article structured data — gives Google the right
   // signal that this is editorial content, not a product page.

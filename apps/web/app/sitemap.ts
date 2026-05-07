@@ -28,8 +28,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/top/open-source-ai-agents",
     "/top/mcp-servers",
     "/articles",
+    "/articles/this-week",
     "/sectors",
-    "/developers",
   ].map((path) => ({
     url: `${SITE}${path}`,
     lastModified: now,

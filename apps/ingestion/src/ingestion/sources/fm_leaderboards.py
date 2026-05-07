@@ -46,10 +46,7 @@ LEADERBOARDS: list[_Leaderboard] = [
     # HuggingFace Open LLM Leaderboard. Their public dataset-server
     # API returns ranked rows as JSON. Stable, no auth. Score is the
     # "Average ⬆️" composite (IFEval / BBH / MATH / GPQA / MUSR /
-    # MMLU-PRO weighted average), 0–100. This replaces LMSys Chatbot
-    # Arena which moved to a JS-rendered page that requires a headless
-    # browser to scrape — Arena returns when their site re-exposes a
-    # static endpoint.
+    # MMLU-PRO weighted average), 0–100.
     #
     # The API caps at 100 rows/page; the dataset is ~4500 rows. The
     # parser paginates internally for "hf_dataset_rows".
@@ -62,6 +59,24 @@ LEADERBOARDS: list[_Leaderboard] = [
         ),
         max_score=100.0,
         parser="hf_dataset_rows",
+    ),
+    # LMSys Chatbot Arena ELO ratings — gold-standard "which model is
+    # actually best to talk to" derived from blind pairwise human votes.
+    # The original arena site moved to a JS-rendered page, but the
+    # community publishes the same data as a HuggingFace dataset
+    # (lmsys/chatbot_arena_leaderboard, refreshed weekly). We pull the
+    # parquet rows via the same datasets-server endpoint as Open LLM —
+    # different parser because the column names differ ("Model" instead
+    # of "eval_name", "Arena Score" instead of "Average").
+    _Leaderboard(
+        name="lmsys-arena",
+        url=(
+            "https://datasets-server.huggingface.co/rows"
+            "?dataset=lmsys%2Fchatbot_arena_leaderboard"
+            "&config=default&split=train"
+        ),
+        max_score=None,  # ELO is unbounded
+        parser="lmsys_arena_hf",
     ),
 ]
 
@@ -207,8 +222,11 @@ async def _upsert_result(
 
 async def _fetch_rows(http, board: _Leaderboard) -> list[tuple[str, float]]:
     """Return [(model_name, score), ...] for the given leaderboard."""
-    if board.parser == "hf_dataset_rows":
-        return await _fetch_hf_paginated(http, board.url)
+    if board.parser in ("hf_dataset_rows", "lmsys_arena_hf"):
+        # Both parsers consume HuggingFace datasets-server pages but
+        # interpret the row schema differently — pick the per-page
+        # parser by name.
+        return await _fetch_hf_paginated(http, board.url, parser=board.parser)
 
     try:
         r = await http.get(board.url)
@@ -227,17 +245,24 @@ async def _fetch_rows(http, board: _Leaderboard) -> list[tuple[str, float]]:
     return []
 
 
-async def _fetch_hf_paginated(http, base_url: str) -> list[tuple[str, float]]:
+async def _fetch_hf_paginated(
+    http, base_url: str, parser: str = "hf_dataset_rows"
+) -> list[tuple[str, float]]:
     """Walk every page of a HuggingFace datasets-server `/rows` URL.
 
     Page size is server-capped at 100. We start at offset 0, read
     ``num_rows_total`` from the first response, and walk all pages.
     Stops on any non-200 to avoid spamming when the API rate-limits.
+    The per-page parser is chosen by ``parser``: Open LLM uses
+    ``eval_name`` + ``Average``, Arena uses ``Model`` + ``Arena Score``.
     """
     out: list[tuple[str, float]] = []
     page_size = 100
     offset = 0
     total: int | None = None
+    page_parser = (
+        _parse_lmsys_arena_hf if parser == "lmsys_arena_hf" else _parse_hf_dataset_rows
+    )
     while True:
         sep = "&" if "?" in base_url else "?"
         url = f"{base_url}{sep}offset={offset}&length={page_size}"
@@ -249,7 +274,7 @@ async def _fetch_hf_paginated(http, base_url: str) -> list[tuple[str, float]]:
         if r.status_code != 200:
             log.warning("leaderboard page %d returned %d", offset, r.status_code)
             break
-        page = _parse_hf_dataset_rows(r.text)
+        page = page_parser(r.text)
         if not page:
             break
         out.extend(page)
@@ -265,6 +290,39 @@ async def _fetch_hf_paginated(http, base_url: str) -> list[tuple[str, float]]:
         # Safety stop — at most 50 pages (5000 rows).
         if offset >= 5000:
             break
+    return out
+
+
+def _parse_lmsys_arena_hf(body: str) -> list[tuple[str, float]]:
+    """LMSys Chatbot Arena leaderboard rows from HuggingFace datasets-server.
+
+    Shape:
+      {"rows": [{"row": {"Model": "GPT-5", "Arena Score": 1421, ...}}]}
+
+    Match name is taken from ``Model`` (the human-readable display
+    name); the FM leaderboard ingestor's normalisation handles the
+    "GPT-5" → "openai-gpt-5" join. Score is the ELO rating.
+    """
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return []
+    out: list[tuple[str, float]] = []
+    for entry in data.get("rows") or []:
+        row = (entry or {}).get("row") or {}
+        name = row.get("Model") or row.get("model") or row.get("Name")
+        score = (
+            row.get("Arena Score")
+            or row.get("arena_score")
+            or row.get("Elo")
+            or row.get("rating")
+        )
+        if name is None or score is None:
+            continue
+        try:
+            out.append((str(name), float(score)))
+        except (ValueError, TypeError):
+            continue
     return out
 
 

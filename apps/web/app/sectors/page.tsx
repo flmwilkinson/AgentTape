@@ -6,6 +6,8 @@ import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
+import { TableSkeleton } from "@/components/skeleton";
+import { ToggleGroup } from "@/components/toggle-group";
 
 // /sectors — index of indexes. Rolls every capability/deployment/
 // maturity tag into a single row showing how the cohort's average
@@ -77,13 +79,13 @@ export default function SectorsPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Toggle
+        <ToggleGroup
           label="Slice"
           value={kind}
           onChange={(v) => setKind(v as Kind)}
           options={KINDS.map((k) => ({ v: k.v, label: k.label }))}
         />
-        <Toggle
+        <ToggleGroup
           label="Window"
           value={window}
           onChange={(v) => setWindow(v as Window)}
@@ -104,13 +106,7 @@ export default function SectorsPage() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <TableSkeleton rows={6} cols={6} />}
             {!isLoading && rows.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
@@ -177,39 +173,3 @@ export default function SectorsPage() {
   );
 }
 
-function Toggle({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { v: string; label: string }[];
-}) {
-  return (
-    <label className="inline-flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="inline-flex rounded-md border border-border bg-card p-0.5">
-        {options.map((o) => (
-          <button
-            key={o.v}
-            type="button"
-            onClick={() => onChange(o.v)}
-            className={cn(
-              "rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors",
-              value === o.v
-                ? "bg-subtle text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </span>
-    </label>
-  );
-}

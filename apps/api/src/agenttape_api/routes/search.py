@@ -30,18 +30,25 @@ async def search(
     q: str = Query(..., min_length=1, max_length=200),
     mode: str = Query("text", pattern="^(text|vibe)$"),
     limit: int = Query(20, ge=1, le=100),
+    tag_kind: str | None = Query(None, max_length=64),
+    tag_value: str | None = Query(None, max_length=128),
     session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> SearchResult:
-    if mode == "vibe":
+    # Vibe search uses a vector index that doesn't currently know about
+    # tags, so when a facet is selected we fall back to text mode so
+    # the filter still applies. This also matches what users actually
+    # want — pairing semantic search with strict tag filters tends to
+    # disappoint either way.
+    if mode == "vibe" and not (tag_kind and tag_value):
         embedding = await _embed(q)
         if embedding is None:
-            # No embedding provider configured — fall back to text search
-            # rather than a 500. The API stays usable in dev.
             hits = await queries.text_search(session, q=q, limit=limit)
         else:
             hits = await queries.vibe_search(session, embedding=embedding, limit=limit)
     else:
-        hits = await queries.text_search(session, q=q, limit=limit)
+        hits = await queries.text_search(
+            session, q=q, limit=limit, tag_kind=tag_kind, tag_value=tag_value
+        )
     facets = await queries.facet_counts(session)
     return SearchResult(
         hits=[SearchHit(**h) for h in hits],

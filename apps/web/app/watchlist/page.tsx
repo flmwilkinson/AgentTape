@@ -6,6 +6,7 @@ import { useQueries } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { useWatchlist } from "@/lib/watchlist";
+import { MobileRankList, type MobileRankItem } from "@/components/mobile-rank-list";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
@@ -52,24 +53,48 @@ export default function WatchlistPage() {
             Your watchlist is empty.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Open any{" "}
-            <Link href="/indexes/tape-100" className="text-primary hover:underline">
-              index
+            Tap the star in the{" "}
+            <Link href="/" className="text-primary hover:underline">
+              Watch
             </Link>{" "}
-            and tap the star next to a stock you want to track.
+            column on any agent table, or in the header of an{" "}
+            <Link href="/" className="text-primary hover:underline">
+              agent's
+            </Link>{" "}
+            page.
           </p>
         </section>
       ) : (
-        <section className="overflow-x-auto rounded-md border border-border bg-card">
+        <>
+        <MobileRankList
+          items={queries
+            .map<MobileRankItem | null>((q, i) => {
+              const a = q.data;
+              if (!a) return null;
+              return {
+                slug: a.slug,
+                name: a.name,
+                label:
+                  a.entity_kind === "foundation_model" ? "model" : "agent",
+                rank: a.score?.rank_now ?? null,
+                score: a.score?.agent_score ?? null,
+                delta24h: a.score?.delta_24h ?? null,
+                rankDelta24h: a.score?.rank_delta_24h ?? null,
+                showCompare: false,
+              };
+            })
+            .filter((x): x is MobileRankItem => x !== null)}
+        />
+        <section className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
           <table className="num w-full min-w-[640px] text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground">
               <tr className="border-b border-border">
-                <th className="px-3 py-2 text-left">Stock</th>
+                <th className="px-3 py-2 text-left">Agent</th>
                 <th className="px-3 py-2 text-right">Rank</th>
                 <th className="px-3 py-2 text-right">24h</th>
                 <th className="px-3 py-2 text-right">Score</th>
                 <th className="px-3 py-2 text-right">Δ24h</th>
-                <th className="px-3 py-2"></th>
+                <th className="px-3 py-2 text-center w-12">Unpin</th>
               </tr>
             </thead>
             <tbody>
@@ -121,7 +146,7 @@ export default function WatchlistPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-center">
                       <WatchToggle slug={a.slug} size="sm" />
                     </td>
                   </tr>
@@ -130,6 +155,7 @@ export default function WatchlistPage() {
             </tbody>
           </table>
         </section>
+        </>
       )}
     </div>
   );

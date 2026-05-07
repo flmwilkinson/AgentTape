@@ -67,6 +67,7 @@ async def root() -> dict[str, str]:
 
 
 @app.get("/health", tags=["meta"])
+@app.get("/healthz", tags=["meta"])
 async def health() -> dict[str, str]:
     """Liveness probe — the process is alive. Always returns 200 if reachable."""
     return {"status": "ok", "service": "api"}

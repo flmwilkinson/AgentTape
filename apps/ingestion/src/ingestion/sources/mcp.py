@@ -97,7 +97,15 @@ async def _from_glama(http) -> set[str]:
             slug = (s.get("slug") or s.get("name") or "").lower()
             if slug:
                 out.add(slug)
-            repo = (s.get("repository") or "").lower()
+            # Glama's API used to expose `repository` as a plain URL
+            # string. It now returns either a string or an object
+            # `{"url": "...", "source": "github"}` depending on the
+            # server entry. Accept both shapes.
+            repo_field = s.get("repository") or ""
+            if isinstance(repo_field, dict):
+                repo = (repo_field.get("url") or "").lower()
+            else:
+                repo = str(repo_field).lower()
             if "github.com/" in repo:
                 out.add(repo.split("github.com/", 1)[1].rstrip("/"))
         page += 1

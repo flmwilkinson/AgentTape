@@ -1,0 +1,306 @@
+export const meta = {
+  slug: "best-ai-coding-agents-2026",
+  title: "The best AI coding agents in 2026 — ranked, live",
+  description:
+    "Eight tools, four trade-offs, and one honest admission: no single agent wins every job. Ranked from real benchmarks and merge rates as of May 2026.",
+  published_at: "2026-05-05",
+  kind: "guide",
+  keywords: [
+    "best ai coding agents",
+    "ai code generation tools",
+    "claude code vs cursor",
+    "best ai for coding",
+    "swe-bench leader",
+  ],
+};
+
+<Lede>
+The benchmark question moves quickly. Claude Opus 4.7 leads SWE-bench
+Verified at 87.6%, and the unreleased Mythos Preview is closer to 94.
+That is the floor of what these tools can do, not the ceiling. The
+same model drops thirty points on SWE-bench Pro, which Scale AI
+rebuilds every month to keep the test set fresh.
+</Lede>
+
+<StatGrid
+  items={[
+    { label: "SWE-Bench Leader", name: "Claude Opus 4.7", detail: "87.6% Verified" },
+    { label: "Highest ARR", name: "Cursor", detail: "$1.2B · 1M+ DAU" },
+    { label: "OSS Star Leader", name: "Cline", detail: "61.3k ★ · 5M+ installs" },
+    { label: "Async Workhorse", name: "Devin", detail: "67% PR merge rate" },
+  ]}
+/>
+
+<Prose>
+So the ranking below weighs four things, not one: Verified scores,
+Pro scores, real-world PR merge rates, and how much the surrounding
+scaffolding lifts or drags the underlying model. In February three
+frameworks pointing at the same Anthropic model finished 17 issues
+apart on the same 731-task evaluation. The wrapper does work.
+</Prose>
+
+<ProductHeading rank={1} name="Claude Code" />
+<Badges
+  items={[
+    "Anthropic",
+    "Terminal",
+    { label: "SWE-Verified 80.8%", tone: "gain" },
+    "Pro $20 · Max $100/$200",
+  ]}
+/>
+<Prose>
+Top of the list on raw capability. Opus 4.6 underneath; 80.8% on
+Verified; 200K standard context with a 1M-token beta for the largest
+refactors. The number that surprised me most: identical-task runs
+show Claude Code using 33K tokens where Cursor uses 188K. Five and a
+half times fewer.
+
+The downside is the bill. Heavy daily use lands at $150–200/month on
+the Max plan, and the rate limit still bites at that tier. The
+pattern that keeps showing up on r/ClaudeCode: Cursor for daily
+flow, Claude Code for the problems Cursor cannot finish. Run them
+together rather than choose.
+</Prose>
+
+<ProductHeading rank={2} name="Cursor" />
+<Badges
+  items={[
+    "Anysphere",
+    "IDE",
+    { label: "SWE-Verified 67.2%", tone: "gain" },
+    "$20 / $60 / $200",
+  ]}
+/>
+<Prose>
+Cursor sits where you actually work. $1.2B ARR, north of a million
+daily users, Composer for multi-file edits, and the Supermaven Tab
+completion model still under 100ms. The agent itself scores 67.2%
+on Verified. The IDE polish is what people pay for, not the agent.
+
+The June 2025 switch to credit-based billing damaged trust that
+Cursor has not yet rebuilt. Pro+ at $60 and Ultra at $200 still
+read as opaque to anyone tracking actual usage. Keep an eye on the
+token meter and you'll be fine.
+</Prose>
+
+<ProductHeading rank={3} name="OpenAI Codex" />
+<Badges
+  items={[
+    "OpenAI",
+    "CLI + Cloud",
+    { label: "SWE-Pro 56.8%", tone: "gain" },
+    "62k ★ · ChatGPT $20/$200",
+  ]}
+/>
+<Prose>
+The unexpected comeback story. GPT-5.3-Codex is at 77.3% on
+Terminal-Bench 2.0 and leads SWE-bench Pro at 56.8%; the Spark
+variant runs on Cerebras WSE-3 silicon at over a thousand tokens a
+second. The cloud-task-runner pattern is the part that's new: write
+a spec, get back a sandboxed PR an hour later.
+
+A year ago Codex did not exist. Today it has roughly 60% of Cursor's
+install base. The Rust CLI is open source under Apache-2.0, sitting
+at 62k stars. Pricing rides the ChatGPT Plus or Pro message budget
+rather than charging per call.
+</Prose>
+
+<ScoreBars
+  caption="SWE-Bench Verified · Top 5 (May 1, 2026)"
+  rows={[
+    { label: "Claude Mythos Preview", value: 93.9 },
+    { label: "Claude Opus 4.7", value: 87.6 },
+    { label: "GPT-5.3-Codex", value: 85.0 },
+    { label: "Claude Opus 4.5", value: 80.9 },
+    { label: "Claude Opus 4.6", value: 80.8 },
+  ]}
+  source="Source: BenchLM / llm-stats live leaderboard. The same models drop 30–35 points on SWE-bench Pro."
+/>
+
+<ProductHeading rank={4} name="Devin" />
+<Badges
+  items={[
+    "Cognition",
+    "Async cloud",
+    { label: "67% merge rate", tone: "gain" },
+    "$20 + $2.25/ACU",
+  ]}
+/>
+<Prose>
+The most autonomous tool here, on its best days. Cognition reports
+a 67% PR merge rate on well-defined tasks, and Goldman Sachs is
+running Devin across its 12,000-engineer programming team with
+claimed 3–4× productivity. Treat the productivity number with
+caution; the merge rate is the one I trust more.
+
+The pricing dropped from $500/month to a $20 base plus $2.25 per
+Agent Compute Unit, which makes Devin a tool you can experiment
+with before committing. Bug backlogs, schema migrations, and
+repetitive feature work are where it shines. Open-ended product
+design is where it still loses.
+</Prose>
+
+<PullQuote>
+Three different agents pointing at the same Anthropic model finished
+17 issues apart on the same 731-task evaluation. Architecture is
+doing real work.
+</PullQuote>
+
+<ProductHeading rank={5} name="Cline" />
+<Badges
+  items={[
+    "Apache-2.0",
+    "VS Code extension",
+    { label: "61.3k ★ · 5M installs", tone: "gain" },
+    "BYOK · 30+ providers",
+  ]}
+/>
+<Prose>
+Cline is the open-source headline at 61.3k stars and 5M installs,
+with bring-your-own-model across more than 30 providers. The
+Plan/Act split is the cleanest oversight pattern in the category:
+Plan reads files and reasons about them, Act is what touches disk.
+You approve the boundary.
+
+You pay only for tokens, which puts a typical feature at
+$0.50–$2.00 against Sonnet 4.7. The April 2026 spend-limit UI is
+the small change that mattered most: agents quietly draining your
+account in a runaway loop is no longer a failure mode you have to
+worry about.
+</Prose>
+
+<ProductHeading rank={6} name="Aider" />
+<Badges
+  items={[
+    "Apache-2.0",
+    "Terminal · git-native",
+    { label: "40k+ ★", tone: "gain" },
+    "100+ languages · BYOK",
+  ]}
+/>
+<Prose>
+Forty-plus thousand stars and several model cycles of survival
+gives Aider an unusual property: every change becomes a real git
+commit you can read or revert. Repo map via tree-sitter scales to
+large codebases. The interface is a terminal prompt and your diff.
+
+For unfamiliar repos and refactors that need to be reviewable
+afterwards, this is the safest tool in the list. It is also the
+dullest one to demo, which is part of why it works.
+</Prose>
+
+<ProductHeading rank={7} name="Sourcegraph Amp" />
+<Badges
+  items={[
+    "Sourcegraph",
+    "Enterprise",
+    { label: "SOC 2 · ISO 27001", tone: "gain" },
+    "$59/user/mo",
+  ]}
+/>
+<Prose>
+Cody Free and Cody Pro retired in July 2025; Cody Enterprise
+continues at $59 per user per month. Amp is the agentic successor,
+shipping in terminal, VS Code, Cursor, JetBrains and Neovim, with
+indexing across 300,000+ repositories under SOC 2 Type II and ISO
+27001:2022.
+
+If procurement requires audit trails and your codebase is
+measured in hundreds of microservices, this is the only tool here
+built for that scale. Smaller teams will find the price hard to
+justify.
+</Prose>
+
+<ProductHeading rank={8} name="Replit Agent 3" />
+<Badges
+  items={[
+    "Replit",
+    "Browser · full-stack",
+    { label: "200-min sessions", tone: "gain" },
+    "$25 Core · $100 Pro",
+  ]}
+/>
+<Prose>
+Replit raised $250M at a $3B valuation in January, and Agent 3 is
+the reason. Two-hundred-minute autonomous sessions, database
+provisioning, full-stack scaffolding with auth, and a public URL
+one click after the model finishes. For getting something in front
+of a stakeholder before lunch, nothing else is close.
+
+For regulated production code on an existing codebase: the wrong
+tool. That is fine. Replit is not pretending otherwise.
+</Prose>
+
+## Trade-offs by job
+
+<TradeoffTable
+  rows={[
+    { job: "Greenfield apps", pick: "Replit Agent 3", why: "Browser-first, deploys in one click." },
+    { job: "Multi-file refactors", pick: "Claude Code", why: "Long context wins; 5.5× fewer tokens than Cursor on identical work." },
+    { job: "AI code review", pick: "Augment Code · Continue", why: "70% win rate against Copilot in head-to-head; CI checks defined as code." },
+    { job: "Human-in-the-loop", pick: "Cline · Aider", why: "Plan/Act split or per-commit diffs make every step inspectable." },
+    { job: "Async delegation", pick: "Devin", why: "End-state-only review for issues with verifiable success criteria." },
+  ]}
+/>
+
+## What to default to, by team shape
+
+<PersonaCards
+  items={[
+    {
+      audience: "Solo indie dev",
+      pick: "Cursor + Claude Code",
+      body: "Forty dollars before usage. Cursor for the editor, Claude Code for the hard problems Cursor can't finish.",
+    },
+    {
+      audience: "Mid-stage startup",
+      pick: "Cursor + Claude Code + Devin Core",
+      body: "Two interactive agents and one async. Wire Devin into Linear or Jira and let the bug backlog work itself down overnight.",
+    },
+    {
+      audience: "Regulated enterprise",
+      pick: "Sourcegraph Amp + Devin Enterprise",
+      body: "Audit posture and codebase indexing as defaults. Add Devin where async ROI is clearly verifiable.",
+    },
+  ]}
+/>
+
+## How CODE-25 ranks them right now
+
+<Prose>
+The list above is a snapshot of how the editors stack up. CODE-25
+is the moving picture: the top 25 admitted agents carrying a
+`code-generation` tag — the underlying engines that builders point
+harnesses at, not the editors wrapping them. Equal-weight v1,
+rebalances Mondays at 03:00 UTC. The numbers below are the index
+as of 5 May 2026; the live tape is one click away.
+</Prose>
+
+<IndexSnapshot
+  index_slug="code-25"
+  caption="CODE-25 · Composite"
+  composite={52.3}
+  delta_label="▲ vs 30d"
+  rows={[
+    { rank: 1, name: "Gemini 2.5 Pro Preview 05-06", score: 76.4 },
+    { rank: 2, name: "GPT-5.3-Codex", score: 68.8 },
+    { rank: 3, name: "GPT-5", score: 68.2 },
+    { rank: 4, name: "everything-claude-code", score: 66.0 },
+    { rank: 5, name: "dify", score: 63.1 },
+    { rank: 6, name: "hermes-agent", score: 56.8 },
+  ]}
+/>
+
+<Closer>
+The ranking above tells you what to install on Monday. CODE-25 tells
+you what's moving by Friday. Both are useful; neither is the whole
+answer.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The CODE-25, <em>tracked daily</em></>}
+  body="Stars, benchmarks, mentions and merge rates all shift week to week. The CODE-25 index is the live tape: which coding engine is gaining momentum on AgentTape this week, which has stalled, and which just entered the basket on Monday's rebalance."
+  href="/indexes/code-25"
+  cta_label="View the CODE-25"
+/>

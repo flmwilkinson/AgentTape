@@ -1,0 +1,179 @@
+# Cloud deployment compose — Hetzner CX22 + Neon Postgres + Vercel web.
+#
+# Self-contained (does NOT layer onto infra/docker-compose.yml). Postgres
+# is intentionally absent — Neon hosts it off-box, accessed via
+# DATABASE_URL. Redis still runs here because it's ephemeral pubsub
+# plumbing where the few-millisecond local-host latency matters.
+#
+# Usage:
+#   cd /opt/agenttape
+#   docker compose -f infra/cloud/docker-compose.cloud.yml up -d --build
+#
+# Required env in /opt/agenttape/.env (see .env.cloud.example):
+#   DATABASE_URL          Neon connection string (postgresql+asyncpg://…)
+#   GITHUB_TOKEN          and the rest of your rotated API keys
+#   ALLOW_HOSTS           comma list of hostnames Caddy should serve
+
+services:
+  # --------------------------------------------------------------- redis
+  # Pubsub bus. Ephemeral — no volume, no backups. If it restarts, the
+  # next signal write within 5 minutes refills any state we'd cared about.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --------------------------------------------------------------- migrate
+  # One-shot. Runs `alembic upgrade head` against Neon and exits before
+  # api / scoring / etc. start. No deploy ever serves traffic against an
+  # unmigrated schema.
+  migrate:
+    image: agenttape-api
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
+    restart: "no"
+
+  # --------------------------------------------------------------- api
+  api:
+    image: agenttape-api
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8001"
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL",
+         "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/healthz').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  # --------------------------------------------------------------- realtime
+  realtime:
+    build:
+      context: ../../apps/realtime
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8002"
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- discovery
+  discovery:
+    build:
+      context: ../../apps/discovery
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8003"
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- ingestion
+  # APScheduler runs FAST (5 min) and MEDIUM (1 h) tiers in-process.
+  # SLOW tier is invoked once a day by the host's systemd timer (see
+  # cloud-init.sh) using `docker compose run --rm slow-tier`. APScheduler's
+  # misfire-grace lost runs whenever the host slept past the grace
+  # window; systemd timers don't.
+  ingestion:
+    image: agenttape-ingestion
+    build:
+      context: ../../apps/ingestion
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      INGESTION_SKIP_TIERS: slow
+    expose:
+      - "8004"
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- scoring
+  scoring:
+    build:
+      context: ../../apps/scoring
+      dockerfile: Dockerfile
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8005"
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- slow-tier
+  # Invoked by host systemd once a day. Profile-gated so it doesn't
+  # start with the rest of the stack on `up -d`.
+  slow-tier:
+    profiles: ["cron"]
+    image: agenttape-ingestion
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "ingestion.run_slow_tier"]
+    depends_on:
+      redis: { condition: service_healthy }
+    restart: "no"
+
+  # --------------------------------------------------------------- caddy
+  # Public ingress. Auto-provisions Let's Encrypt for the hostnames in
+  # Caddyfile. The only container with published ports.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - realtime
+      - discovery
+      - ingestion
+      - scoring
+
+volumes:
+  caddy_data:
+  caddy_config:

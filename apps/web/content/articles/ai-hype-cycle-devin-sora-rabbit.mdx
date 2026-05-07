@@ -1,0 +1,371 @@
+export const meta = {
+  slug: "ai-hype-cycle-devin-sora-rabbit",
+  title:
+    "Anatomy of an AI hype cycle — how Devin, Sora and Rabbit R1 traced three different curves",
+  description:
+    "Three AI products launched to massive hype between 2024 and 2025. One quietly compounded its way into Goldman Sachs. One died losing $15M a day. One is dying slowly. The differences were visible on day one.",
+  published_at: "2026-05-06",
+  kind: "report",
+  keywords: [
+    "ai hype cycle",
+    "devin ai cognition",
+    "sora shutdown",
+    "rabbit r1 failure",
+    "ai product strategy",
+  ],
+};
+
+<Lede>
+On March 12, 2024, Cognition Labs posted a video on Twitter titled
+"Introducing Devin, the first AI software engineer." Within
+forty-eight hours it had been viewed tens of millions of times.
+Aravind Srinivas, the CEO of Perplexity, said Devin "seemed to be the
+first demo of any agent, leave alone coding, that crosses the
+threshold" of human capability. Cognition closed a Series A at a
+$2 billion valuation almost immediately.
+</Lede>
+
+<StatGrid
+  items={[
+    {
+      label: "Devin · resurrection",
+      name: "659 PRs / wk",
+      detail: "Single-week merges, early 2026 (vs 154 best-week 2025)",
+    },
+    {
+      label: "Sora · collapse",
+      name: "$15M / $2.1M",
+      detail: "Daily cost vs lifetime revenue at shutdown",
+    },
+    {
+      label: "Rabbit R1 · slow death",
+      name: "100K units",
+      detail: "Sold then largely returned. Unpaid-salary reports 2026.",
+    },
+    {
+      label: "Time-to-divergence",
+      name: "~6 weeks",
+      detail: "After launch, before the three curves visibly separate",
+    },
+  ]}
+/>
+
+<Prose>
+Three weeks after that launch video, a YouTube channel called
+Internet of Bugs posted a thirty-minute video taking the demo apart
+piece by piece. The reviewer showed that Devin had been credited
+with finishing tasks it hadn't actually finished. That the agent
+had invented work the original task didn't ask for. That the
+timeline shown in the demo had been compressed to make it look
+much faster than it was. The video racked up over a million views.
+
+It looked, at that point in early 2024, like the moment Devin died.
+Two years later, the company is embedded inside Goldman Sachs
+across a 12,000-person engineering organisation. Cognition has
+merged hundreds of thousands of pull requests across thousands of
+customer companies. Annual recurring revenue more than doubled in
+the eighteen months following the backlash, and the company that
+looked dead in April 2024 has quietly become one of the most
+successful enterprise AI deployments in software.
+
+What actually happened to Devin between then and now isn't the
+curve most people watching the launch predicted. Two other
+high-profile AI products from the same era ended up on more
+familiar trajectories, and reading their stories alongside the
+Devin one gives a rough framework for spotting which products
+will compound and which will collapse, often well before the data
+is fully in.
+</Prose>
+
+<SectionDivider number="01" label="Three curves, three product fates" />
+
+<Prose>
+Most AI launches in the current cycle, after the opening spike of
+attention burns off, end up settling onto one of three rough
+trajectories.
+</Prose>
+
+<AxesGrid
+  items={[
+    {
+      label: "The collapse curve",
+      body: "Sharp launch peak, backlash within weeks, decline ending in shutdown or zombification. The economics or the category don't survive contact with reality. (Sora.)",
+    },
+    {
+      label: "The slow-death curve",
+      body: "Modest launch peak that doesn't quite collapse but never recovers either. Diminishing user numbers, increasingly desperate pivots, eventually irrelevance. (Rabbit R1.)",
+    },
+    {
+      label: "The resurrection curve",
+      body: "Launch peak, brutal backlash that looks like collapse, quiet pivot to a different audience, then growth that compounds out of public view. (Devin.)",
+    },
+  ]}
+/>
+
+<Prose>
+The differences between these curves don't really announce
+themselves at launch, because the launch part of any AI product
+story tends to look fairly identical from the outside: a viral
+demo on Twitter, strong opening numbers, a founder media tour, and
+follow-on funding within weeks. The divergence between the curves
+only becomes visible somewhere between week six and month four,
+and what drives it tends to be structural features of the product
+that were knowable on day one if anyone was looking at the right
+things.
+</Prose>
+
+<SectionDivider number="02" label="Sora — the collapse curve" />
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Sora
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      OpenAI · Standalone consumer video generation
+    </div>
+    <p>
+      Sora launched into a category that combined two characteristics
+      that should probably have been read as warnings before the
+      product ever shipped. Inference costs were significant: each
+      ten-second clip required roughly forty minutes of parallel GPU
+      processing and cost about $1.30 in compute. Willingness-to-pay
+      was always going to be modest, since most consumers using video
+      generation were doing it for entertainment or curiosity rather
+      than for revenue-generating work. The unit economics were going
+      to be difficult from the start.
+    </p>
+    <p>
+      The launch itself worked. Number one on the US App Store for
+      twenty consecutive days. Faster to a million users than ChatGPT
+      itself. Downloads peaked at 3.33 million in November 2025. A
+      planned Disney partnership covering more than 200 characters
+      from Marvel, Pixar, and Star Wars was announced in December.
+    </p>
+    <p>
+      Then the math caught up. Forbes, citing analyst estimates from
+      Cantor Fitzgerald, reported Sora was burning roughly $15 million
+      per day in inference costs at peak. Mobile intelligence firm
+      Appfigures put Sora's lifetime in-app revenue at $2.1 million.
+      By February 2026, downloads had fallen 66% to 1.13 million. The
+      Disney partnership evaporated. On March 24, 2026, OpenAI
+      announced the shutdown.
+    </p>
+    <p>
+      <strong>What was visible at launch.</strong> The unit economics.
+      A consumer AI product whose per-use compute cost runs above
+      roughly 10% of its monthly subscription price tends to be in the
+      same equation Sora was in, and that equation generally doesn't
+      get easier as users scale; it gets worse.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Sora"
+    badge="Collapse"
+    rows={[
+      { key: "Daily cost (peak)", value: "$15M", big: true },
+      { key: "Lifetime revenue", value: "$2.1M" },
+      { key: "Downloads peak", value: "3.33M (Nov 25)" },
+      { key: "Final downloads", value: "1.13M (Feb 26)" },
+      { key: "Status", value: "Shut down Apr 26" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="03" label="Rabbit R1 — the slow-death curve" />
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Rabbit R1
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Rabbit Inc · Standalone AI hardware · "Large Action Model"
+    </div>
+    <p>
+      Rabbit's launch at CES 2024 was the high point of the AI
+      hardware moment. The company sold roughly 100,000 units of a
+      $199 device that promised an autonomous "Large Action Model"
+      capable of taking actions across the apps on your phone.
+      Pre-orders sold out. Tech press coverage was breathless.
+    </p>
+    <p>
+      Then the units shipped. Reviewers found voice-response latency
+      of up to ten seconds. The "Large Action Model" couldn't reliably
+      interact with most third-party apps. The device had four
+      functioning integrations: Spotify, Midjourney, DoorDash, and
+      Uber. Basic phone tasks (timer, email) failed. Battery life was
+      about an hour. Engadget called it "a $199 AI toy that fails at
+      almost everything." Wired, Gizmodo, and Inc. published
+      variations on the same finding.
+    </p>
+    <p>
+      The R1 didn't die on impact, though. It limped. RabbitOS 2,
+      released in September 2025, redesigned the interface and
+      rebranded the device as an "AI agent assistant" rather than the
+      original autonomous-agent concept. By early 2026, reports of
+      unpaid employee salaries and financial distress had begun to
+      surface. Jony Ive publicly criticised both the R1 and the
+      comparable Humane Pin, and the entire category of standalone AI
+      hardware appears to have been a category error in retrospect.
+    </p>
+    <p>
+      <strong>What was visible at launch.</strong> The category
+      position. Both the R1 and the Humane Pin were effectively
+      selling against the iPhone, which was always going to win that
+      fight given Apple's distribution and Apple's own AI roadmap.
+      The useful question to ask of any AI product at launch is
+      probably less about whether the product is good in isolation,
+      and more about what it looks like once the dominant adjacent
+      platform ships the same capability as a feature.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Rabbit R1"
+    badge="Slow death"
+    rows={[
+      { key: "Units sold", value: "~100K", big: true },
+      { key: "Working integrations", value: "4 (at launch)" },
+      { key: "Voice latency", value: "Up to 10s" },
+      { key: "Pivot", value: "RabbitOS 2 · Sep 2025" },
+      { key: "Status", value: "Limping · 2026" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="04" label="Devin — the resurrection curve" />
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Devin
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Cognition Labs · Autonomous AI software engineer
+    </div>
+    <p>
+      Devin's path is the most useful of the three to study, because
+      unlike the other two, the original product more or less worked.
+      It just didn't work as well as the marketing implied at launch,
+      and the gap between the demo and the reality became the
+      dominant story for several months after.
+    </p>
+    <p>
+      The honest read of the original Devin, available now that two
+      years have passed, is that it scored 13.86% on SWE-bench Lite.
+      That figure was a genuine improvement over prior state of the
+      art at the time, but it also meant the product was failing on
+      more than 86% of tasks. By early 2026, multiple competing
+      systems were scoring above 75% on the much harder SWE-bench
+      Verified, and Devin's lead on benchmarks had effectively
+      evaporated.
+    </p>
+    <p>
+      What happened instead is that Cognition pivoted in three
+      directions that compounded. They acquired Windsurf, the
+      AI-native IDE, which gave them a real-time coding surface to
+      complement Devin's autonomous batch surface. They built Devin
+      Review, a code review tool that addressed what Cognition's
+      customers were telling them was now the bottleneck — that AI
+      agents were generating more code than humans could review. And
+      they went hard into enterprise. By July 2025, Goldman Sachs had
+      begun deployment to its 12,000-person engineering organisation,
+      with hundreds of Devin instances running and a path to
+      thousands.
+    </p>
+    <p>
+      The metrics from inside Cognition tell the rest of the story.
+      By early 2026, Devin sessions per week across all enterprise
+      customers had doubled in just six weeks. In their best week of
+      2025, the team merged 154 internal Devin-generated PRs. By
+      early 2026 that figure was 659 in a single week. PR merge rate
+      across enterprise customers improved from 34% to 67%
+      year-over-year.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Devin"
+    badge="Resurrection"
+    rows={[
+      { key: "Single-week PRs", value: "659", big: true },
+      { key: "PR merge rate YoY", value: "34% → 67%" },
+      { key: "Goldman Sachs", value: "12K-person org" },
+      { key: "ARR post-backlash", value: "More than 2×" },
+      { key: "Sessions in 6 weeks", value: "2× across enterprise" },
+    ]}
+  />
+</Section>
+
+<PullQuote>
+The hype cycle hit Cognition harder than most because they fed it
+harder. But the underlying business they were building was a B2B
+platform play, and B2B platform plays don't generally die from a
+YouTube takedown. They die from failing to find customers willing to
+pay six figures for something that solves a real bottleneck.
+Cognition found those customers.
+</PullQuote>
+
+<Prose>
+The structural feature that was visible at Devin's launch, which
+most people missed in the noise around the demo, was that
+Cognition had a strong technical team (10 IOI gold medals on the
+founding roster), real research depth, and a willingness to
+operate on enterprise sales timelines rather than consumer ones.
+Most of Devin's enterprise customers stay quiet about using it.
+Goldman Sachs is the public exception, and that quietness from
+the rest of the customer base is itself a useful signal about
+what's actually happening underneath.
+</Prose>
+
+<SectionDivider number="05" label="How to read the curves in real time" />
+
+<Prose>
+The interesting question is whether you can tell which curve a
+product is on early enough to act on it. The signals are different
+for each.
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "Collapse curve",
+      pick: "Read the unit economics on day one",
+      why: "A consumer AI product whose per-use compute cost exceeds ~10% of its monthly subscription price is in the Sora equation. The equation does not improve at scale.",
+    },
+    {
+      job: "Slow-death curve",
+      pick: "Read the category position",
+      why: "If a tool is selling against a dominant adjacent platform that is about to ship this as a feature, the timeline is already running. iPhone, ChatGPT, Gemini, and Workspace are the four big absorbers in 2026.",
+    },
+    {
+      job: "Resurrection curve",
+      pick: "Read who is quiet about using it",
+      why: "AI products working in production tend to have customers who aren't loud, because the people deploying them are inside risk-averse enterprises. Watch for credible deployments inside otherwise-silent companies, followed by case studies two or three quarters later.",
+    },
+  ]}
+/>
+
+<Prose>
+The implication for picking AI tools right now is that the tools
+worth tracking aren't necessarily the loudest ones. They're the
+ones with second-order signals: slow-burn case studies, migration
+posts from large companies, named hires from enterprise customers.
+The hype cycle moves at the speed of the news cycle. The actual
+market moves much slower, and ends up in a different place.
+</Prose>
+
+<Closer>
+Sora's collapse generated bigger headlines than Devin's quiet rise
+probably ever will. The lessons sitting inside the two products are
+quite different though, and the more useful one for anyone building
+or picking AI tools right now is probably the quieter one.
+Compounding usually doesn't make for good copy.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The signals beneath the <em>headlines</em></>}
+  body="The hype cycle is loud; the actual market is quiet. AgentTape tracks AI products by usage flow, retention, sentiment, and migration patterns — the second-order signals that distinguish the resurrection curves from the collapses. The leaderboard for the part of the market that isn't on the news yet."
+  href="/indexes"
+  cta_label="View the live indexes"
+/>

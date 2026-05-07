@@ -6,6 +6,8 @@ import { IndexCard } from "@/components/index-card";
 import { MoverChip } from "@/components/mover-chip";
 import { TickerCard } from "@/components/ticker-card";
 import { TickerTape } from "@/components/ticker-tape";
+import { WelcomeBanner } from "@/components/welcome-banner";
+import { CAPABILITIES } from "@/lib/taxonomy";
 
 // The Floor — overview page.
 //
@@ -60,6 +62,7 @@ export default async function FloorPage() {
   return (
     <div>
       <TickerTape initial={agents.slice(0, 30)} />
+      <WelcomeBanner />
 
       <div className="container py-8 md:py-12 space-y-12">
         {/* Headline of the day — auto-picked, never stale. */}
@@ -106,12 +109,13 @@ export default async function FloorPage() {
           </div>
         </section>
 
-        {/* Find-an-agent shortcut — the buyer's primary entry point.
-            Big chips deep-link straight into the sector pages where
-            filters and multi-select compare live. Below it, the
-            capability rail keeps the top-3 visible for the impatient. */}
-        <section className="rounded-md border border-border bg-card p-5 md:p-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-4">
+        {/* Find-an-agent surface — capability rail with chip shortcuts
+            up top. One section instead of two: the chips give a
+            10-capability overview, the rail below shows the leading
+            stocks in each. Click "All →" on any rail to drill into
+            the full sector page (filters + compare). */}
+        <section>
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 Find the right agent
@@ -119,6 +123,12 @@ export default async function FloorPage() {
               <h2 className="editorial mt-1 text-2xl font-semibold leading-tight md:text-3xl">
                 What do you need an agent for?
               </h2>
+              <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+                Pick a capability to see the live ranking with filters
+                for license, deployment and maturity. Tick the{" "}
+                <span className="font-mono text-primary">+</span> on any
+                row to add it to your compare tray (up to 5).
+              </p>
             </div>
             <Link
               href="/search"
@@ -127,24 +137,8 @@ export default async function FloorPage() {
               Full search →
             </Link>
           </div>
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-            Pick a capability to see the live ranking with filters for
-            license, deployment and maturity. Tick the agents you want
-            and compare up to five side by side.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[
-              { slug: "code-generation", label: "Coding" },
-              { slug: "browsing", label: "Browser" },
-              { slug: "rag", label: "RAG" },
-              { slug: "multi-agent", label: "Multi-agent" },
-              { slug: "research", label: "Research" },
-              { slug: "automation", label: "Automation" },
-              { slug: "tool-use", label: "Tool use" },
-              { slug: "vision", label: "Vision" },
-              { slug: "memory", label: "Memory" },
-              { slug: "voice", label: "Voice" },
-            ].map((c) => (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {CAPABILITIES.map((c) => (
               <Link
                 key={c.slug}
                 href={`/sectors/capability/${c.slug}`}
@@ -154,21 +148,6 @@ export default async function FloorPage() {
               </Link>
             ))}
           </div>
-        </section>
-
-        {/* Top by capability — keeps the "leading three stocks per
-            category" view available without forcing a click into a
-            sector page. */}
-        <section>
-          <SectionHead
-            label="Top by capability"
-            hint="The leading three stocks per category"
-            trailing={
-              <Link href="/search" className="text-xs text-primary hover:underline">
-                Browse all →
-              </Link>
-            }
-          />
           <CapabilityRail />
         </section>
 
@@ -251,16 +230,24 @@ function pickHeadline({
   drops24h: { agent: { slug: string; name: string }; delta: number; score_now: number }[];
   recent: { slug: string; name: string; discovered_at: string }[];
 }): { title: string; body?: string; linkSlug?: string } | null {
-  // Priority order:
-  //   1. A meaningful gainer (>= 1 point in 24h)
-  //   2. A new listing within last 24h
-  //   3. A meaningful decliner
-  //   4. Something neutral
+  // Tiered language so we don't oversell a 1-point move as the
+  // "biggest" of the day when scores routinely shift by 5+.
+  //
+  //   ≥ 5 points:  "biggest move" — genuinely notable
+  //   ≥ 2 points:  "notable move"
+  //   ≥ 1 point :  "today's top mover" (no superlative)
+  //   < 1 point :  fall through to a new listing or quiet-floor copy
   const gain = top24h[0];
   if (gain && gain.delta >= 1.0) {
+    const headline =
+      gain.delta >= 5
+        ? "Today's biggest move in AgentScore — by a wide margin."
+        : gain.delta >= 2
+          ? "A notable move on the floor today."
+          : "Today's top mover. Other moves are smaller.";
     return {
       title: `${gain.agent.name} climbs ${gain.delta.toFixed(1)} points to ${gain.score_now.toFixed(1)}.`,
-      body: "Today's biggest move in AgentScore. Tap to see the signals driving it.",
+      body: `${headline} Tap to see the signals driving it.`,
       linkSlug: gain.agent.slug,
     };
   }
@@ -282,9 +269,16 @@ function pickHeadline({
 
   const drop = drops24h[0];
   if (drop && Math.abs(drop.delta) >= 1.0) {
+    const mag = Math.abs(drop.delta);
+    const headline =
+      mag >= 5
+        ? "Biggest decline today."
+        : mag >= 2
+          ? "A notable decline today."
+          : "Today's top decliner.";
     return {
-      title: `${drop.agent.name} falls ${Math.abs(drop.delta).toFixed(1)} points.`,
-      body: "Biggest decline today.",
+      title: `${drop.agent.name} falls ${mag.toFixed(1)} points.`,
+      body: headline,
       linkSlug: drop.agent.slug,
     };
   }

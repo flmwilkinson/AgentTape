@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { GitCompare, Plus, X, Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   COMPARE_TRAY_MAX,
@@ -20,6 +21,15 @@ import {
 export function CompareTrayLauncher() {
   const slugs = useCompareTray();
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Close the drawer whenever the user navigates. Without this, tapping
+  // an agent in the drawer leaves it open and covering the next page —
+  // particularly bad on mobile where the drawer eats the bottom of the
+  // viewport.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   if (slugs.length === 0) return null;
 
@@ -117,6 +127,38 @@ export function CompareTrayLauncher() {
         </div>
       )}
     </>
+  );
+}
+
+// Top-bar Compare link. Always navigates to /compare; shows a small
+// badge with the current tray count so the user can see at a glance
+// how many slugs are queued. Used in both desktop and mobile nav so
+// the compare flow has a permanent home, not just the floating tray.
+export function CompareNavLink({ className }: { className?: string }) {
+  const slugs = useCompareTray();
+  const pathname = usePathname();
+  const active = pathname.startsWith("/compare");
+  const href = slugs.length >= 2
+    ? `/compare?slugs=${slugs.join(",")}`
+    : "/compare";
+  return (
+    <Link
+      href={href}
+      aria-label="Compare"
+      className={cn(
+        "inline-flex items-center gap-1 hover:text-foreground",
+        active && "text-foreground",
+        className,
+      )}
+    >
+      <GitCompare className="h-3.5 w-3.5" />
+      <span>Compare</span>
+      {slugs.length > 0 && (
+        <span className="ml-1 rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] leading-none text-primary">
+          {slugs.length}
+        </span>
+      )}
+    </Link>
   );
 }
 

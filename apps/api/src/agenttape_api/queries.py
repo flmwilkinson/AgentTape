@@ -87,7 +87,7 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
         if getattr(row, "rank_24h_ago", None) is not None
         else None
     )
-      raw_payload = getattr(row, "raw_payload", None)
+    raw_payload = getattr(row, "raw_payload", None)
     facts = _extract_facts(
         getattr(row, "entity_kind", "application"), raw_payload
     )
@@ -303,6 +303,122 @@ def _extract_facts(
         out = {k: raw_payload.get(k) for k in keys if raw_payload.get(k) is not None}
         return out
     return {}
+
+
+async def compute_retention_badge(
+    session: AsyncSession, agent_id: Any
+) -> dict[str, Any] | None:
+    """Month-2 retention proxy.
+
+    Compare the agent's *current* score against its score 30 days
+    after it was admitted. Ratio > 1 means it kept growing past launch
+    hype; ratio < 0.5 means it's already decaying. Returns None if the
+    agent is < 60 days old (not enough room for a "month-2" window) or
+    we don't have a score from the comparison point.
+
+    The return type is the dict shape RetentionBadge expects so the
+    route can drop it straight onto the response.
+    """
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT
+                    a.discovered_at,
+                    cs.agent_score AS score_now,
+                    (
+                        SELECT s.agent_score FROM scores s
+                        WHERE s.agent_id = a.id
+                          AND s.computed_at >= a.discovered_at + interval '30 days'
+                        ORDER BY s.computed_at ASC
+                        LIMIT 1
+                    ) AS score_at_30d
+                FROM agents a
+                LEFT JOIN current_scores cs ON cs.agent_id = a.id
+                WHERE a.id = :aid
+                """
+            ),
+            {"aid": agent_id},
+        )
+    ).first()
+    if row is None:
+        return None
+
+    discovered_at = row.discovered_at
+    if discovered_at is None:
+        return None
+    days_since = (datetime.now(UTC) - discovered_at).days
+    if days_since < 60:
+        return None
+    if row.score_now is None or row.score_at_30d is None:
+        return None
+    score_now = float(row.score_now)
+    score_at_30d = float(row.score_at_30d)
+    if score_at_30d <= 0:
+        return None
+
+    ratio = score_now / score_at_30d
+    if ratio >= 1.10:
+        status = "growing"
+    elif ratio >= 0.90:
+        status = "holding"
+    elif ratio >= 0.50:
+        status = "fading"
+    else:
+        status = "decaying"
+    return {
+        "ratio": ratio,
+        "status": status,
+        "score_now": score_now,
+        "score_at_30d": score_at_30d,
+        "days_since_admission": days_since,
+    }
+
+
+async def compute_openrouter_rank(
+    session: AsyncSession, agent_id: Any
+) -> dict[str, Any] | None:
+    """Position in the OpenRouter token-volume cohort for foundation models.
+
+    Pulls the most-recent ``openrouter_token_volume_30d`` reading per
+    agent and returns this agent's 1-indexed rank within the cohort.
+    None when this agent has no recent reading or fewer than two
+    agents have one (no rank distribution to speak of).
+    """
+    rows = (
+        await session.execute(
+            text(
+                """
+                WITH latest AS (
+                    SELECT s.agent_id, s.value,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY s.agent_id ORDER BY s.captured_at DESC
+                           ) AS rn
+                    FROM signals s
+                    JOIN agents a ON a.id = s.agent_id
+                    WHERE s.source = CAST('openrouter_token_volume_30d' AS signal_source)
+                      AND a.eligibility_status = 'admitted'
+                      AND a.entity_kind = 'foundation_model'
+                      AND s.captured_at > now() - interval '7 days'
+                )
+                SELECT agent_id, value
+                FROM latest
+                WHERE rn = 1
+                ORDER BY value DESC
+                """
+            )
+        )
+    ).all()
+    if len(rows) < 2:
+        return None
+    for idx, r in enumerate(rows, start=1):
+        if r.agent_id == agent_id:
+            return {
+                "rank": idx,
+                "total": len(rows),
+                "tokens_30d": float(r.value),
+            }
+    return None
 
 
 async def _agent_tags(session: AsyncSession, agent_id: UUID) -> list[dict[str, str]]:
@@ -711,7 +827,12 @@ async def movers(
 
 
 async def text_search(
-    session: AsyncSession, *, q: str, limit: int
+    session: AsyncSession,
+    *,
+    q: str,
+    limit: int,
+    tag_kind: str | None = None,
+    tag_value: str | None = None,
 ) -> list[dict[str, Any]]:
     """Ranked text search.
 
@@ -722,13 +843,27 @@ async def text_search(
       4. Slug contains the query
       5. Description contains the query   (lowest — keeps fuzzy hits last)
 
-    Ties break on AgentScore. The earlier behavior matched all three
-    ILIKE clauses with no ranking, so a query for "gemini" surfaced
-    every model that *mentioned* gemini in its description, including
-    unrelated wrappers.
+    Ties break on AgentScore.
+
+    When ``tag_kind`` and ``tag_value`` are passed, the result set is
+    additionally restricted to agents carrying that tag — letting the
+    /search page combine a free-text query with a sidebar facet
+    instead of treating them as exclusive.
     """
     pattern = f"%{q}%"
     starts = f"{q}%"
+    tag_filter_sql = ""
+    params: dict[str, Any] = {"pattern": pattern, "starts": starts, "limit": limit}
+    if tag_kind and tag_value:
+        tag_filter_sql = (
+            " AND a.id IN ("
+            "   SELECT at.agent_id FROM agent_tags at"
+            "   JOIN tags t ON t.id = at.tag_id"
+            "   WHERE t.kind = :tag_kind AND t.value = :tag_value"
+            " )"
+        )
+        params["tag_kind"] = tag_kind
+        params["tag_value"] = tag_value
     sql = f"""
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
@@ -741,6 +876,7 @@ async def text_search(
         {RANKS_JOIN}
         WHERE a.eligibility_status = 'admitted'
           AND (a.slug ILIKE :pattern OR a.name ILIKE :pattern OR a.description ILIKE :pattern)
+          {tag_filter_sql}
         ORDER BY
             CASE
                 WHEN a.name ILIKE :starts THEN 1
@@ -752,9 +888,7 @@ async def text_search(
             cs.agent_score DESC NULLS LAST
         LIMIT :limit
     """
-    rows = await session.execute(
-        text(sql), {"pattern": pattern, "starts": starts, "limit": limit}
-    )
+    rows = await session.execute(text(sql), params)
     return [
         {"agent": _row_to_agent_summary(r), "similarity": None}
         for r in rows
@@ -764,28 +898,59 @@ async def text_search(
 async def search_suggest(
     session: AsyncSession, *, q: str, limit: int
 ) -> list[dict[str, Any]]:
-    """Fast autocomplete — name/slug only, no description."""
+    """Fast autocomplete.
+
+    Matches three layers, blended:
+      1. Agent name/slug substring match (the original behaviour).
+      2. Agents whose tags contain the query (e.g. typing "browser"
+         surfaces every agent tagged "browser-automation").
+      3. Tag suggestions themselves — clicking one jumps to a
+         pre-filtered /search view, so capabilities are first-class.
+    """
     pattern = f"%{q}%"
     starts = f"{q}%"
+
+    # Reserve a couple of slots for tag suggestions; agents take
+    # the rest. Tag suggestions help users discover whole capability
+    # cohorts they didn't know existed.
+    tag_limit = max(1, min(2, limit // 4))
+    agent_limit = max(1, limit - tag_limit)
+
     sql = """
-        SELECT a.slug, a.name, a.entity_kind, a.description, cs.agent_score
+        WITH tag_hits AS (
+            -- agents whose tag values match — boosts recall for
+            -- queries like "browser" or "open source" that don't
+            -- appear in the agent name.
+            SELECT DISTINCT a.id
+            FROM agents a
+            JOIN agent_tags at ON at.agent_id = a.id
+            JOIN tags t ON t.id = at.tag_id
+            WHERE a.eligibility_status = 'admitted'
+              AND t.value ILIKE :pattern
+        )
+        SELECT a.slug, a.name, a.entity_kind, a.description, cs.agent_score,
+               CASE
+                   WHEN a.name ILIKE :starts THEN 1
+                   WHEN a.slug ILIKE :starts THEN 2
+                   WHEN a.name ILIKE :pattern OR a.slug ILIKE :pattern THEN 3
+                   ELSE 4  -- matched only via tag
+               END AS match_rank
         FROM agents a
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
         WHERE a.eligibility_status = 'admitted'
-          AND (a.slug ILIKE :pattern OR a.name ILIKE :pattern)
-        ORDER BY
-            CASE
-                WHEN a.name ILIKE :starts THEN 1
-                WHEN a.slug ILIKE :starts THEN 2
-                ELSE 3
-            END ASC,
-            cs.agent_score DESC NULLS LAST
+          AND (
+              a.slug ILIKE :pattern
+              OR a.name ILIKE :pattern
+              OR a.id IN (SELECT id FROM tag_hits)
+          )
+        ORDER BY match_rank ASC, cs.agent_score DESC NULLS LAST
         LIMIT :limit
     """
     rows = await session.execute(
-        text(sql), {"pattern": pattern, "starts": starts, "limit": limit}
+        text(sql),
+        {"pattern": pattern, "starts": starts, "limit": agent_limit},
     )
-    return [
+    agent_hits = [
         {
             "kind": "agent",
             "slug": r.slug,
@@ -796,6 +961,35 @@ async def search_suggest(
         }
         for r in rows
     ]
+
+    # Tag suggestions — pull the most popular matching tags.
+    tag_sql = """
+        SELECT t.kind, t.value, count(*) AS cnt
+        FROM tags t
+        JOIN agent_tags at ON at.tag_id = t.id
+        JOIN agents a ON a.id = at.agent_id
+        WHERE a.eligibility_status = 'admitted'
+          AND t.value ILIKE :pattern
+        GROUP BY t.kind, t.value
+        ORDER BY cnt DESC
+        LIMIT :limit
+    """
+    tag_rows = await session.execute(
+        text(tag_sql), {"pattern": pattern, "limit": tag_limit}
+    )
+    tag_hits = [
+        {
+            "kind": "tag",
+            "tag_kind": r.kind,
+            "tag_value": r.value,
+            "count": int(r.cnt),
+        }
+        for r in tag_rows
+    ]
+
+    # Tag rows surface above the lowest-ranked agent hits but never
+    # eclipse a clean prefix match on the agent name.
+    return agent_hits + tag_hits
 
 
 async def vibe_search(
