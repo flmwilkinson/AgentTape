@@ -37,8 +37,8 @@ services:
       context: ../../apps/api
       dockerfile: Dockerfile
     env_file: ../../.env
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
+    # DATABASE_URL comes from .env via env_file. Don't restate it
+    # here — see comment in `api`.
     command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
     restart: "no"
 
@@ -50,7 +50,10 @@ services:
       dockerfile: Dockerfile
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
     expose:
       - "8001"
@@ -74,7 +77,10 @@ services:
       dockerfile: Dockerfile
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
     expose:
       - "8002"
@@ -90,7 +96,10 @@ services:
       dockerfile: Dockerfile
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
     expose:
       - "8003"
@@ -112,7 +121,10 @@ services:
       dockerfile: Dockerfile
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
       INGESTION_SKIP_TIERS: slow
     expose:
@@ -129,7 +141,10 @@ services:
       dockerfile: Dockerfile
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
     expose:
       - "8005"
@@ -146,7 +161,10 @@ services:
     image: agenttape-ingestion
     env_file: ../../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # DATABASE_URL comes from .env via env_file. Don't restate it
+      # here as ${DATABASE_URL} — that does host-shell substitution
+      # at compose-parse time, which would override env_file with an
+      # empty value when the shell doesn't have it exported.
       REDIS_URL: redis://redis:6379/0
     command: ["python", "-m", "ingestion.run_slow_tier"]
     depends_on:
