@@ -11,9 +11,27 @@ from scoring.config import get_settings
 
 
 def _async_url(url: str) -> str:
+    """Coerce a Postgres URL to the asyncpg-compatible form.
+
+    Two operations:
+      1. Pin the dialect to ``+asyncpg`` if missing (so SQLAlchemy
+         dispatches to the right driver).
+      2. Strip libpq-only query params that asyncpg's ``connect()``
+         would reject as unknown kwargs (``sslmode``,
+         ``channel_binding``). Neon's connection strings ship with
+         these by default; psycopg/alembic accepts them, asyncpg
+         does not. We don't lose security — Neon enforces TLS at
+         the transport layer regardless of the URL flag.
+    """
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
     if url.startswith("postgresql://") and "+asyncpg" not in url:
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    parts = urlsplit(url)
+    drop = {"sslmode", "channel_binding"}
+    qs = [(k, v) for k, v in parse_qsl(parts.query) if k not in drop]
+    return urlunsplit(parts._replace(query=urlencode(qs)))
 
 
 _engine: AsyncEngine | None = None
