@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -9,6 +9,8 @@ import {
   type ArticleKind,
   type ArticleMeta,
 } from "@/lib/articles";
+
+const PAGE_SIZE = 10;
 
 // Client filter UI for the articles index. Lives in its own file so
 // the server page can pass *only* the metadata across the boundary —
@@ -22,7 +24,11 @@ import {
 //      Search matches title / description / keywords case-insensitively.
 //   3. Card grid of remaining articles, each with a kind-coloured chip.
 
-const ALL_KINDS: ArticleKind[] = ["weekly", "report", "guide", "comparison"];
+// Only weekly reports earn a kind chip — they're a distinct rhythm
+// (auto-generated from live data, archived after the next one ships).
+// Guides, comparisons, and reports are all editorial long-form pieces
+// where the title carries enough signal; the chip just adds noise.
+const ALL_KINDS: ArticleKind[] = ["weekly"];
 
 interface Props {
   articles: ArticleMeta[];
@@ -32,13 +38,24 @@ export function ArticlesIndex({ articles }: Props) {
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<ArticleKind | "all">("all");
   const [month, setMonth] = useState<string>("all"); // YYYY-MM or "all"
+  const [page, setPage] = useState(1);
 
   const featured = articles.filter((a) => a.live);
-  const restPool = articles.filter((a) => !a.live);
+  // The grid shows every article — including the live one pinned in
+  // the featured row above. That keeps the "Weekly report" filter
+  // chip useful (it would otherwise match zero, since the only live
+  // entry is the weekly) and gives past weekly reports a home
+  // alongside the current one. Sort newest-first so the latest
+  // editorial always lands at the top regardless of registry order.
+  const restPool = useMemo(
+    () =>
+      [...articles].sort((a, b) =>
+        b.published_at.localeCompare(a.published_at),
+      ),
+    [articles],
+  );
 
-  // Build the unique YYYY-MM list once from non-live articles. The
-  // weekly recap's published_at is "this Monday", which would
-  // otherwise show up as a phantom month here.
+  // Unique YYYY-MM list driven by what the grid actually shows.
   const months = useMemo(() => {
     const set = new Set<string>();
     for (const a of restPool) {
@@ -75,6 +92,19 @@ export function ArticlesIndex({ articles }: Props) {
 
   const anyFilter =
     query.trim().length > 0 || kindFilter !== "all" || month !== "all";
+
+  // Pagination: 10 per page, snap back to page 1 whenever the
+  // filtered set changes shape so the user never lands on an empty
+  // page after filtering down. Clamp page in case React renders a
+  // stale page index for one frame after a filter change.
+  useEffect(() => {
+    setPage(1);
+  }, [query, kindFilter, month]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   return (
     <article className="container py-10 md:py-14 max-w-5xl space-y-10">
@@ -153,6 +183,7 @@ export function ArticlesIndex({ articles }: Props) {
               onChange={(e) => setMonth(e.target.value)}
               className="h-9 rounded-md border border-border bg-card px-2 text-xs"
               aria-label="Filter by month"
+              suppressHydrationWarning
             >
               <option value="all">All months</option>
               {months.map((m) => (
@@ -176,6 +207,7 @@ export function ArticlesIndex({ articles }: Props) {
                 setMonth("all");
               }}
               className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              suppressHydrationWarning
             >
               Clear
             </button>
@@ -191,13 +223,29 @@ export function ArticlesIndex({ articles }: Props) {
             No articles match these filters.
           </div>
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2">
-            {filtered.map((a) => (
-              <li key={a.slug}>
-                <ArticleCard article={a} />
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="grid gap-3 md:grid-cols-2">
+              {pageItems.map((a) => (
+                <li key={a.slug}>
+                  <ArticleCard article={a} />
+                </li>
+              ))}
+            </ul>
+            {totalPages > 1 && (
+              <PageNav
+                page={safePage}
+                totalPages={totalPages}
+                onChange={(p) => {
+                  setPage(p);
+                  // Jump back to the top of the grid so paging doesn't
+                  // leave the user mid-card on the next page.
+                  if (typeof window !== "undefined") {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                }}
+              />
+            )}
+          </>
         )}
       </section>
     </article>
@@ -250,17 +298,25 @@ function FeaturedCard({ article: a }: { article: ArticleMeta }) {
 function ArticleCard({ article: a }: { article: ArticleMeta }) {
   const tag = ARTICLE_KIND_TAG[a.kind];
   const href = a.external_href ?? `/articles/${a.slug}`;
+  // Only weekly reports earn a chip on the card — every other kind
+  // is editorial long-form where the title and date carry enough.
+  const showChip = a.kind === "weekly";
   return (
     <Link
       href={href}
       className="block h-full rounded-md border border-border bg-card p-5 transition-colors hover:border-foreground/20 hover:bg-subtle"
     >
       <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider">
-        <span
-          className={cn("rounded-full border px-2 py-0.5 text-[9px]", tag.tone)}
-        >
-          {tag.label}
-        </span>
+        {showChip && (
+          <span
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[9px]",
+              tag.tone,
+            )}
+          >
+            {tag.label}
+          </span>
+        )}
         <span className="text-muted-foreground">
           {new Date(a.published_at).toLocaleDateString(undefined, {
             year: "numeric",
@@ -278,6 +334,63 @@ function ArticleCard({ article: a }: { article: ArticleMeta }) {
       <div className="mt-2 text-base font-medium leading-snug">{a.title}</div>
       <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
     </Link>
+  );
+}
+
+function PageNav({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (p: number) => void;
+}) {
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+  return (
+    <nav
+      className="mt-6 flex items-center justify-between gap-3"
+      aria-label="Articles pagination"
+    >
+      <button
+        type="button"
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-foreground/80 hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
+        suppressHydrationWarning
+      >
+        ← Prev
+      </button>
+      <ul className="flex items-center gap-1">
+        {pages.map((p) => (
+          <li key={p}>
+            <button
+              type="button"
+              onClick={() => onChange(p)}
+              aria-current={p === page ? "page" : undefined}
+              className={cn(
+                "min-w-[2rem] rounded-md border px-2 py-1 text-xs font-mono",
+                p === page
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-subtle hover:text-foreground",
+              )}
+              suppressHydrationWarning
+            >
+              {p}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={() => onChange(page + 1)}
+        disabled={page >= totalPages}
+        className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-foreground/80 hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
+        suppressHydrationWarning
+      >
+        Next →
+      </button>
+    </nav>
   );
 }
 
@@ -302,6 +415,11 @@ function KindChip({
           ? tone ?? "border-primary bg-primary text-primary-foreground"
           : "border-border bg-card text-muted-foreground hover:bg-subtle hover:text-foreground",
       )}
+      // Form-filler extensions (1Password, LastPass, etc.) inject an
+      // `fdprocessedid` attribute onto buttons during hydration, which
+      // surfaces as a noisy hydration mismatch in dev. Suppress here —
+      // the input above already does the same for the same reason.
+      suppressHydrationWarning
     >
       {label}
     </button>

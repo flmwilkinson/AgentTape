@@ -7,7 +7,7 @@ import { ARTICLES, ARTICLE_BY_SLUG } from "@/lib/articles";
 export function generateStaticParams() {
   // Skip articles whose canonical URL lives elsewhere — pre-rendering
   // /articles/this-week would shadow the dedicated server-rendered
-  // route, and /articles/inaugural-report would 404 (the body is null).
+  // route.
   return ARTICLES.filter((a) => !a.external_href).map((a) => ({ slug: a.slug }));
 }
 
@@ -42,10 +42,9 @@ export default async function ArticlePage({
   const { slug } = await params;
   const a = ARTICLE_BY_SLUG[slug];
   if (!a) notFound();
-  // External-href articles (inaugural, weekly recap) live on their
-  // own route; if the user lands here, /articles/this-week is a
-  // sibling static route that takes precedence so this branch only
-  // triggers for the inaugural-report fallback.
+  // External-href articles (e.g. the live weekly recap) live on a
+  // dedicated route; /articles/this-week is a sibling static route
+  // that takes precedence, so this branch is a defensive fallback.
   if (a.external_href) {
     redirect(a.external_href);
   }

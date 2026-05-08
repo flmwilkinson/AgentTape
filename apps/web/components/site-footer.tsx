@@ -33,7 +33,7 @@ const COLUMNS: { title: string; items: { href: string; label: string }[] }[] = [
       // /developers page to drift out of date.
       {
         href:
-          (process.env.NEXT_PUBLIC_API_URL ?? "https://agenttape.io/api") +
+          (process.env.NEXT_PUBLIC_API_URL ?? "https://agenttape.com/api") +
           "/docs",
         label: "API · OpenAPI",
       },

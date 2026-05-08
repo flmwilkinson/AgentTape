@@ -15,3 +15,21 @@ declare module "*.mdx" {
   const MDXComponent: ComponentType<Record<string, unknown>>;
   export default MDXComponent;
 }
+
+// Webpack's `require.context` is genuinely available at runtime in
+// Next.js bundles, but the @types/node `Require` shape doesn't include
+// it. Used by lib/articles.tsx to auto-discover every .mdx under
+// content/articles/ — augment globally so the call site stays clean.
+declare namespace NodeJS {
+  interface RequireContext {
+    keys(): string[];
+    <T = unknown>(id: string): T;
+  }
+  interface Require {
+    context(
+      path: string,
+      recursive?: boolean,
+      regex?: RegExp,
+    ): RequireContext;
+  }
+}

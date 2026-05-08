@@ -184,7 +184,7 @@ export default async function SectorLandingPage({
     itemListElement: detail.constituents.slice(0, 25).map((c, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      url: `https://agenttape.io/agents/${c.agent.slug}`,
+      url: `https://agenttape.com/agents/${c.agent.slug}`,
       name: c.agent.name,
     })),
   };

@@ -4,9 +4,9 @@
 # file no longer publishes those ports to the host; Caddy reaches them
 # over the internal docker network using the service DNS name.
 #
-# Vercel hosts agenttape.io itself; this file is only for the
+# Vercel hosts agenttape.com itself; this file is only for the
 # api/realtime/discovery/ingestion/scoring subdomains. If you want
-# Caddy to also serve the marketing site, add an `agenttape.io { … }`
+# Caddy to also serve the marketing site, add an `agenttape.com { … }`
 # block, but Vercel's CDN is faster and free, so we keep them split.
 
 (common) {
@@ -18,18 +18,18 @@
 	}
 }
 
-api.agenttape.io {
+api.agenttape.com {
 	import common
 	reverse_proxy api:8001
 }
 
-ws.agenttape.io {
+ws.agenttape.com {
 	# Realtime websocket service. Caddy auto-handles WS upgrades.
 	import common
 	reverse_proxy realtime:8002
 }
 
-discovery.agenttape.io {
+discovery.agenttape.com {
 	import common
 	# Internal-only by default (not announced via DNS publicly), but
 	# routed if you wire the subdomain. Used for manual triggers /
@@ -37,12 +37,12 @@ discovery.agenttape.io {
 	reverse_proxy discovery:8003
 }
 
-ingestion.agenttape.io {
+ingestion.agenttape.com {
 	import common
 	reverse_proxy ingestion:8004
 }
 
-scoring.agenttape.io {
+scoring.agenttape.com {
 	import common
 	reverse_proxy scoring:8005
 }

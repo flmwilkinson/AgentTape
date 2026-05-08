@@ -101,8 +101,8 @@ where the long-running container restarts mid-tick.
 - Build command: `pnpm build`
 - Output: handled by `next build`
 - Env: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_REALTIME_URL` (must be `wss://` in prod).
-- Add the production domain (`agenttape.io`) and a staging
-  (`staging.agenttape.io`) at minimum.
+- Add the production domain (`agenttape.com`) and a staging
+  (`staging.agenttape.com`) at minimum.
 
 The `pnpm build` step in `packages/shared` runs
 `openapi-typescript` against the bundled `apps/api/openapi.json`. Run

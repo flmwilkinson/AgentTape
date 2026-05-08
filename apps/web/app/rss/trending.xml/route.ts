@@ -8,7 +8,7 @@ import { api } from "@/lib/api-client";
 
 export const revalidate = 600;  // refresh server cache every 10 min
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.io";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com";
 
 function escape(s: string): string {
   return s

@@ -44,8 +44,8 @@ app = FastAPI(
     description="Live WebSocket + SSE fan-out from Redis pub/sub.",
 )
 
-# CORS — the SSE endpoints are accessed via fetch() from agenttape.io
-# (different origin to ws.agenttape.io). WebSocket connections have
+# CORS — the SSE endpoints are accessed via fetch() from agenttape.com
+# (different origin to ws.agenttape.com). WebSocket connections have
 # their own Origin handshake and don't go through CORS, but the
 # /sse/* mirrors do. Public read-only stream — `*` is fine.
 app.add_middleware(

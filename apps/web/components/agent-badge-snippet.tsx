@@ -22,7 +22,7 @@ export function AgentBadgeSnippet({ slug }: Props) {
   const [copied, setCopied] = useState<"md" | "html" | null>(null);
   const origin =
     typeof window === "undefined"
-      ? process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.io"
+      ? process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com"
       : window.location.origin;
   const badgeUrl = `${origin}/api/badge/${slug}.svg`;
   const pageUrl = `${origin}/agents/${slug}`;

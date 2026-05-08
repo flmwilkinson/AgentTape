@@ -114,26 +114,26 @@ Add A records pointing to the Hetzner IP:
 
 | Host                       | Type  | Target                |
 | -------------------------- | ----- | --------------------- |
-| `api.agenttape.io`         | A     | `<hetzner-ip>`        |
-| `ws.agenttape.io`          | A     | `<hetzner-ip>`        |
-| `ingestion.agenttape.io`   | A     | `<hetzner-ip>`        |
-| `scoring.agenttape.io`     | A     | `<hetzner-ip>`        |
-| `discovery.agenttape.io`   | A     | `<hetzner-ip>`        |
+| `api.agenttape.com`         | A     | `<hetzner-ip>`        |
+| `ws.agenttape.com`          | A     | `<hetzner-ip>`        |
+| `ingestion.agenttape.com`   | A     | `<hetzner-ip>`        |
+| `scoring.agenttape.com`     | A     | `<hetzner-ip>`        |
+| `discovery.agenttape.com`   | A     | `<hetzner-ip>`        |
 
-Apex `agenttape.io` and `www.agenttape.io` will point at Vercel — set
+Apex `agenttape.com` and `www.agenttape.com` will point at Vercel — set
 those in step 7.
 
 DNS propagation usually takes <5 min for new records. Caddy auto-grabs
-TLS certs as soon as `api.agenttape.io` resolves to the box.
+TLS certs as soon as `api.agenttape.com` resolves to the box.
 
 ## 7. Vercel (web frontend) (~5 min)
 
 - New project → import `flmwilkinson/AgentTape`.
 - **Root Directory**: `apps/web`.
 - **Environment Variables**:
-  - `NEXT_PUBLIC_API_URL=https://api.agenttape.io/api`
-  - `NEXT_PUBLIC_REALTIME_URL=wss://ws.agenttape.io`
-- Deploy. Add `agenttape.io` and `www.agenttape.io` as custom domains
+  - `NEXT_PUBLIC_API_URL=https://api.agenttape.com/api`
+  - `NEXT_PUBLIC_REALTIME_URL=wss://ws.agenttape.com`
+- Deploy. Add `agenttape.com` and `www.agenttape.com` as custom domains
   (Vercel will tell you the exact A / CNAME records to add at your
   registrar).
 
@@ -142,13 +142,13 @@ TLS certs as soon as `api.agenttape.io` resolves to the box.
 From your laptop:
 
 ```bash
-curl -s https://api.agenttape.io/healthz
+curl -s https://api.agenttape.com/healthz
 # {"status":"ok","service":"api"}
 
-curl -s https://api.agenttape.io/agents | head -c 200
+curl -s https://api.agenttape.com/agents | head -c 200
 # Should return JSON
 
-open https://agenttape.io
+open https://agenttape.com
 # Should render the floor with live data from your new backend
 ```
 

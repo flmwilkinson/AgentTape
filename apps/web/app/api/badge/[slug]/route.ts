@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { api } from "@/lib/api-client";
 
 // Embeddable SVG badge for an agent. Authors put
-//   ![AgentTape](https://agenttape.io/api/badge/<slug>.svg)
+//   ![AgentTape](https://agenttape.com/api/badge/<slug>.svg)
 // on their README and get a live "Featured on AgentTape · Score X ·
 // Rank #N" pill. Cacheable for an hour so the badge endpoint doesn't
 // hammer our API per page view from third-party traffic.

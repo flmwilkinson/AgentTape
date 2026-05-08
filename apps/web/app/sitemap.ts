@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { api } from "@/lib/api-client";
 import { ARTICLES } from "@/lib/articles";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.io";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com";
 
 // next.js sitemap. Includes every static surface plus every admitted
 // agent + every index. Capped at 50K URLs by spec; we're nowhere near

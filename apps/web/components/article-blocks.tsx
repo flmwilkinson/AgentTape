@@ -313,12 +313,20 @@ export function ProductHeading({
 
 // ---------------------------------------------------------------- lede
 
-/** Opening paragraph with drop-cap and editorial scale. */
+/**
+ * Opening paragraph with drop-cap and editorial scale.
+ *
+ * Rendered as a <div>, not a <p>: the .mdx files put the text body
+ * on its own lines inside <Lede>…</Lede>, and MDX wraps that body in
+ * its own <p> when the children read as a block. A <p> wrapping a
+ * <p> is invalid HTML and trips React's hydration validator. <div>
+ * + first-letter: yields the same drop-cap visual without nesting.
+ */
 export function Lede({ children }: { children: ReactNode }) {
   return (
-    <p className="editorial my-6 text-xl leading-relaxed text-foreground/90 md:text-2xl first-letter:editorial first-letter:float-left first-letter:mr-2 first-letter:text-6xl first-letter:font-semibold first-letter:leading-none first-letter:text-primary md:first-letter:text-7xl">
+    <div className="editorial my-6 text-xl leading-relaxed text-foreground/90 md:text-2xl first-letter:editorial first-letter:float-left first-letter:mr-2 first-letter:text-6xl first-letter:font-semibold first-letter:leading-none first-letter:text-primary md:first-letter:text-7xl">
       {children}
-    </p>
+    </div>
   );
 }
 
@@ -769,12 +777,16 @@ export function CTAButtonRow({ items }: { items: CTAButton[] }) {
 
 // ------------------------------------------------------- closer paragraph
 
-/** Editorial closing-line — italic, slightly bigger than body. */
+/**
+ * Editorial closing-line — italic, slightly bigger than body. Same
+ * <div>-not-<p> reasoning as Lede above: MDX may wrap the inner text
+ * in its own <p>, so the wrapper has to be a non-<p> block.
+ */
 export function Closer({ children }: { children: ReactNode }) {
   return (
-    <p className="editorial mt-8 text-xl leading-snug text-foreground/90 md:text-2xl">
+    <div className="editorial mt-8 text-xl leading-snug text-foreground/90 md:text-2xl">
       {children}
-    </p>
+    </div>
   );
 }
 

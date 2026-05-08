@@ -53,11 +53,11 @@ export default async function AboutPage() {
       "@context": "https://schema.org",
       "@type": "WebSite",
       name: "AgentTape",
-      url: "https://agenttape.io",
+      url: "https://agenttape.com",
       description: metadata.description,
       potentialAction: {
         "@type": "SearchAction",
-        target: "https://agenttape.io/search?q={search_term_string}",
+        target: "https://agenttape.com/search?q={search_term_string}",
         "query-input": "required name=search_term_string",
       },
     },
@@ -71,7 +71,7 @@ export default async function AboutPage() {
         item: {
           "@type": "SoftwareApplication",
           name: a.name,
-          url: `https://agenttape.io/agents/${a.slug}`,
+          url: `https://agenttape.com/agents/${a.slug}`,
           applicationCategory: "AIApplication",
           aggregateRating: a.score?.agent_score
             ? {
