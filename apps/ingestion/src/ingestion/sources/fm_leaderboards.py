@@ -93,17 +93,10 @@ LEADERBOARDS: list[_Leaderboard] = [
         max_score=100.0,
         parser="hf_dataset_rows",
     ),
-    # LiveBench. Monthly contamination-free benchmark covering
-    # reasoning, coding, math and language. CSV published at the
-    # website; first column is the model id, "Global Average" column
-    # is the headline. Parser already exists in this module — we
-    # just needed an entry to wire the URL.
-    _Leaderboard(
-        name="livebench",
-        url="https://livebench.ai/livebench.csv",
-        max_score=100.0,
-        parser="livebench",
-    ),
+    # LiveBench would be a great fit here (monthly contam-free eval)
+    # but their public CSV URL has changed and the new endpoint isn't
+    # documented. _parse_livebench is preserved at the bottom of the
+    # file so we can wire it back up the moment we find the new URL.
 ]
 
 # Patterns we expect to find in slugs / names so we can match a
@@ -141,6 +134,12 @@ class FMLeaderboardsIngestor(Ingestor):
         agents: list[AgentRow],
         redis_client: Any,
     ) -> dict[str, int]:
+        # HF datasets-server now gates many "community" datasets behind
+        # auth, even for read-only access. Without an HF token in the
+        # request headers, lmsys-arena and bigcode-models return 401.
+        # Open LLM Leaderboard is still public so it works either way.
+        hf_token = self.settings.huggingface_token
+
         # Build the benchmark-name → id map (idempotent insert).
         bench_ids: dict[str, UUID] = {}
         for board in LEADERBOARDS:
@@ -162,7 +161,7 @@ class FMLeaderboardsIngestor(Ingestor):
         matched_per_board: dict[str, int] = {}
         for board in LEADERBOARDS:
             try:
-                rows = await _fetch_rows(self._http, board)
+                rows = await _fetch_rows(self._http, board, hf_token=hf_token)
             except Exception as e:  # noqa: BLE001
                 log.warning("leaderboard %s fetch failed: %s", board.name, e)
                 rows = []
@@ -246,13 +245,22 @@ async def _upsert_result(
     )
 
 
-async def _fetch_rows(http, board: _Leaderboard) -> list[tuple[str, float]]:
+async def _fetch_rows(
+    http,
+    board: _Leaderboard,
+    *,
+    hf_token: str | None = None,
+) -> list[tuple[str, float]]:
     """Return [(model_name, score), ...] for the given leaderboard."""
     if board.parser in ("hf_dataset_rows", "lmsys_arena_hf"):
         # Both parsers consume HuggingFace datasets-server pages but
         # interpret the row schema differently — pick the per-page
-        # parser by name.
-        return await _fetch_hf_paginated(http, board.url, parser=board.parser)
+        # parser by name. HF token is forwarded so datasets that
+        # require auth (most community-published leaderboards now do)
+        # don't 401.
+        return await _fetch_hf_paginated(
+            http, board.url, parser=board.parser, hf_token=hf_token
+        )
 
     try:
         r = await http.get(board.url)
@@ -272,7 +280,11 @@ async def _fetch_rows(http, board: _Leaderboard) -> list[tuple[str, float]]:
 
 
 async def _fetch_hf_paginated(
-    http, base_url: str, parser: str = "hf_dataset_rows"
+    http,
+    base_url: str,
+    parser: str = "hf_dataset_rows",
+    *,
+    hf_token: str | None = None,
 ) -> list[tuple[str, float]]:
     """Walk every page of a HuggingFace datasets-server `/rows` URL.
 
@@ -289,11 +301,14 @@ async def _fetch_hf_paginated(
     page_parser = (
         _parse_lmsys_arena_hf if parser == "lmsys_arena_hf" else _parse_hf_dataset_rows
     )
+    headers: dict[str, str] = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
     while True:
         sep = "&" if "?" in base_url else "?"
         url = f"{base_url}{sep}offset={offset}&length={page_size}"
         try:
-            r = await http.get(url)
+            r = await http.get(url, headers=headers)
         except Exception as e:  # noqa: BLE001
             log.warning("leaderboard page fetch %s: %s", url, e)
             break

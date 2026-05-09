@@ -8,14 +8,21 @@ not brick the whole daily run.
 Sites:
     - Galileo Agent Leaderboard
     - HAL (Hallucinations leaderboard)
-    - AstaBench
     - LLM-Stats
-    - Steel.dev WebVoyager
 
 The HTML layouts here change without notice. We attempt structured
 extraction first (any JSON-LD or data-* attributes), then fall back to
 matching agent identifiers against the page text. Misses are logged
 silently — we'd rather under-emit than emit garbage.
+
+History:
+    AstaBench (allenai.github.io/asta-bench/) and Steel WebVoyager
+    (steel.dev/webvoyager) were here previously but both URLs 404 as
+    of 2026-05. Dropped from the seed list rather than chase moved
+    pages — when we find replacements with stable URLs we'll re-add
+    them. Adding a dead URL just prints a warning and skips, so
+    there's no functional damage either way, but the log noise was
+    obscuring the real failures.
 """
 from __future__ import annotations
 
@@ -45,9 +52,7 @@ SITES: list[BenchmarkSite] = [
         "https://huggingface.co/spaces/galileo-ai/agent-leaderboard",
     ),
     BenchmarkSite("hal", "https://hal.cs.princeton.edu/"),
-    BenchmarkSite("astabench", "https://allenai.github.io/asta-bench/"),
     BenchmarkSite("llm-stats", "https://llm-stats.com/"),
-    BenchmarkSite("steel-webvoyager", "https://steel.dev/webvoyager"),
 ]
 
 NUMBER = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:%|points?)?\b")

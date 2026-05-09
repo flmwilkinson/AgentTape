@@ -100,12 +100,23 @@ class GithubReposUsingModelIngestor(Ingestor):
 def _query_term(a: AgentRow) -> str | None:
     """Pick the most-distinctive token to search code for.
 
-    For OpenRouter-sourced models, the slug usually has the form
-    ``provider-model-version`` (e.g. ``anthropic-claude-opus-4-7``).
-    We strip the provider prefix so we don't get a hit from every
-    file that imports ``import anthropic`` — we want files that
-    actually reference *this* model id specifically.
+    For OpenRouter-sourced models the ``openrouter_id`` is in the
+    facts payload (e.g. ``anthropic/claude-opus-4-7``). The slash
+    form is essentially a unique sentinel — code that uses this
+    model nearly always passes that exact string as the model id,
+    which means GitHub Code Search's 422 "vague query" rejection
+    almost never fires. Use it whenever it's available.
+
+    Without an openrouter_id we fall back to the slug minus the
+    provider prefix. That can trigger 422 for very short/common
+    tokens (e.g. ``gpt-5``), in which case ``_count`` returns None
+    and we silently skip the agent — better than emitting noise.
     """
+    if a.facts:
+        oid = a.facts.get("openrouter_id")
+        if isinstance(oid, str) and len(oid) >= 4:
+            return f'"{oid}"'
+
     name = a.slug or ""
     if not name:
         return None
@@ -116,8 +127,6 @@ def _query_term(a: AgentRow) -> str | None:
     name = name.lower().strip()
     if len(name) < 4 or name in _NOISE_WORDS:
         return None
-    # Quote the term so multi-word slugs like "claude-opus-4-7" match
-    # the exact substring, not the union of words.
     return f'"{name}"'
 
 
