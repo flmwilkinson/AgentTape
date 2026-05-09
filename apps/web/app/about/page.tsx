@@ -13,9 +13,9 @@ import { api } from "@/lib/api-client";
 
 export const metadata: Metadata = {
   title:
-    "AgentTape — Top AI Agents Tracked Live. Score, Rank, Compare.",
+    "AgentTape: Top AI Agents Tracked Live. Score, Rank, Compare.",
   description:
-    "AgentTape is a live index of every public AI agent and foundation model. Compare the best AI agents for coding, browsing, research and more. Open-source-friendly, always free to read, scored by an open formula.",
+    "A live index of every public AI agent and foundation model. Compare the best AI agents for coding or browsing. Free to read, scored by an open formula.",
   keywords: [
     "top AI agents",
     "best AI agents",
@@ -30,9 +30,9 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: "/about" },
   openGraph: {
-    title: "AgentTape — top AI agents and foundation models, live.",
+    title: "AgentTape: top AI agents and foundation models, live.",
     description:
-      "A free, transparent index of every public AI agent and foundation model. Built on autonomous discovery — agents appear here the day they start to matter.",
+      "A free, transparent index of every public AI agent and foundation model. Built on autonomous discovery. Agents appear here the day they start to matter.",
     images: [{ url: "/api/og/index/tape-100" }],
   },
 };
@@ -102,9 +102,9 @@ export default async function AboutPage() {
           The live index of every public AI agent.
         </h1>
         <p className="editorial mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
-          Find, compare and watch the best AI agents and foundation
-          models as they emerge. Scored by an open formula. Free to
-          read. No login needed.
+          Find and compare the best AI agents and foundation models
+          as they emerge. Scored by an open formula. Free to read,
+          no login needed.
         </p>
       </header>
 
@@ -136,7 +136,7 @@ export default async function AboutPage() {
             The 50 best foundation models.
           </h2>
           <p className="mt-3 text-sm text-muted-foreground">
-            Claude, GPT, Llama, Gemini, Mistral, DeepSeek and more —
+            Claude, GPT, Llama, Gemini, Mistral, DeepSeek and more,
             tracked as their own asset class. Compare GPT vs Claude
             directly with an overlaid chart.
           </p>
@@ -152,10 +152,10 @@ export default async function AboutPage() {
           <p>
             AgentTape is a live, autonomously-populated index of every
             public AI agent. Each agent is its own stock ticker with a
-            transparent 0–100 AgentScore, four pillar scores (Adoption,
-            Quality, Momentum, Community), and a chart of how it's moved
-            over time. Click any agent to see why its score is what it
-            is — every input is published.
+            transparent 0-100 AgentScore, four pillar scores (Adoption,
+            Quality, Momentum, Community), and a chart of how it has
+            moved over time. Click any agent to see why its score is
+            what it is. Every input is published.
           </p>
           <p>
             We do not curate. The discovery service watches{" "}
@@ -163,7 +163,7 @@ export default async function AboutPage() {
             <strong>MCP registries</strong>, <strong>npm</strong> and{" "}
             <strong>PyPI</strong>, <strong>arXiv</strong>, and{" "}
             <strong>Hacker News</strong>, plus the{" "}
-            <strong>OpenRouter</strong> model catalogue, and admits
+            <strong>OpenRouter</strong> model catalogue, then admits
             agents on its own schedule. If a project starts gaining
             real traction, it shows up here without anyone asking.
           </p>
@@ -178,22 +178,22 @@ export default async function AboutPage() {
           <UseCase
             title="Pick the best AI agent for my use case"
             href="/search"
-            body="Filter by capability — code generation, browsing, research, RAG, multi-agent — and see the top stocks ranked by AgentScore. Then drop the top 2–4 onto the comparison page and decide."
+            body="Filter by capability (code generation, browsing, research, RAG, multi-agent) and see the top stocks ranked by AgentScore. Then drop the top 2-4 onto the comparison page and decide."
           />
           <UseCase
             title="Compare two foundation models"
             href="/compare"
-            body="Stick Claude and GPT side-by-side on the compare page. Get an overlay chart of their AgentScore over 30 days, pillar bars side-by-side, and a clean 'best at X' verdict per model."
+            body="Stick Claude and GPT side-by-side on the compare page. You get an overlay chart of their AgentScore over 30 days, pillar bars next to each other, plus a clean 'best at X' verdict per model."
           />
           <UseCase
             title="See which agents are gaining traction"
             href="/trending"
-            body="Trending shows the biggest score moves over 1h / 24h / 7d / 30d, broken out by application agents vs foundation models. Rank-movement arrows show who climbed and how far."
+            body="Trending shows the biggest score moves over 1h / 24h / 7d / 30d, split by application agents vs foundation models. Rank-movement arrows show who climbed and how far."
           />
           <UseCase
             title="Track newly-released agents and models"
             href="/new"
-            body="The discovery feed surfaces new admissions in real time — the day they're noticed by GitHub, npm, Hugging Face or OpenRouter. Catch the next AutoGPT before everyone else has heard of it."
+            body="The discovery feed surfaces new admissions in real time, the day they're noticed by GitHub, npm, Hugging Face or OpenRouter. Catch the next AutoGPT before everyone else has heard of it."
           />
         </div>
       </section>
@@ -203,7 +203,7 @@ export default async function AboutPage() {
           Today's top stocks
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Live snapshot — refreshes whenever the page is recrawled.
+          Live snapshot. Refreshes whenever the page is recrawled.
         </p>
         <ul className="mt-4 divide-y divide-border rounded-md border border-border bg-card">
           {top.items.slice(0, 8).map((a, i) => (
@@ -235,35 +235,35 @@ export default async function AboutPage() {
         </h2>
         <div className="prose prose-zinc mt-4 max-w-none editorial space-y-4 text-base leading-relaxed text-foreground/90 md:text-lg">
           <p>
-            A 0–100 headline backed by four pillars. The weights below
+            A 0-100 headline backed by four pillars. The weights below
             are the defaults; quality's 30% is redistributed pro-rata
             when an agent is unrated so a young project isn't penalized
             for the absence of benchmark coverage.
           </p>
           <ul className="list-disc pl-6">
             <li>
-              <strong>Adoption (35%)</strong> — z-score across stars,
+              <strong>Adoption (35%)</strong>: z-score across stars,
               downloads, package counts, registry presence
             </li>
             <li>
-              <strong>Quality (30%)</strong> — mean z-score across
-              benchmark results; <em>Unrated</em> when no benchmark
+              <strong>Quality (30%)</strong>: mean z-score across
+              benchmark results. <em>Unrated</em> when no benchmark
               exists, never zero
             </li>
             <li>
-              <strong>Momentum (20%)</strong> — 7-day and 30-day
+              <strong>Momentum (20%)</strong>: 7-day and 30-day
               rate-of-change blend on adoption signals
             </li>
             <li>
-              <strong>Community (15%)</strong> — contributors, HN
+              <strong>Community (15%)</strong>: contributors, HN
               points, Reddit points
             </li>
           </ul>
           <p>
-            Three manipulation rules — star spike without contributor
-            diversity, HF download surge without GitHub activity,
-            coordinated HN posting — exclude implicated signals from
-            that day's score. Read the full{" "}
+            Manipulation rules (star spike without contributor diversity,
+            HF download surge without matching GitHub activity, coordinated
+            HN posting) exclude implicated signals from that day's score.
+            Read the full{" "}
             <Link
               href="/methodology"
               className="text-primary underline-offset-2 hover:underline"
@@ -307,15 +307,14 @@ export default async function AboutPage() {
         <Link href="/methodology" className="text-primary hover:underline">
           methodology
         </Link>{" "}
-        for the math, the{" "}
+        for the math, or the{" "}
         <a
           href="https://github.com/flmwilkinson/AgentTape"
           className="text-primary hover:underline"
         >
           repo
         </a>{" "}
-        for the source. No login. No paywall. No newsletter sign-up
-        wall.
+        for the source. No login. No paywall. No newsletter wall.
       </p>
     </article>
   );

@@ -50,8 +50,8 @@ export function WelcomeBanner() {
           </span>{" "}
           <span className="text-foreground/85">
             AgentTape is a live ranking of AI agents and foundation
-            models, updated hourly from public signals — GitHub stars,
-            downloads, mentions, benchmarks. No curated list, every
+            models, updated hourly from public signals like GitHub
+            stars and benchmark results. No curated list. Every
             input{" "}
             <a href="/methodology" className="text-primary underline-offset-2 hover:underline">
               published

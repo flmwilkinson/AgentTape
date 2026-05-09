@@ -4,19 +4,39 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import { TableSkeleton } from "@/components/skeleton";
 import { ToggleGroup } from "@/components/toggle-group";
 
-// /sectors — index of indexes. Rolls every capability/deployment/
+// /sectors - index of indexes. Rolls every capability / deployment /
 // maturity tag into a single row showing the cohort's average
 // AgentScore plus a tiny up/down arrow indicating whether it's
-// trending over the selected window.
+// trending over the selected window. Desktop also shows the numeric
+// delta and a verdict pill so power users can scan at a glance;
+// mobile keeps just the arrow to fit a phone screen without scroll.
 //
 // Why three slicers? Because "is coding hot right now?" and "is
 // CLI-deployed agents hot right now?" are different questions and a
 // reader cares about both. Maturity is the third axis since stable
 // vs experimental moves in different rhythms.
+
+type Verdict =
+  | "booming"
+  | "growing"
+  | "steady"
+  | "cooling"
+  | "declining"
+  | "no_history";
+
+const VERDICT_TONE: Record<Verdict, { tone: string; label: string }> = {
+  booming: { tone: "text-gain", label: "Booming" },
+  growing: { tone: "text-gain", label: "Growing" },
+  steady: { tone: "text-muted-foreground", label: "Steady" },
+  cooling: { tone: "text-loss", label: "Cooling" },
+  declining: { tone: "text-loss", label: "Declining" },
+  no_history: { tone: "text-muted-foreground", label: "—" },
+};
 
 const KINDS = [
   { v: "capability", label: "Capability" },
@@ -82,15 +102,23 @@ export default function SectorsPage() {
               <th className="px-3 py-2 text-left">Sector</th>
               <th className="px-3 py-2 text-right">Members</th>
               <th className="px-3 py-2 text-right">Avg score</th>
+              {/* Desktop-only columns: numeric delta and verdict pill.
+                  Mobile shows just the inline arrow on Avg score. */}
+              <th className="hidden px-3 py-2 text-right md:table-cell">
+                Δ {window}
+              </th>
+              <th className="hidden px-3 py-2 text-right md:table-cell">
+                Verdict
+              </th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <TableSkeleton rows={6} cols={4} />}
+            {isLoading && <TableSkeleton rows={6} cols={6} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
-                  No sectors yet — agents need tags before this page can
+                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                  No sectors yet. Agents need tags before this page can
                   populate. The discovery service will fill them in.
                 </td>
               </tr>
@@ -106,6 +134,7 @@ export default function SectorsPage() {
                   : r.delta > 0
                     ? "up"
                     : "down";
+              const tone = VERDICT_TONE[r.verdict];
               return (
                 <tr
                   key={r.value}
@@ -129,6 +158,26 @@ export default function SectorsPage() {
                       {dir === "down" && (
                         <ArrowDown className="h-3.5 w-3.5 text-loss" />
                       )}
+                    </span>
+                  </td>
+                  <td
+                    className={cn(
+                      "hidden px-3 py-2 text-right font-mono md:table-cell",
+                      tone.tone,
+                    )}
+                  >
+                    {r.delta == null
+                      ? "—"
+                      : `${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(2)}`}
+                  </td>
+                  <td
+                    className={cn(
+                      "hidden px-3 py-2 text-right md:table-cell",
+                      tone.tone,
+                    )}
+                  >
+                    <span className="font-mono text-xs uppercase tracking-wider">
+                      {tone.label}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right">

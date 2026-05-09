@@ -104,7 +104,7 @@ export function SiteFooter() {
             </div>
             <p className="max-w-xs text-xs text-muted-foreground">
               Live ranking of AI agents and foundation models, updated
-              hourly from public signals. No curated list, every input
+              hourly from public signals. No curated list. Every input
               published.
             </p>
           </div>
@@ -124,8 +124,8 @@ export function SiteFooter() {
 
         <div className="mt-8 border-t border-border pt-4 text-[11px] text-muted-foreground">
           AgentTape is informational. The trading metaphor is a
-          presentation choice — nothing here is financial or investment
-          advice, and AgentScore is not a price.
+          presentation choice. Nothing here is financial advice, and
+          AgentScore is not a price.
         </div>
       </div>
     </footer>

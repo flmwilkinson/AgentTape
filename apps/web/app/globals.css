@@ -120,6 +120,15 @@
   .dark {
     color-scheme: dark;
   }
+  /* Reserve scrollbar space whether content overflows or not. Without
+     this, navigating between a long page and a short page changes the
+     usable viewport width by the scrollbar width (~17px on Windows /
+     ~15px on Linux). The fixed mobile bottom nav appears to "compress"
+     during the transition because its grid is pinned to a viewport
+     width that's mid-shift. scrollbar-gutter: stable keeps width fixed. */
+  html {
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "cv11";

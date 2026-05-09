@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -259,12 +260,17 @@ function ComparePageInner() {
           );
         })}
         {Array.from({ length: Math.max(0, MAX - slugs.length) }).map((_, i) => (
-          <div
+          <Link
             key={`empty-${i}`}
-            className="flex min-h-[220px] items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground"
+            href="/search"
+            className="group flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-subtle hover:text-foreground"
           >
-            add an agent
-          </div>
+            <Plus className="h-5 w-5 transition-transform group-hover:scale-110" />
+            <span>add an agent</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              opens search
+            </span>
+          </Link>
         ))}
       </div>
 

@@ -87,9 +87,8 @@ export default async function FloorPage() {
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-loss">
               Backend unreachable
             </span>{" "}
-            Live data refresh is paused — the cached page below may be a few
-            minutes stale. The site auto-recovers as soon as the backend
-            reconnects.
+            Live data refresh is paused. The cached page below may be a few
+            minutes stale, and auto-recovers when the backend reconnects.
           </div>
         </div>
       )}
@@ -197,7 +196,7 @@ export default async function FloorPage() {
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
             {recent.length === 0 && (
               <div className="px-4 py-6 text-xs text-muted-foreground">
-                No admissions yet — the discovery service is on its first sweep.
+                No admissions yet. The discovery service is on its first sweep.
               </div>
             )}
             {recent.map((a) => (
@@ -339,7 +338,7 @@ function pickHeadline({
   if (gain && gain.delta >= 1.0) {
     const headline =
       gain.delta >= 5
-        ? "Today's biggest move in AgentScore — by a wide margin."
+        ? "Today's biggest move in AgentScore, by a wide margin."
         : gain.delta >= 2
           ? "A notable move on the floor today."
           : "Today's top mover. Other moves are smaller.";
@@ -359,7 +358,7 @@ function pickHeadline({
     if (ageHours <= 24) {
       return {
         title: `${newest.name} just listed.`,
-        body: "Most recent admission. The discovery service hasn't been told to look for this — it found it.",
+        body: "Most recent admission. The discovery service wasn't told to look for this; it found it.",
         linkSlug: newest.slug,
       };
     }
