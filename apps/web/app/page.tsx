@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
+import type { IndexSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CapabilityRail } from "@/components/capability-rail";
 import { IndexCard } from "@/components/index-card";
@@ -64,17 +66,15 @@ export default async function FloorPage() {
     .slice(0, 3);
   const headline = pickHeadline({ top24h, drops24h, recent });
 
-  // For the index cards: pull a thin history per index in parallel so
-  // each card has a sparkline.
-  const indexHistories = await Promise.all(
-    indexes.map((i) =>
-      api
-        .indexHistory(i.slug, "30d")
-        .then((rows) => ({ slug: i.slug, values: rows.map((r) => r.composite_value) }))
-        .catch(() => ({ slug: i.slug, values: [] as number[] })),
-    ),
-  );
-  const histBySlug = Object.fromEntries(indexHistories.map((h) => [h.slug, h.values]));
+  // Index sparklines + capability rail are deferred to <Suspense>
+  // boundaries below so their fetch latency doesn't gate first-byte.
+  // Without that, a cold-cache render serialises:
+  //   main Promise.all (~2s)
+  //   → indexHistories Promise.all (~2s)
+  //   → CapabilityRail's internal Promise.all (~2s)
+  // = up to 6 s of dead time before any HTML reaches the browser.
+  // With Suspense, only the main Promise.all gates first byte; the
+  // other two stream in over the same connection.
 
   return (
     <div>
@@ -178,7 +178,9 @@ export default async function FloorPage() {
               </Link>
             ))}
           </div>
-          <CapabilityRail />
+          <Suspense fallback={<CapabilityRailSkeleton />}>
+            <CapabilityRail />
+          </Suspense>
         </section>
 
         {/* New listings — the "rush to compare new releases" surface. */}
@@ -215,11 +217,9 @@ export default async function FloorPage() {
               </Link>
             }
           />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {indexes.map((i) => (
-              <IndexCard key={i.id} index={i} history={histBySlug[i.slug] ?? []} />
-            ))}
-          </div>
+          <Suspense fallback={<IndexesGridSkeleton count={Math.max(indexes.length, 6)} />}>
+            <IndexesGrid indexes={indexes} />
+          </Suspense>
         </section>
 
         {/* Methodology callout — short, links to the full page. */}
@@ -244,6 +244,74 @@ export default async function FloorPage() {
           </p>
         </section>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- streamed sub-trees
+//
+// These render under <Suspense>. While their data is in flight Next
+// streams the parent shell + skeleton fallbacks; the sub-tree HTML
+// arrives as a follow-up chunk on the same response. Net effect on a
+// cold render: TTFB drops from ~6s to ~2s when the backend is slow,
+// because indexHistories and the capability rail no longer serialise
+// behind the main Promise.all.
+
+async function IndexesGrid({ indexes }: { indexes: IndexSummary[] }) {
+  const indexHistories = await Promise.all(
+    indexes.map((i) =>
+      api
+        .indexHistory(i.slug, "30d")
+        .then((rows) => ({
+          slug: i.slug,
+          values: rows.map((r) => r.composite_value),
+        }))
+        .catch(() => ({ slug: i.slug, values: [] as number[] })),
+    ),
+  );
+  const histBySlug = Object.fromEntries(
+    indexHistories.map((h) => [h.slug, h.values]),
+  );
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {indexes.map((i) => (
+        <IndexCard
+          key={i.id}
+          index={i}
+          history={histBySlug[i.slug] ?? []}
+        />
+      ))}
+    </div>
+  );
+}
+
+function IndexesGridSkeleton({ count }: { count: number }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="h-40 animate-pulse rounded-md border border-border bg-card"
+        />
+      ))}
+    </div>
+  );
+}
+
+function CapabilityRailSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-md border border-border bg-card p-4 space-y-3"
+        >
+          <div className="h-3 w-20 rounded bg-muted/40" />
+          <div className="h-4 w-full rounded bg-muted/30" />
+          <div className="h-4 w-5/6 rounded bg-muted/30" />
+          <div className="h-4 w-4/6 rounded bg-muted/30" />
+        </div>
+      ))}
     </div>
   );
 }

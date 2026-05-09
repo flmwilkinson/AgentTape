@@ -14,7 +14,11 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
-const DEFAULT_TIMEOUT_MS = 3000;
+// 2s is the practical ceiling for "user notices delay". Below that
+// people perceive the page as "loading" rather than "broken". When
+// the backend is healthy a fetch finishes in ~50–200 ms; this only
+// kicks in on a hung connection.
+const DEFAULT_TIMEOUT_MS = 2000;
 
 export async function apiFetch<T>(
   path: string,
