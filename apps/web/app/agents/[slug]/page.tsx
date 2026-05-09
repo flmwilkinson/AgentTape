@@ -23,13 +23,40 @@ export async function generateMetadata(
   const { slug } = await params;
   try {
     const a = await api.getAgent(slug);
+    const kind =
+      a.entity_kind === "foundation_model" ? "foundation model" : "AI agent";
+    // Build a real description even when the agent's own blurb is
+    // empty: kind + score + the top capability tag is enough to
+    // give Google something distinct to index per agent.
+    const cap = a.tags.find((t) => t.kind === "capability");
+    const capLabel = cap?.display_name ?? cap?.value;
+    const score = a.score?.agent_score?.toFixed(1);
+    const fallback =
+      [
+        `${a.name} is a${kind === "AI agent" ? "n" : ""} ${kind}`,
+        capLabel ? `for ${capLabel.toLowerCase()}` : null,
+        score ? `currently scoring ${score} on AgentTape's 0-100 AgentScore` : null,
+      ]
+        .filter(Boolean)
+        .join(" ") + ". Live ranking, score breakdown and benchmarks.";
+    const description = a.description ?? fallback;
+    const title = `${a.name}: AgentScore, benchmarks and signals`;
     return {
-      title: a.name,
-      description: a.description ?? `${a.name} on AgentTape`,
+      title,
+      description,
+      alternates: { canonical: `/agents/${a.slug}` },
       openGraph: {
-        title: `${a.name} — AgentTape`,
-        description: a.description ?? `${a.name} on AgentTape`,
-        images: [{ url: `/api/og/agent/${a.slug}` }],
+        title: `${a.name} | AgentTape`,
+        description,
+        url: `/agents/${a.slug}`,
+        type: "website",
+        images: [{ url: `/api/og/agent/${a.slug}`, width: 1200, height: 630 }],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${a.name} | AgentTape`,
+        description,
+        images: [`/api/og/agent/${a.slug}`],
       },
     };
   } catch {
