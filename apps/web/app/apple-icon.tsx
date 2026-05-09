@@ -1,8 +1,9 @@
 import { ImageResponse } from "next/og";
 
-// 180x180 icon used by iOS / iPadOS when a user adds AgentTape to
-// their home screen. Same brand mark as the favicon, scaled up so
-// the typography stays crisp at app-icon size on Retina displays.
+// 180x180 icon used by iOS / iPadOS when AgentTape is added to a
+// home screen. Same design language as the favicon: black square,
+// white serif "AT", no decoration. Scale of 180 lets the typography
+// breathe and stay crisp on Retina.
 
 export const runtime = "edge";
 export const size = { width: 180, height: 180 };
@@ -13,20 +14,27 @@ export default function AppleIcon() {
     (
       <div
         style={{
-          fontSize: 110,
-          background: "#1547e6",
+          background: "#0a0a0a",
           width: "100%",
           height: "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
-          fontWeight: 700,
-          fontFamily: "monospace",
-          letterSpacing: -3,
         }}
       >
-        AT
+        <div
+          style={{
+            display: "flex",
+            fontSize: 122,
+            fontWeight: 700,
+            letterSpacing: -8,
+            fontFamily: "ui-serif, Georgia, 'Times New Roman', serif",
+            lineHeight: 1,
+          }}
+        >
+          AT
+        </div>
       </div>
     ),
     { ...size },

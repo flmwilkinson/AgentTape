@@ -391,32 +391,39 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                 <button
                   type="button"
                   onClick={() => setExpanded(open ? null : r.key)}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-subtle/50"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-subtle/50 sm:gap-3 sm:px-4"
                 >
                   <ChevronRight
                     className={cn(
-                      "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                      "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
                       open && "rotate-90",
                     )}
                   />
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground w-24">
+                  {/* Label width relaxed on mobile so a long pillar
+                      ("Community") doesn't collide with the score
+                      number to its right. */}
+                  <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted-foreground w-20 sm:w-24">
                     {r.label}
                   </span>
-                  <span className="num text-base font-semibold w-16">
+                  <span className="num shrink-0 text-base font-semibold w-14 sm:w-16">
                     {r.score == null ? "Unrated" : r.score.toFixed(1)}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
+                  {/* Signal count is informative but not critical;
+                      hide on phones to keep the row free for the
+                      delta. Reappears above 640px. */}
+                  <span className="hidden text-[11px] text-muted-foreground sm:inline">
                     {r.contributing.length}/{r.total} signals
                   </span>
                   {r.delta24h != null && r.delta24h !== 0 && (
                     <span
                       className={cn(
-                        "ml-auto font-mono text-xs",
+                        "ml-auto shrink-0 font-mono text-xs",
                         r.delta24h > 0 ? "text-gain" : "text-loss",
                       )}
                     >
                       {r.delta24h > 0 ? "+" : ""}
-                      {r.delta24h.toFixed(2)} 24h
+                      {r.delta24h.toFixed(2)}{" "}
+                      <span className="hidden sm:inline">24h</span>
                     </span>
                   )}
                 </button>

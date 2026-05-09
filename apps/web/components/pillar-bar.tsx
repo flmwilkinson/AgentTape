@@ -100,11 +100,14 @@ export function PillarBar({ score, variant = "full", className }: PillarBarProps
       </div>
 
       {variant === "full" && (
-        <div className="grid grid-cols-4 gap-2 text-[11px] text-muted-foreground">
+        // 2x2 on mobile, 4-up on >= sm. Four columns at 320px makes
+        // "Momentum" + value collide into the next cell; 2x2 keeps
+        // each chip readable without truncation.
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground sm:grid-cols-4 sm:gap-2">
           {segments.map((s) => (
-            <div key={s.key} className="flex items-center gap-1.5">
+            <div key={s.key} className="flex items-center gap-1.5 min-w-0">
               <span
-                className="block h-2 w-2 rounded-sm"
+                className="block h-2 w-2 shrink-0 rounded-sm"
                 style={{
                   backgroundColor: s.value === null ? "transparent" : s.color,
                   borderColor: s.color,
@@ -112,8 +115,10 @@ export function PillarBar({ score, variant = "full", className }: PillarBarProps
                   borderStyle: "solid",
                 }}
               />
-              <span className="uppercase tracking-wider">{s.label}</span>
-              <span className="num ml-auto text-foreground">
+              <span className="truncate uppercase tracking-wider">
+                {s.label}
+              </span>
+              <span className="num ml-auto shrink-0 text-foreground">
                 {s.value === null ? "—" : s.value.toFixed(1)}
               </span>
             </div>

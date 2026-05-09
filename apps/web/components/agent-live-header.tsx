@@ -63,7 +63,11 @@ export function AgentLiveHeader({ agent }: Props) {
           <span className="text-[11px] text-muted-foreground">
             {agent.slug}
           </span>
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+          {/* Live / Not-Live indicator is desktop-only. On mobile the
+              icon flashed every time the WebSocket reconnected during
+              page navigation, which read as visual noise more than
+              useful state. The watch toggle still shows. */}
+          <span className="ml-auto hidden items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground md:inline-flex">
             {connected ? (
               <Wifi className="h-3 w-3 text-gain" />
             ) : (
@@ -71,7 +75,9 @@ export function AgentLiveHeader({ agent }: Props) {
             )}
             Live
           </span>
-          <WatchToggle slug={agent.slug} showLabel />
+          <span className="ml-auto md:ml-0">
+            <WatchToggle slug={agent.slug} showLabel />
+          </span>
         </div>
 
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl md:leading-[1.05]">

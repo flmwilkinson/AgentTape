@@ -121,16 +121,14 @@ export default async function FloorPage() {
           </section>
         )}
 
-        {/* Trending Up + Trending Down — the "what's gaining" surface. */}
+        {/* Trending Up + Trending Down. */}
         <section>
-          <SectionHead
-            label="Trending"
-            hint="Biggest 24h moves in AgentScore"
-            trailing={
-              <Link href="/trending" className="text-xs text-primary hover:underline">
-                Full feed →
-              </Link>
-            }
+          <BigHead
+            kicker="Trending"
+            title="Biggest 24h moves."
+            hint="Top gainers and decliners over the last 24 hours, by AgentScore."
+            trailingHref="/trending"
+            trailingLabel="Full feed →"
           />
           <div className="grid gap-3 md:grid-cols-2">
             <MoverList title="Gainers · 24h" items={top24h} emptyHint="No upward movement yet today." />
@@ -182,16 +180,14 @@ export default async function FloorPage() {
           </Suspense>
         </section>
 
-        {/* New listings — the "rush to compare new releases" surface. */}
+        {/* New listings. */}
         <section>
-          <SectionHead
-            label="New listings"
-            hint={`Most recent admissions · ${recent.length} latest`}
-            trailing={
-              <Link href="/new" className="text-xs text-primary hover:underline">
-                Live feed →
-              </Link>
-            }
+          <BigHead
+            kicker="New listings"
+            title="Just admitted."
+            hint={`The ${recent.length} most recent agents the discovery service picked up.`}
+            trailingHref="/new"
+            trailingLabel="Live feed →"
           />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
             {recent.length === 0 && (
@@ -205,16 +201,14 @@ export default async function FloorPage() {
           </div>
         </section>
 
-        {/* Indexes — sector + foundation-model baskets. */}
+        {/* Indexes (sector + foundation-model baskets). */}
         <section>
-          <SectionHead
-            label="Indexes"
-            hint="Top stocks grouped by sector or foundation model"
-            trailing={
-              <Link href="/indexes" className="text-xs text-primary hover:underline">
-                All indexes →
-              </Link>
-            }
+          <BigHead
+            kicker="Indexes"
+            title="Sector and foundation-model baskets."
+            hint="Curated baskets that track a slice of the market: top coding agents, the FM-50 model board, MCP servers, and more."
+            trailingHref="/indexes"
+            trailingLabel="All indexes →"
           />
           <Suspense fallback={<IndexesGridSkeleton count={Math.max(indexes.length, 6)} />}>
             <IndexesGrid indexes={indexes} />
@@ -386,24 +380,45 @@ function pickHeadline({
   };
 }
 
-function SectionHead({
-  label,
+// Strong section heading: mono kicker, editorial title, body hint,
+// optional trailing action link. Mirrors the "Find the right agent"
+// block so every section reads at the same weight on the Floor.
+function BigHead({
+  kicker,
+  title,
   hint,
-  trailing,
+  trailingHref,
+  trailingLabel,
 }: {
-  label: string;
+  kicker: string;
+  title: string;
   hint?: string;
-  trailing?: React.ReactNode;
+  trailingHref?: string;
+  trailingLabel?: string;
 }) {
   return (
-    <div className="mb-4 flex items-end justify-between">
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          {label}
+          {kicker}
         </div>
-        {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+        <h2 className="editorial mt-1 text-2xl font-semibold leading-tight md:text-3xl">
+          {title}
+        </h2>
+        {hint && (
+          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+            {hint}
+          </p>
+        )}
       </div>
-      {trailing}
+      {trailingHref && trailingLabel && (
+        <Link
+          href={trailingHref}
+          className="text-xs font-mono uppercase tracking-wider text-primary hover:underline"
+        >
+          {trailingLabel}
+        </Link>
+      )}
     </div>
   );
 }

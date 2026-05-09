@@ -48,7 +48,10 @@ export function TickerTape({ initial }: TickerTapeProps) {
   // Render the row twice so the marquee has no visible seam.
   return (
     <div className="relative w-full overflow-hidden border-b border-border bg-card">
-      <div className="absolute right-3 top-1.5 z-10 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+      {/* Live/Not-Live indicator is desktop-only. On mobile the icon
+          flashed in and out every page navigation as the WebSocket
+          re-handshook, which read as broken rather than alive. */}
+      <div className="absolute right-3 top-1.5 z-10 hidden items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground md:flex">
         {connected ? (
           <Wifi className="h-3 w-3 text-gain" />
         ) : (
