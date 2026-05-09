@@ -233,7 +233,17 @@ interface Props {
 
 export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
   const [window, setWindow] = useState<Window>("all");
-  const [expanded, setExpanded] = useState<string | null>("adoption");
+  // Multi-open accordion: opening one pillar leaves any others
+  // already open in place. Adoption is open by default so the
+  // first read shows real signal data, not just collapsed rows.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["adoption"]));
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const { data: history } = useQuery({
     queryKey: ["score-history", slug, window],
@@ -385,12 +395,12 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
         </div>
         <ul className="divide-y divide-border">
           {rows.map((r) => {
-            const open = expanded === r.key;
+            const open = expanded.has(r.key);
             return (
               <li key={r.key}>
                 <button
                   type="button"
-                  onClick={() => setExpanded(open ? null : r.key)}
+                  onClick={() => toggleExpanded(r.key)}
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-subtle/50 sm:gap-3 sm:px-4"
                 >
                   <ChevronRight
