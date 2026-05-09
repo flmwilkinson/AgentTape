@@ -19,7 +19,7 @@
 set -euo pipefail
 
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
-SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILI4iIW4o/7SM6Z54LC79C3ld8ytKEr2eK43LvEPqXsG agenttape-deploy"
+SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTicL6RFS4U9pkecQzS072XxI7+4goAJM2KB96o+Un5 f.l.m.wilkinson@gmail.com"
 
 # ---------------------------------------------------------------- packages
 apt-get update -y
