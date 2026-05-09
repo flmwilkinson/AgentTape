@@ -117,6 +117,10 @@ ANCHORS: dict[SignalSource, float] = {
     # scaled() — anchor here is the value-where-the-score-is-50.
     # 24h ↔ 50 means "a one-day median response is the par baseline".
     SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D: 24,
+    # Cumulative repos calling a foundation model. 100 distinct repos
+    # = score 50 — that's "real ecosystem traction, not a one-off".
+    # Top FMs (Claude, GPT) clear several thousand and so peg at 100.
+    SignalSource.GITHUB_REPOS_USING_MODEL: 100,
 }
 
 
@@ -245,6 +249,11 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.REDDIT_POINTS_7D,
+        # Total GitHub repos calling this model. Best signal we have
+        # for community traction on closed-weight flagships (Claude,
+        # GPT, Gemini) that have no HF page and no GitHub repo of
+        # their own. See sources/github_repos_using_model.py.
+        SignalSource.GITHUB_REPOS_USING_MODEL,
     ],
 }
 

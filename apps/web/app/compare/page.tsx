@@ -605,7 +605,14 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "openrouter_token_volume_30d",
   ],
   // Bluesky removed: it's already in Adoption (level) + Momentum (rate).
-  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
+  // github_repos_using_model added: ecosystem-usage signal for
+  // closed-weight flagships that have no HF or GitHub home of their own.
+  community: [
+    "hf_likes",
+    "github_contributors",
+    "reddit_points_7d",
+    "github_repos_using_model",
+  ],
 };
 const SIGNAL_LABEL: Record<string, string> = {
   github_stars: "GitHub stars",
@@ -634,6 +641,7 @@ const SIGNAL_LABEL: Record<string, string> = {
   google_trends_score: "Google Trends",
   openrouter_token_volume_30d: "OpenRouter tokens (30d)",
   github_first_response_hours_30d: "First-response hours (30d, median)",
+  github_repos_using_model: "GitHub repos using this model",
 };
 
 function fmtCount(n: number): string {

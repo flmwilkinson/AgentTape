@@ -20,6 +20,9 @@ from ingestion.sources.github_issue_velocity import (
 )
 from ingestion.sources.github_mentions import GithubMentions7dIngestor
 from ingestion.sources.github_releases import GithubReleases90dIngestor
+from ingestion.sources.github_repos_using_model import (
+    GithubReposUsingModelIngestor,
+)
 from ingestion.sources.github_response_time import (
     GithubFirstResponseHours30dIngestor,
 )
@@ -60,6 +63,7 @@ __all__ = [
     "GithubIssueCloseRate30dIngestor",
     "GithubMentions7dIngestor",
     "GithubReleases90dIngestor",
+    "GithubReposUsingModelIngestor",
     "GithubStarsIngestor",
     "GoogleTrendsScoreIngestor",
     "HFDownloads30dIngestor",

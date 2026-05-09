@@ -151,7 +151,15 @@ const FOUNDATION_MODEL_PILLARS = {
   ],
   // Bluesky removed: it already feeds Adoption (level) + Momentum
   // (rate). Triple-counting the same reading inflates community.
-  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
+  // github_repos_using_model added: ecosystem usage for
+  // closed-weight flagships (Claude, GPT, Gemini) without HF / GH
+  // pages of their own.
+  community: [
+    "hf_likes",
+    "github_contributors",
+    "reddit_points_7d",
+    "github_repos_using_model",
+  ],
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -163,6 +171,7 @@ const SOURCE_LABELS: Record<string, string> = {
   github_releases_90d: "GitHub releases (90d)",
   github_issue_close_rate_30d: "Issue close rate (30d)",
   github_first_response_hours_30d: "Median first-response hours (30d)",
+  github_repos_using_model: "GitHub repos using this model",
   openrouter_token_volume_30d: "OpenRouter tokens (30d)",
   hf_downloads_30d: "HF downloads (30d)",
   hf_likes: "HF likes",

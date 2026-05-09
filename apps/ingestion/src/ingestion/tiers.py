@@ -29,6 +29,7 @@ from ingestion.sources import (
     GithubIssueCloseRate30dIngestor,
     GithubMentions7dIngestor,
     GithubReleases90dIngestor,
+    GithubReposUsingModelIngestor,
     GithubStarsIngestor,
     GoogleTrendsScoreIngestor,
     HFDownloads30dIngestor,
@@ -96,6 +97,11 @@ SLOW: list[type[Ingestor]] = [
     # per recent issue, capped at 30 issues × ~500 repos). Daily is
     # plenty given the underlying medians don't move that fast.
     GithubFirstResponseHours30dIngestor,
+    # Cumulative count of GitHub repos referencing each FM. Slow
+    # tier — the underlying number doesn't churn faster than daily,
+    # and the GitHub Code Search API is the slowest of our github
+    # endpoints (30 req/min authenticated).
+    GithubReposUsingModelIngestor,
 ]
 
 
