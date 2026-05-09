@@ -78,6 +78,32 @@ LEADERBOARDS: list[_Leaderboard] = [
         max_score=None,  # ELO is unbounded
         parser="lmsys_arena_hf",
     ),
+    # BigCode Models Leaderboard. Public HF dataset, scores models on
+    # HumanEval / MBPP / MultiPL-E. Direct fit for "best AI coding
+    # agent" queries since coding-capable FMs are the spine of the
+    # CODE-25 / agent-engine selection question. Same datasets-server
+    # parser shape as Open LLM (eval_name + Average column).
+    _Leaderboard(
+        name="bigcode-models",
+        url=(
+            "https://datasets-server.huggingface.co/rows"
+            "?dataset=bigcode%2Fbigcode-models-leaderboard"
+            "&config=default&split=train"
+        ),
+        max_score=100.0,
+        parser="hf_dataset_rows",
+    ),
+    # LiveBench. Monthly contamination-free benchmark covering
+    # reasoning, coding, math and language. CSV published at the
+    # website; first column is the model id, "Global Average" column
+    # is the headline. Parser already exists in this module — we
+    # just needed an entry to wire the URL.
+    _Leaderboard(
+        name="livebench",
+        url="https://livebench.ai/livebench.csv",
+        max_score=100.0,
+        parser="livebench",
+    ),
 ]
 
 # Patterns we expect to find in slugs / names so we can match a
