@@ -22,11 +22,19 @@ class Settings(BaseSettings):
 
     # Dev throttle. The scouts cap at this many candidates per run so a wild
     # GitHub query doesn't dump 10k rows into the holding pen.
-    max_candidates_per_run: int = 100
+    max_candidates_per_run: int = 200
 
-    # Promoter thresholds.
-    auto_admit_threshold: float = 0.6
-    auto_reject_threshold: float = 0.4
+    # Promoter thresholds. Set to the same value so there is NO middle
+    # "pending review" bucket — every candidate either admits or
+    # rejects on the first promoter pass. Otherwise the bucket grows
+    # without bound (no automated review process exists).
+    #
+    # 0.5 = "has an LLM dependency AND at least one supporting signal
+    # (agent vocab / popularity / maintained / packaged)". Stricter
+    # than 0.4 (LLM dep alone) so we don't admit any repo that
+    # name-drops "openai" once.
+    auto_admit_threshold: float = 0.5
+    auto_reject_threshold: float = 0.5
 
     # User-Agent for outbound HTTP. Some hosts (HF, registry sites) want this.
     user_agent: str = "AgentTape-Discovery/0.0 (+https://github.com/flmwilkinson/AgentTape)"

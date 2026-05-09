@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import redis.asyncio as redis_async
@@ -55,22 +56,38 @@ async def lifespan(app: FastAPI):
     scheduler: AsyncIOScheduler | None = None
     if os.environ.get("DISCOVERY_SCHEDULER", "on").lower() != "off":
         scheduler = AsyncIOScheduler()
-        for cls in ALL_SCOUTS:
+        # APScheduler bug fix: passing ``next_run_time=None`` to
+        # ``add_job`` PAUSES the job indefinitely; the comment that
+        # used to live here ("stagger first run by 30s") was wrong.
+        # The IntervalTrigger then has nothing to compute from and the
+        # scout never fires. Symptom in production was no admissions
+        # since cloud bootstrap. Now we set an explicit first-run
+        # 30 seconds after boot, staggered 15s per scout so we don't
+        # slam every external API at the same instant.
+        first_run_base = datetime.now(UTC) + timedelta(seconds=30)
+        for idx, cls in enumerate(ALL_SCOUTS):
             scheduler.add_job(
                 _run_scout_job,
                 IntervalTrigger(seconds=cls.interval_seconds),
                 args=[cls],
                 id=f"scout-{cls.name}",
-                # Stagger first run by 30s so we don't slam every API at boot.
-                next_run_time=None,
+                next_run_time=first_run_base + timedelta(seconds=idx * 15),
             )
         scheduler.add_job(
             _promoter_job,
             IntervalTrigger(seconds=10 * 60),
             id="promoter",
+            # First promoter run 60s after boot — gives the first
+            # scout tier a chance to actually drop candidates in.
+            next_run_time=datetime.now(UTC) + timedelta(seconds=60),
         )
         scheduler.start()
-        log.info("discovery scheduler started with %d jobs", len(scheduler.get_jobs()))
+        scheduled = scheduler.get_jobs()
+        log.info(
+            "discovery scheduler started with %d jobs; first scout fires at %s",
+            len(scheduled),
+            first_run_base.isoformat(),
+        )
     yield
     if scheduler is not None:
         scheduler.shutdown(wait=False)
