@@ -216,12 +216,19 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.GITHUB_STARS,
         SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.WIKIPEDIA_VIEWS_30D,
-        # OpenRouter token volume — best public proxy for "actual
+        # OpenRouter token volume is the best public proxy for "actual
         # production traffic" on FMs. Routinely diverges from
         # benchmark and HF download rankings.
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
-    "quality": [SignalSource.BENCHMARK_SCORE],
+    "quality": [
+        SignalSource.BENCHMARK_SCORE,
+        # Peer-reviewed citations are a quality signal that doesn't
+        # depend on a benchmark catalogue catching up to a new model.
+        # Useful for new flagships (e.g. GPT/Claude releases) before
+        # leaderboards refresh.
+        SignalSource.ARXIV_CITATIONS,
+    ],
     "momentum": [
         SignalSource.HF_DOWNLOADS_30D,
         SignalSource.HN_MENTIONS_7D,
@@ -232,9 +239,11 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
     "community": [
+        # Note: BLUESKY_MENTIONS_7D was removed here — it already
+        # feeds Adoption (level) and Momentum (rate of change). Having
+        # it in Community too was a triple-count of the same row.
         SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
-        SignalSource.BLUESKY_MENTIONS_7D,
         SignalSource.REDDIT_POINTS_7D,
     ],
 }

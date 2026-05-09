@@ -594,7 +594,7 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "wikipedia_views_30d",
     "openrouter_token_volume_30d",
   ],
-  quality: ["benchmark_score"],
+  quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
     "hf_downloads_30d",
     "hn_mentions_7d",
@@ -604,7 +604,8 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "google_trends_score",
     "openrouter_token_volume_30d",
   ],
-  community: ["hf_likes", "github_contributors", "bluesky_mentions_7d", "reddit_points_7d"],
+  // Bluesky removed: it's already in Adoption (level) + Momentum (rate).
+  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
 };
 const SIGNAL_LABEL: Record<string, string> = {
   github_stars: "GitHub stars",

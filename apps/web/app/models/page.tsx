@@ -167,6 +167,21 @@ export default function ModelsPage() {
     } else if (openness === "closed") {
       out = out.filter((m) => !OPEN_FAMILIES.has(familyOf(m.slug)));
     }
+    // Sort by rank_now so the displayed rank column is monotonic.
+    // The API returns rows ordered by agent_score (full precision)
+    // but rank_now is computed at a slightly different snapshot
+    // moment, so when scores tie at e.g. 36.4 the display order
+    // and the rank number can disagree (#4, #6, #5 ...). Sorting
+    // by rank_now keeps them aligned. Rows with no rank fall
+    // through to the bottom by score.
+    out = [...out].sort((a, b) => {
+      const ra = a.score?.rank_now;
+      const rb = b.score?.rank_now;
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return (b.score?.agent_score ?? 0) - (a.score?.agent_score ?? 0);
+    });
     return out;
   }, [all, family, tier, reasoning, modality, openness]);
 

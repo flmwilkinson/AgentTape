@@ -139,7 +139,7 @@ const FOUNDATION_MODEL_PILLARS = {
     "wikipedia_views_30d",
     "openrouter_token_volume_30d",
   ],
-  quality: ["benchmark_score"],
+  quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
     "hf_downloads_30d",
     "hn_mentions_7d",
@@ -149,7 +149,9 @@ const FOUNDATION_MODEL_PILLARS = {
     "google_trends_score",
     "openrouter_token_volume_30d",
   ],
-  community: ["hf_likes", "github_contributors", "bluesky_mentions_7d", "reddit_points_7d"],
+  // Bluesky removed: it already feeds Adoption (level) + Momentum
+  // (rate). Triple-counting the same reading inflates community.
+  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
 };
 
 const SOURCE_LABELS: Record<string, string> = {
