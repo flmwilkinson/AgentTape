@@ -11,7 +11,10 @@ import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
 import { WatchToggle } from "@/components/watch-toggle";
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR. Cached HTML keeps serving when the backend is slow or
+// unreachable. Trade-off: a 5-minute lag on composite moves vs a hard
+// outage when Hetzner blips.
+export const revalidate = 300;
 
 export async function generateMetadata({
   params,

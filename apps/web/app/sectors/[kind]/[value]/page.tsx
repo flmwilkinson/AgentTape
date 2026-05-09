@@ -19,7 +19,10 @@ import { SectorMembersPanel } from "@/components/sector-members-panel";
 
 const VALID_KINDS = ["capability", "deployment", "maturity", "domain", "license"];
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR. Cached HTML keeps serving when the backend is slow or
+// unreachable. Trade-off: a 5-minute lag on cohort moves vs a hard
+// outage when Hetzner blips.
+export const revalidate = 300;
 
 interface PageParams {
   params: Promise<{ kind: string; value: string }>;

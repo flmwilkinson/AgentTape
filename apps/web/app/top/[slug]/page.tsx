@@ -162,7 +162,8 @@ export async function generateMetadata({
   };
 }
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR. SEO landings stay visible during backend outages.
+export const revalidate = 300;
 
 export default async function SectorLandingPage({
   params,

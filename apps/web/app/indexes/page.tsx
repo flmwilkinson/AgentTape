@@ -1,11 +1,12 @@
 import { api } from "@/lib/api-client";
 import { IndexCard } from "@/components/index-card";
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR so cached HTML survives backend outages.
+export const revalidate = 300;
 export const metadata = { title: "Indexes" };
 
 export default async function IndexesPage() {
-  const indexes = await api.listIndexes();
+  const indexes = await api.listIndexes().catch(() => []);
   const histories = await Promise.all(
     indexes.map((i) =>
       api

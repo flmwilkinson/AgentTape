@@ -11,7 +11,11 @@ import { FmFactsPanel } from "@/components/fm-facts-panel";
 import { ScoreBreakdownPanel } from "@/components/score-breakdown-panel";
 import { TickerCard } from "@/components/ticker-card";
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR. Cached HTML keeps serving when the backend is slow or
+// unreachable; only first-time renders for an uncached slug actually
+// hit the API. Trade-off: a 5-minute lag on score moves vs a hard
+// outage when Hetzner blips.
+export const revalidate = 300;
 
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> },

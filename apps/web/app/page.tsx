@@ -22,19 +22,36 @@ import { CAPABILITIES } from "@/lib/taxonomy";
 // fold — useful context but not what someone showing up for the first
 // time needs to see first.
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR cache. Vercel keeps the last successful render around
+// and re-validates in the background. When the backend is slow or
+// down, visitors still get the cached HTML (a few minutes stale) —
+// massively better than a 10-second blank screen followed by a hard
+// error. Only after the cache expires AND a fresh fetch fails do we
+// show the partial-data fallbacks below.
+export const revalidate = 300;
+
+// Fallbacks rendered when the API is unreachable or returns an
+// unexpected shape. Each top-level fetch is wrapped with .catch so
+// a single dead endpoint doesn't take the page down.
+const EMPTY_AGENTS_PAGE = { items: [], total: 0, limit: 60, offset: 0 };
 
 export default async function FloorPage() {
-  // /movers ranks by absolute delta. We pull a wide slice (60) so
-  // both gainers and decliners are visible — if we only fetched 8
-  // and all eight were big drops (e.g. after a formula recalibration),
-  // the gainers panel would falsely look empty.
+  // Each call independently catches — if the backend is down, the
+  // page still renders, just with empty sections that show
+  // "temporarily unavailable" hints. We fan out in parallel and let
+  // each piece succeed or fail on its own.
   const [agentsPage, indexes, movers24h, recent] = await Promise.all([
-    api.listAgents({ sort: "score", limit: 60 }),
-    api.listIndexes(),
-    api.movers("1d", 60),
-    api.recentDiscoveries(8),
+    api.listAgents({ sort: "score", limit: 60 }).catch(() => EMPTY_AGENTS_PAGE),
+    api.listIndexes().catch(() => []),
+    api.movers("1d", 60).catch(() => []),
+    api.recentDiscoveries(8).catch(() => []),
   ]);
+
+  const apiOffline =
+    agentsPage.items.length === 0 &&
+    indexes.length === 0 &&
+    movers24h.length === 0 &&
+    recent.length === 0;
 
   const agents = agentsPage.items;
   const top24h = movers24h
@@ -63,6 +80,19 @@ export default async function FloorPage() {
     <div>
       <TickerTape initial={agents.slice(0, 30)} />
       <WelcomeBanner />
+
+      {apiOffline && (
+        <div className="border-b border-loss/30 bg-loss-subtle">
+          <div className="container py-3 text-sm">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-loss">
+              Backend unreachable
+            </span>{" "}
+            Live data refresh is paused — the cached page below may be a few
+            minutes stale. The site auto-recovers as soon as the backend
+            reconnects.
+          </div>
+        </div>
+      )}
 
       <div className="container py-8 md:py-12 space-y-12">
         {/* Headline of the day — auto-picked, never stale. */}

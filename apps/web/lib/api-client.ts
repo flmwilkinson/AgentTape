@@ -4,15 +4,26 @@
 // fetcher itself untyped at the wire — the response shapes are
 // re-typed at the call site so a schema drift surfaces as a TS error
 // in the page that uses the response, not a generic API helper.
+//
+// Server-side timeout is critical: when the backend is unreachable
+// (Hetzner outage, network blip, DNS hiccup), Node's default fetch
+// hangs ~10-30s before failing. That manifests as a 10-second blank
+// page on Vercel before any error UI renders. Capping at 3s means a
+// failed call surfaces in user-visible time.
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
+const DEFAULT_TIMEOUT_MS = 3000;
+
 export async function apiFetch<T>(
   path: string,
-  init: RequestInit & { searchParams?: Record<string, string | number | boolean | string[] | undefined> } = {},
+  init: RequestInit & {
+    searchParams?: Record<string, string | number | boolean | string[] | undefined>;
+    timeoutMs?: number;
+  } = {},
 ): Promise<T> {
-  const { searchParams, ...rest } = init;
+  const { searchParams, timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
   let url = `${API_BASE}${path}`;
   if (searchParams) {
     const qs = new URLSearchParams();
@@ -25,8 +36,18 @@ export async function apiFetch<T>(
     if (s) url += `?${s}`;
   }
 
+  // Respect a caller-supplied AbortSignal (e.g. React Query) but
+  // also bound the call ourselves so a hung backend can't blank the
+  // page for 30s. AbortSignal.timeout produces a one-shot signal we
+  // merge with whatever the caller already passed.
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = rest.signal
+    ? AbortSignal.any([rest.signal, timeoutSignal])
+    : timeoutSignal;
+
   const res = await fetch(url, {
     ...rest,
+    signal,
     headers: {
       Accept: "application/json",
       ...(rest.headers ?? {}),
