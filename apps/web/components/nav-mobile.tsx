@@ -39,16 +39,19 @@ type Tab = {
 const TABS: Tab[] = [
   { href: "/", label: "Floor", icon: Home, match: (p) => p === "/" },
   { href: "/sectors", label: "Sectors", icon: Hash },
+  { href: "/models", label: "Models", icon: Cpu },
   { href: "/trending", label: "Trending", icon: TrendingUp },
-  { href: "/compare", label: "Compare", icon: GitCompare },
 ];
 
 // Items in the More sheet — everything not on the bar. Order is rough
 // importance / use-frequency, with "destinations" first and "context"
-// pages (methodology, about, developers) last.
+// pages (methodology, about) last. Compare lives here so it's still
+// reachable but doesn't crowd the bottom bar — most mobile sessions
+// don't go straight to Compare without first browsing.
 const MORE: { href: string; label: string; icon: typeof Home }[] = [
-  { href: "/models", label: "Models", icon: Cpu },
+  { href: "/compare", label: "Compare", icon: GitCompare },
   { href: "/indexes", label: "Indexes", icon: Layers },
+  { href: "/new", label: "New", icon: TrendingUp },
   { href: "/search", label: "Search", icon: Compass },
   { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/articles", label: "Articles", icon: BookOpen },
@@ -70,7 +73,6 @@ export function NavMobile() {
             const active = t.match
               ? t.match(pathname)
               : pathname.startsWith(t.href);
-            const showBadge = t.href === "/compare" && compareCount > 0;
             return (
               <li key={t.href}>
                 <Link
@@ -88,11 +90,6 @@ export function NavMobile() {
                   <span className="font-mono uppercase tracking-wider">
                     {t.label}
                   </span>
-                  {showBadge && (
-                    <span className="absolute right-3 top-2 rounded-full bg-primary px-1.5 py-0.5 font-mono text-[9px] leading-none text-primary-foreground">
-                      {compareCount}
-                    </span>
-                  )}
                 </Link>
               </li>
             );
@@ -102,12 +99,17 @@ export function NavMobile() {
               type="button"
               onClick={() => setMoreOpen(true)}
               aria-label="More"
-              className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground"
+              className="relative flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground"
             >
               <Menu className="h-5 w-5" strokeWidth={1.75} />
               <span className="font-mono uppercase tracking-wider">
                 More
               </span>
+              {compareCount > 0 && (
+                <span className="absolute right-3 top-2 rounded-full bg-primary px-1.5 py-0.5 font-mono text-[9px] leading-none text-primary-foreground">
+                  {compareCount}
+                </span>
+              )}
             </button>
           </li>
         </ul>

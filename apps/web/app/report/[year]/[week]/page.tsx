@@ -121,11 +121,7 @@ export default async function WeeklyReport({ params }: PageParams) {
       </section>
 
       <p className="mt-16 text-xs text-muted-foreground">
-        Reports are versioned at /report/[year]/[week]. Earlier:{" "}
-        <Link href="/report" className="text-primary hover:underline">
-          archive
-        </Link>
-        .
+        Reports are versioned at /report/[year]/[week].
       </p>
     </article>
   );
