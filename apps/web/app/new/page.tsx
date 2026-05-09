@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Wifi, WifiOff } from "lucide-react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { useWebSocket, type WsFrame } from "@/lib/ws";
 import { formatScore, relativeTime } from "@/lib/format";
 import { WatchToggle } from "@/components/watch-toggle";
 
-// /discovery — the autonomous-discovery brag.
+// /new — the autonomous-discovery brag.
 // Server-rendered initial paint via TanStack Query, plus a WS feed
-// that prepends new admissions as they happen.
+// that prepends new admissions as they happen. We don't surface a
+// "Live / Reconnecting" pill on this page anymore — the WebSocket
+// reconnects on every navigation and the pill flashed in and out
+// constantly, which read as broken rather than alive. Page freshness
+// is communicated by the relative-time stamp on each row instead.
 
 export default function DiscoveryPage() {
   const { data: initial } = useQuery({
@@ -20,7 +23,10 @@ export default function DiscoveryPage() {
   });
   const [stream, setStream] = useState<AgentSummary[]>([]);
 
-  const { connected } = useWebSocket({
+  // Subscribe but ignore connection state: we only react to event
+  // frames. If the WS drops, the next visit will pull fresh data via
+  // useQuery and refresh on its own, no UI affordance needed.
+  useWebSocket({
     path: "/ws/ticker",
     onFrame: async (frame: WsFrame) => {
       if (frame.type !== "event") return;
@@ -49,28 +55,18 @@ export default function DiscoveryPage() {
 
   return (
     <div className="container py-8 md:py-12">
-      <div className="mb-8 flex items-end justify-between gap-4">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Discovery feed
-          </div>
-          <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
-            Agents are appearing here without us telling them to.
-          </h1>
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-            The discovery service scans GitHub, Hugging Face, MCP registries,
-            npm/PyPI, arXiv, and Hacker News on its own schedule.
-            Admitted agents land here first.
-          </p>
+      <div className="mb-8">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          Discovery feed
         </div>
-        <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-          {connected ? (
-            <Wifi className="h-3.5 w-3.5 text-gain" />
-          ) : (
-            <WifiOff className="h-3.5 w-3.5 text-loss" />
-          )}
-          {connected ? "Live" : "Reconnecting"}
-        </div>
+        <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
+          Agents are appearing here without us telling them to.
+        </h1>
+        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+          The discovery service scans GitHub, Hugging Face, MCP registries,
+          npm/PyPI, arXiv, and Hacker News on its own schedule.
+          Admitted agents land here first.
+        </p>
       </div>
 
       <ol className="space-y-2">
