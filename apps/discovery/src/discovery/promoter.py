@@ -440,9 +440,16 @@ async def _attach_tag(
 
 
 def _extract_name(payload: dict[str, Any], source_id: str) -> str:
+    # Order matters. Prefer fields the scout set deliberately (name,
+    # full_name) over derived ones, then fall back to anything that
+    # carries an "owner/repo" form before giving up to source_id.
+    # source_id is a last resort because some scouts encode metadata
+    # into it (e.g. HN's "<story_id>:<full_name>") which produces
+    # ugly slugs like "48068741-owner-repo".
     return (
         payload.get("name")
         or payload.get("full_name")
+        or payload.get("github_repo")
         or payload.get("title")
         or source_id
     )

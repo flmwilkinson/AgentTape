@@ -1,10 +1,17 @@
 """arXiv scout.
 
 Daily query against arXiv for new cs.AI / cs.CL papers mentioning
-"agent" together with one of (framework | benchmark | release). We pull
-the abstract and extract any github.com URLs — research papers are a
-strong source of newly-published frameworks and benchmarks that
+"agent" together with one of (framework | benchmark | release). We
+pull the abstract and extract any github.com URLs — research papers
+are a strong source of newly-published frameworks and benchmarks that
 GitHub-trending hasn't caught yet.
+
+Important: we do NOT admit the paper itself as an agent. A paper is a
+description of research, not a deployable thing. We only emit
+candidates for github repos referenced in the abstract — those are
+the actual frameworks the paper releases. The paper's existence is
+captured separately as a SIGNAL on those github-discovered agents
+via the ``arxiv_mentions`` ingestor.
 """
 from __future__ import annotations
 
@@ -55,24 +62,17 @@ class ArxivScout(Scout):
             summary = (entry.get("summary") or "").replace("\n", " ")
             title = (entry.get("title") or "").replace("\n", " ")
 
-            # Yield the paper itself as a candidate.
-            yield Candidate(
-                source=DiscoverySource.ARXIV,
-                source_id=arxiv_id,
-                raw_payload={
-                    "arxiv_id": arxiv_id,
-                    "title": title,
-                    "summary": summary,
-                    "authors": [a.get("name") for a in (entry.get("authors") or [])],
-                    "published": entry.get("published"),
-                    "primary_category": (entry.get("arxiv_primary_category") or {}).get("term"),
-                    "html_url": entry.get("link"),
-                    "github_repos": list(_extract_github_repos(summary)),
-                },
-            )
-
-            # And any GitHub repos referenced in the abstract — those are
-            # the actual frameworks the paper releases.
+            # Only emit candidates for github repos referenced in the
+            # abstract. The paper itself is research, not an agent —
+            # we used to admit it as a candidate but that polluted the
+            # index with rows like "Agentic RAG for Financial Document
+            # QA" which aren't deployable tools.
+            #
+            # If a paper has no github repo in the abstract we drop it
+            # entirely from discovery. The arxiv_mentions ingestor
+            # will still pick up "this paper mentions agent X" as a
+            # signal on already-admitted agents — that's the right
+            # place for the paper to surface.
             for owner, repo in _extract_github_repos(summary):
                 full = f"{owner}/{repo}"
                 yield Candidate(
@@ -80,9 +80,11 @@ class ArxivScout(Scout):
                     source_id=full,
                     raw_payload={
                         "full_name": full,
+                        "github_repo": full,
                         "discovered_via": "arxiv",
                         "arxiv_id": arxiv_id,
                         "title": title,
+                        "summary": summary,
                     },
                 )
 

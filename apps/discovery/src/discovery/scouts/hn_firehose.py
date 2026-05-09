@@ -81,12 +81,19 @@ class HNFirehoseScout(Scout):
                 source=DiscoverySource.HACKER_NEWS,
                 source_id=f"{hit.get('objectID')}:{full_name}",
                 raw_payload={
+                    # full_name is what _extract_name in the promoter
+                    # uses to derive the agent name + slug. Without it,
+                    # the slug fell through to source_id ("48068741:...")
+                    # which prefixed every HN-discovered agent with the
+                    # HN story id — ugly + breaks dedup against the same
+                    # repo discovered via github_search.
+                    "full_name": full_name,
+                    "github_repo": full_name,
                     "hn_id": hit.get("objectID"),
                     "hn_title": title,
                     "hn_url": f"https://news.ycombinator.com/item?id={hit.get('objectID')}",
                     "story_url": url,
                     "story_text": story_text[:2000] if story_text else None,
-                    "github_repo": full_name,
                     "points": hit.get("points"),
                     "num_comments": hit.get("num_comments"),
                     "created_at": hit.get("created_at"),
