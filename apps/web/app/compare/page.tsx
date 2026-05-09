@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Fragment, Suspense, useState } from "react";
+import { Fragment, Suspense, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareChart } from "@/components/compare-chart";
@@ -55,6 +54,16 @@ function ComparePageInner() {
     ? raw.split(",").filter(Boolean).slice(0, MAX)
     : [legacyA, legacyB].filter((s): s is string => Boolean(s)).slice(0, MAX);
   const [draft, setDraft] = useState("");
+  // Ref on the slug input so empty slot cards can scroll-and-focus it
+  // instead of routing the user away to /search and losing context.
+  const draftInputRef = useRef<HTMLInputElement>(null);
+  const focusDraftInput = () => {
+    const el = draftInputRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Slight delay so the focus ring lands after the scroll settles.
+    setTimeout(() => el.focus(), 250);
+  };
 
   const detailQueries = useQueries({
     queries: slugs.map((slug) => ({
@@ -129,10 +138,11 @@ function ComparePageInner() {
         }}
       >
         <input
+          ref={draftInputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="agent-slug (e.g. autogpt, browser-use, anthropic-claude-haiku-latest)"
-          className="flex-1 min-w-[260px] rounded-md border border-border bg-card px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
+          className="flex-1 min-w-[260px] rounded-md border border-border bg-card px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
         />
         <button
           type="submit"
@@ -260,17 +270,19 @@ function ComparePageInner() {
           );
         })}
         {Array.from({ length: Math.max(0, MAX - slugs.length) }).map((_, i) => (
-          <Link
+          <button
             key={`empty-${i}`}
-            href="/search"
+            type="button"
+            onClick={focusDraftInput}
+            aria-label="Add an agent to compare"
             className="group flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-subtle hover:text-foreground"
           >
             <Plus className="h-5 w-5 transition-transform group-hover:scale-110" />
             <span>add an agent</span>
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
-              opens search
+              type a slug above
             </span>
-          </Link>
+          </button>
         ))}
       </div>
 

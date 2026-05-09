@@ -461,6 +461,17 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           {r.contributing.map((c) => {
                             const series = sigSeriesBySource.get(c.source) ?? [];
+                            // Level-vs-rate label disambiguation.
+                            // The same source (e.g. github_stars) can
+                            // appear under both Adoption and Momentum;
+                            // under Adoption we read the current level,
+                            // under Momentum the 7-day growth rate. The
+                            // shared SOURCE_LABEL hid that distinction.
+                            const baseLabel = SOURCE_LABELS[c.source] ?? c.source;
+                            const label =
+                              r.key === "momentum"
+                                ? `${baseLabel} (7-day growth)`
+                                : baseLabel;
                             return (
                               <div
                                 key={c.source}
@@ -468,7 +479,7 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                               >
                                 <div className="flex items-center justify-between">
                                   <span className="text-foreground/85">
-                                    {SOURCE_LABELS[c.source] ?? c.source}
+                                    {label}
                                   </span>
                                   {c.delta24h != null && c.delta24h !== 0 && (
                                     <span
