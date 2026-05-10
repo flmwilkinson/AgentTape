@@ -17,6 +17,20 @@ import { WatchToggle } from "@/components/watch-toggle";
 // outage when Hetzner blips.
 export const revalidate = 300;
 
+// Pre-build the known indexes at deploy time so first-hit navigation
+// is instant. There are only ~6 of them, so the cost is negligible
+// and the user-visible win is large: clicking from /indexes into
+// CODE-25 used to do a full SSR, now it serves the pre-built HTML.
+export async function generateStaticParams() {
+  try {
+    const indexes = await api.listIndexes();
+    return indexes.map((i) => ({ slug: i.slug }));
+  } catch {
+    // Build fails open — Next will SSR on demand instead.
+    return [];
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {

@@ -37,7 +37,10 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "force-dynamic";
+// 5-minute ISR. Was force-dynamic, which meant every /about hit
+// SSR'd from scratch and waited on /agents + /indexes. Cached HTML
+// is plenty fresh for an "about" page.
+export const revalidate = 300;
 
 export default async function AboutPage() {
   // Live top-5 application + foundation-model — keeps the page fresh

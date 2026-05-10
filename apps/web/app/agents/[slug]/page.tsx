@@ -17,6 +17,21 @@ import { TickerCard } from "@/components/ticker-card";
 // outage when Hetzner blips.
 export const revalidate = 300;
 
+// Pre-render the top 50 agents at deploy time so the most common
+// navigations (Floor → highest-scoring ticker, Trending → top mover)
+// land on a fully built page instead of triggering a cold SSR. Lower-
+// ranked agents still SSR on first hit, then ISR caches them for 5
+// minutes. The build budget is small: 50 × ~3 fetches each = 150
+// extra calls during deploy.
+export async function generateStaticParams() {
+  try {
+    const page = await api.listAgents({ sort: "score", limit: 50 });
+    return page.items.map((a) => ({ slug: a.slug }));
+  } catch {
+    return [];
+  }
+}
+
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<Metadata> {

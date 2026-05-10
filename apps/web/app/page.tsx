@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
-import type { AgentSummary, IndexSummary } from "@/lib/api-client";
+import type { AgentSummary, IndexSummary, Mover } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import {
   CapabilityRail,
@@ -74,14 +74,13 @@ export default async function FloorPage() {
   }
 
   const agents = agentsPage.items;
-  const top24h = movers24h
-    .filter((m) => m.delta > 0)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, 3);
-  const drops24h = movers24h
-    .filter((m) => m.delta < 0)
-    .sort((a, b) => a.delta - b.delta)
-    .slice(0, 3);
+  // Keep both kinds visible. Foundation models tend to dominate raw
+  // delta rankings (broader signal coverage = bigger swings) — without
+  // balancing, the home page gainers list reads like an FM-only board.
+  // Take up to 2 of each kind, then sort the combined set by
+  // signed delta so the largest move (any kind) leads.
+  const top24h = balanceMovers(movers24h, (m) => m.delta > 0, "desc");
+  const drops24h = balanceMovers(movers24h, (m) => m.delta < 0, "asc");
   const headline = pickHeadline({ top24h, drops24h, recent });
 
   // Index sparklines + capability rail are deferred to <Suspense>
@@ -405,6 +404,32 @@ function groupAgentsByCapability(
 
 
 // ---------------------------------------------------------------- helpers
+
+// Balance a movers list across application + foundation_model so the
+// home page never reads as FM-only just because FM scores swing
+// wider. Up to two of each kind enter the result, then we sort the
+// combined set by signed delta so the largest move still leads.
+//
+// `pred` selects gainers vs decliners; `direction` picks the sort
+// order ("desc" for biggest gain first, "asc" for biggest drop first).
+function balanceMovers(
+  movers: Mover[],
+  pred: (m: Mover) => boolean,
+  direction: "asc" | "desc",
+): Mover[] {
+  const filtered = movers.filter(pred);
+  const sortFn = (a: Mover, b: Mover) =>
+    direction === "desc" ? b.delta - a.delta : a.delta - b.delta;
+  const apps = filtered
+    .filter((m) => m.agent.entity_kind === "application")
+    .sort(sortFn)
+    .slice(0, 2);
+  const fms = filtered
+    .filter((m) => m.agent.entity_kind === "foundation_model")
+    .sort(sortFn)
+    .slice(0, 2);
+  return [...apps, ...fms].sort(sortFn);
+}
 
 
 function pickHeadline({

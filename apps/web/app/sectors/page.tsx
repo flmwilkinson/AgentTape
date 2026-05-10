@@ -110,14 +110,13 @@ export default function SectorsPage() {
               <th className="hidden px-3 py-2 text-right md:table-cell">
                 Verdict
               </th>
-              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <TableSkeleton rows={6} cols={6} />}
+            {isLoading && <TableSkeleton rows={6} cols={5} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
                   No sectors yet. Agents need tags before this page can
                   populate. The discovery service will fill them in.
                 </td>
@@ -141,7 +140,12 @@ export default function SectorsPage() {
                   className="border-b border-border last:border-b-0"
                 >
                   <td className="px-3 py-2">
-                    <div className="font-medium">{r.display_name}</div>
+                    <Link
+                      href={`/sectors/${kind}/${r.value}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {r.display_name}
+                    </Link>
                     <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                       {kind} · {r.value}
                     </div>
@@ -179,14 +183,6 @@ export default function SectorsPage() {
                     <span className="font-mono text-xs uppercase tracking-wider">
                       {tone.label}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <Link
-                      href={`/sectors/${kind}/${r.value}`}
-                      className="text-[11px] font-mono uppercase tracking-wider text-primary hover:underline"
-                    >
-                      Drill in →
-                    </Link>
                   </td>
                 </tr>
               );
