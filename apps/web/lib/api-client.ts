@@ -283,6 +283,16 @@ export const api = {
       cache: "no-store",
     }),
 
+  // All indexes' history in one round-trip — used by the Floor's
+  // index sparklines so we don't fan out N /indexes/{slug}/history
+  // calls per ISR regen. Falls back to per-index calls in the page
+  // if this endpoint isn't on the deployed API yet.
+  indexHistoriesAll: (window = "30d") =>
+    apiFetch<Record<string, IndexSnapshot[]>>("/indexes/histories", {
+      searchParams: { window },
+      cache: "no-store",
+    }),
+
   indexRebalances: (slug: string, limit = 10) =>
     apiFetch<RebalanceLog[]>(`/indexes/${slug}/rebalances`, {
       searchParams: { limit },

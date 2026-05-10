@@ -698,6 +698,40 @@ async def index_history(
     ]
 
 
+async def index_history_all(
+    session: AsyncSession, *, since: datetime
+) -> dict[str, list[dict[str, Any]]]:
+    """All index histories in one query — keyed by index slug.
+
+    The Floor's index card grid uses this for sparklines. Replaces a
+    Promise.all of N parallel ``/indexes/{slug}/history`` calls with
+    a single round-trip; per-row cost was paid mostly in
+    DB-connection setup, not in scan time, so collapsing to one
+    fetch is a real win on cold ISR regen.
+    """
+    rows = await session.execute(
+        text(
+            """
+            SELECT i.slug, s.captured_at, s.composite_value
+            FROM index_snapshots s
+            JOIN indexes i ON i.id = s.index_id
+            WHERE s.captured_at >= :since
+            ORDER BY i.slug ASC, s.captured_at ASC
+            """
+        ),
+        {"since": since},
+    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        out.setdefault(r.slug, []).append(
+            {
+                "captured_at": r.captured_at,
+                "composite_value": float(r.composite_value),
+            }
+        )
+    return out
+
+
 async def index_rebalances(
     session: AsyncSession, *, slug: str, limit: int
 ) -> list[dict[str, Any]]:

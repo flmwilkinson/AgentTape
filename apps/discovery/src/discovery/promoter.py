@@ -127,6 +127,23 @@ async def run_promoter(session: AsyncSession, settings: Settings | None = None) 
             rejected += 1
             continue
 
+        # Substance filter: archived or disabled GitHub repos are a
+        # known source of low-signal admissions ("we ranked an
+        # abandoned tutorial repo above Claude Code"). The GitHub
+        # search API surfaces ``archived`` and ``disabled`` flags;
+        # rejecting on either means we never store the agent in the
+        # first place. Marking with a clear reason so we can audit
+        # the rejection list later and back this off if it's too
+        # aggressive.
+        if p.get("archived") is True:
+            await _reject(session, cand_id, 0.0, {"github_archived": True})
+            rejected += 1
+            continue
+        if p.get("disabled") is True:
+            await _reject(session, cand_id, 0.0, {"github_disabled": True})
+            rejected += 1
+            continue
+
         score, reasons = score_candidate(p, source)
         if score >= settings.auto_admit_threshold:
             await _admit(
@@ -217,7 +234,74 @@ def score_candidate(
         score += 0.1
         reasons["packaged"] = True
 
+    # Substance bonuses — small nudges for shape signals that
+    # correlate with real projects vs vibe-coded weekend dumps.
+    # Each is bounded so they can't admit junk on their own; the
+    # core score still has to clear the auto-admit threshold.
+    substance = _substance_score(payload)
+    if substance > 0:
+        score += substance
+        reasons["substance"] = round(substance, 2)
+
     return min(score, 1.0), reasons
+
+
+def _substance_score(p: dict[str, Any]) -> float:
+    """Soft signals that the project is substantive.
+
+    Each signal is small (≤0.05) so even all of them together can't
+    flip a candidate from below auto-reject to above auto-admit.
+    They mainly help borderline cases where the core rubric returns
+    a "pending review" score and one of these tips it into admission.
+
+      • topics_count — GitHub repos with ≥3 declared topics tend to
+        be better-organised than topic-less dumps. Ditto npm
+        ``keywords`` and HF ``tags``.
+      • description_depth — a repo description longer than ~80 chars
+        usually means the maintainer wrote a real summary instead of
+        leaving it blank. Empty descriptions correlate with low
+        substance (and with auto-generated repos).
+      • multiple_packaging — published to more than one ecosystem
+        (e.g. npm AND a github repo, or pypi AND docker) signals a
+        maintained, distributed product.
+      • active_commits — pushed within the last 14 days, not just
+        within the 90d "maintained" floor. Tighter recency captures
+        live development.
+    """
+    bonus = 0.0
+    topics = (p.get("topics") or []) + (p.get("tags") or []) + (
+        p.get("keywords") or []
+    )
+    if len(topics) >= 3:
+        bonus += 0.05
+
+    desc = (
+        p.get("description")
+        or p.get("summary")
+        or (p.get("info") or {}).get("summary")
+        or ""
+    )
+    if isinstance(desc, str) and len(desc.strip()) >= 80:
+        bonus += 0.05
+
+    if p.get("packages") and (
+        p.get("github_repo") or p.get("full_name")
+    ):
+        bonus += 0.05
+
+    for key in ("pushed_at", "updated_at", "lastModified"):
+        v = p.get(key)
+        if not v:
+            continue
+        try:
+            ts = _parse_dt(v)
+        except (ValueError, TypeError):
+            continue
+        if ts and (datetime.now(UTC) - ts) <= timedelta(days=14):
+            bonus += 0.05
+            break
+
+    return bonus
 
 
 def _haystack(p: dict[str, Any]) -> str:

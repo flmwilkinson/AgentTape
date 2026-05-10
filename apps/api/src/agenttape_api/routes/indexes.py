@@ -27,6 +27,30 @@ async def list_indexes(
     return [IndexSummary(**r) for r in rows]
 
 
+# All-indexes history in one round-trip. Declared BEFORE /{slug}
+# so /indexes/histories doesn't match the slug-pattern route below.
+@router.get("/histories", response_model=dict[str, list[IndexSnapshotOut]])
+async def get_all_index_histories(
+    window: str = Query("30d", pattern="^(1d|7d|30d|90d|all)$"),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> dict[str, list[IndexSnapshotOut]]:
+    """Returns ``{ slug: [snapshots] }`` for every index in one query.
+
+    The Floor's index card grid uses this to draw 6 sparklines —
+    fetching them as N parallel /indexes/{slug}/history calls cost
+    N round-trips of connection+query setup. One query, one
+    round-trip, dictionary keyed by slug for direct lookup on the
+    client.
+    """
+    grouped = await queries.index_history_all(
+        session, since=_window_to_since(window)
+    )
+    return {
+        slug: [IndexSnapshotOut(**r) for r in rows]
+        for slug, rows in grouped.items()
+    }
+
+
 @router.get("/{slug}", response_model=IndexDetail)
 async def get_index(
     slug: str,

@@ -305,20 +305,32 @@ export default async function FloorPage() {
 // behind the main Promise.all.
 
 async function IndexesGrid({ indexes }: { indexes: IndexSummary[] }) {
-  const indexHistories = await Promise.all(
-    indexes.map((i) =>
-      api
-        .indexHistory(i.slug, "30d")
-        .then((rows) => ({
-          slug: i.slug,
-          values: rows.map((r) => r.composite_value),
-        }))
-        .catch(() => ({ slug: i.slug, values: [] as number[] })),
-    ),
-  );
-  const histBySlug = Object.fromEntries(
-    indexHistories.map((h) => [h.slug, h.values]),
-  );
+  // One batched fetch covers all sparklines. Falls back to a fan-out
+  // of per-slug calls if the /indexes/histories endpoint isn't
+  // deployed yet (older API), so the Floor never goes blank waiting
+  // on a backend deploy.
+  let histBySlug: Record<string, number[]> = {};
+  try {
+    const all = await api.indexHistoriesAll("30d");
+    for (const [slug, rows] of Object.entries(all)) {
+      histBySlug[slug] = rows.map((r) => r.composite_value);
+    }
+  } catch {
+    const indexHistories = await Promise.all(
+      indexes.map((i) =>
+        api
+          .indexHistory(i.slug, "30d")
+          .then((rows) => ({
+            slug: i.slug,
+            values: rows.map((r) => r.composite_value),
+          }))
+          .catch(() => ({ slug: i.slug, values: [] as number[] })),
+      ),
+    );
+    histBySlug = Object.fromEntries(
+      indexHistories.map((h) => [h.slug, h.values]),
+    );
+  }
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {indexes.map((i) => (
