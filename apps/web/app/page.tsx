@@ -189,15 +189,22 @@ export default async function FloorPage() {
             trailingHref="/new"
             trailingLabel="Live feed →"
           />
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
-            {recent.length === 0 && (
-              <div className="px-4 py-6 text-xs text-muted-foreground">
-                No admissions yet. The discovery service is on its first sweep.
-              </div>
-            )}
-            {recent.map((a) => (
-              <TickerCard key={a.id} agent={a} className="shrink-0 basis-[260px]" />
-            ))}
+          {/* Horizontal-scroll row of new-listing cards. Wrapped in
+              overflow-x-clip so the scroll behaviour stays inside
+              the section rather than pushing the page wider than the
+              viewport (which on mobile would throw off the fixed
+              bottom nav). */}
+          <div className="overflow-x-clip">
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {recent.length === 0 && (
+                <div className="px-4 py-6 text-xs text-muted-foreground">
+                  No admissions yet. The discovery service is on its first sweep.
+                </div>
+              )}
+              {recent.map((a) => (
+                <TickerCard key={a.id} agent={a} className="shrink-0 basis-[260px]" />
+              ))}
+            </div>
           </div>
         </section>
 

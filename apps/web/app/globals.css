@@ -125,15 +125,24 @@
      navigating between a long page and a short page on desktop
      changes the usable viewport width by the scrollbar width
      (~17px Windows / ~15px Linux), making the fixed bottom nav
-     appear to "compress" during the transition.
-     We DO NOT apply this on mobile (pointer: coarse). Some mobile
-     browsers interpret scrollbar-gutter alongside their overlay-
-     scrollbar model in ways that push fixed-position elements off
-     the viewport — losing the bottom nav entirely. The desktop-only
-     guard sidesteps that without giving up the desktop benefit. */
+     appear to "compress" during the transition. */
   @media (pointer: fine) {
     html {
       scrollbar-gutter: stable;
+    }
+  }
+  /* On mobile, defensively clip any rogue horizontal overflow at
+     the body level. Several patterns in the app use full-bleed
+     negative margins (e.g. -mx-4 on horizontal-scroll card rows)
+     that, combined with a container that doesn't have matching
+     horizontal padding, can extend past the viewport edge. Without
+     this guard the fixed bottom nav gets shoved off-screen as the
+     viewport tries to accommodate the wider content. overflow-x:
+     hidden on body is the bluntest fix; alternatives like clipping
+     each section individually leak through. */
+  @media (pointer: coarse) {
+    html, body {
+      overflow-x: hidden;
     }
   }
   body {

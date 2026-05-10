@@ -26,6 +26,14 @@ const KINDS = [
   { v: "application", label: "Agents" },
   { v: "foundation_model", label: "Models" },
 ] as const;
+// Default to "up" so the page leads with rises rather than the
+// loudest absolute moves (which can be a 20-point crash). Users
+// looking specifically for fallers can flip to "down".
+const DIRECTIONS = [
+  { v: "up", label: "Rising" },
+  { v: "down", label: "Falling" },
+  { v: "all", label: "Both" },
+] as const;
 
 const CAPABILITIES = [
   { v: "", label: "Any" },
@@ -56,6 +64,7 @@ export default function TrendingPage() {
   const [kind, setKind] = useState<(typeof KINDS)[number]["v"]>("all");
   const [capability, setCapability] = useState<string>("");
   const [deployment, setDeployment] = useState<string>("");
+  const [direction, setDirection] = useState<(typeof DIRECTIONS)[number]["v"]>("up");
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ["movers", window, kind, capability, deployment],
@@ -72,7 +81,23 @@ export default function TrendingPage() {
       }),
   });
 
-  const list = rows ?? [];
+  // Apply direction filter + sort client-side. The /movers API
+  // returns rows ordered by absolute delta, but the user-visible
+  // expectation is "biggest rises" first (or biggest falls when
+  // filtered to falling). We re-sort here rather than push the
+  // direction param to the API so the cached query stays a single
+  // payload regardless of which direction the user is currently
+  // viewing.
+  const raw = rows ?? [];
+  const list = (() => {
+    let filtered = raw;
+    if (direction === "up") filtered = raw.filter((m) => m.delta > 0);
+    else if (direction === "down") filtered = raw.filter((m) => m.delta < 0);
+    return [...filtered].sort((a, b) => {
+      if (direction === "down") return a.delta - b.delta; // most-negative first
+      return b.delta - a.delta; // largest positive first; for "all", positive ranks above negative
+    });
+  })();
 
   return (
     <div className="container py-8 md:py-12">
@@ -81,17 +106,24 @@ export default function TrendingPage() {
           Trending
         </div>
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
-          Biggest moves.
+          What's gaining.
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Ranked by absolute AgentScore change over the window. Filter by kind,
-          capability, or deployment to slice the moves you actually care about.
-          The arrow column is rank-movement in the last 24 hours within the
-          kind (agents vs foundation models keep separate ladders).
+          AgentScore moves over the window, sorted by signed delta —
+          rises first by default. Flip Direction to "Falling" for the
+          biggest declines, or "Both" to see rises and falls in one
+          ranking. Filter by kind, capability, or deployment to slice
+          further.
         </p>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <ToggleGroup
+          label="Direction"
+          value={direction}
+          onChange={(v) => setDirection(v as (typeof DIRECTIONS)[number]["v"])}
+          options={DIRECTIONS.map((d) => ({ v: d.v, label: d.label }))}
+        />
         <ToggleGroup
           label="Window"
           value={window}
