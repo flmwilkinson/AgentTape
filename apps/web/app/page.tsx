@@ -56,15 +56,16 @@ export default async function FloorPage() {
     movers24h.length === 0 &&
     recent.length === 0;
 
-  // ISR cache hygiene: when ALL four top-level fetches come back
-  // empty, the upstream is broken, not "quiet" — and this rendering
-  // would otherwise replace the previous good cached HTML for the
-  // next ISR cycle, leaving users staring at the "Backend
-  // unreachable" banner for a minute even after the API recovered.
-  // Throwing here aborts the regen so Next keeps serving the
-  // previous good cache while still attempting fresh regens on the
-  // next request.
-  if (apiOffline) {
+  // ISR cache hygiene: when all four top-level fetches come back
+  // empty, the upstream is broken — and this render would otherwise
+  // replace the good previous cache. Throwing inside the handler at
+  // RUNTIME makes Next.js keep the previous cached HTML during ISR
+  // revalidation. But throwing at BUILD time (when Vercel
+  // pre-renders the route) fails the deploy outright. The
+  // NEXT_PHASE check threads the needle: bail at runtime, render
+  // the gracefully-degraded "Backend unreachable" banner at build
+  // (when there's no good cache to fall back on anyway).
+  if (apiOffline && process.env.NEXT_PHASE !== "phase-production-build") {
     throw new Error("Floor regen aborted: all top-level fetches empty");
   }
 
