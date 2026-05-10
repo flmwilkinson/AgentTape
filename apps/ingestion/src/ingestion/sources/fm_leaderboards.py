@@ -68,17 +68,49 @@ LEADERBOARDS: list[_Leaderboard] = [
     # parquet rows via the same datasets-server endpoint as Open LLM —
     # different parser because the column names differ ("Model" instead
     # of "eval_name", "Arena Score" instead of "Average").
-    # LMSys / LMArena Chatbot Arena was here but neither the
-    # original `lmsys/chatbot_arena_leaderboard` nor the renamed
-    # `lmarena-ai/chatbot-arena-leaderboard` HF dataset paths return
-    # data anymore (both 404). LMArena now publishes results on
-    # lmarena.ai as a JS-rendered page rather than a structured
-    # endpoint. Adding it back requires either:
-    #   1. Finding the canonical HF dataset path (community renames
-    #      happen — check huggingface.co/lmarena-ai or huggingface.co/lmsys)
-    #   2. Or scraping the lmarena.ai HTML, which is brittle.
-    # The _parse_lmsys_arena_hf helper stays in the file so we can
-    # wire it back up the moment we find the working URL.
+    # LMArena (was LMSys) Chatbot Arena. Bradley-Terry / Elo rating
+    # from blind pairwise human votes — community gold-standard for
+    # "best model to actually talk to". The dataset rename from
+    # lmsys → lmarena-ai also reshaped the schema; correct path is
+    # config=text&split=latest. Schema columns: model_name + rating
+    # (verified live, ~70 rows on the latest snapshot date).
+    _Leaderboard(
+        name="lmarena",
+        url=(
+            "https://datasets-server.huggingface.co/rows"
+            "?dataset=lmarena-ai%2Fleaderboard-dataset"
+            "&config=text&split=latest"
+        ),
+        max_score=None,  # Bradley-Terry / Elo unbounded
+        parser="lmsys_arena_hf",
+    ),
+    # MMLU-Pro leaderboard (TIGER-Lab community submission). Expanded
+    # MMLU with 14 subject categories. Headline score is the "Overall"
+    # column on a 0–100 scale.
+    _Leaderboard(
+        name="mmlu-pro",
+        url=(
+            "https://datasets-server.huggingface.co/rows"
+            "?dataset=TIGER-Lab%2Fmmlu_pro_leaderboard_submission"
+            "&config=default&split=train"
+        ),
+        max_score=100.0,
+        parser="mmlu_pro_hf",
+    ),
+    # SWE-bench leaderboard. Direct JSON from the swe-bench.github.io
+    # repo's master branch. Fetches in one shot (~7MB), no pagination.
+    # We pull the "Verified" sub-leaderboard since it's the curated
+    # quality-controlled split — Test/Lite/Multimodal exist too but
+    # Verified is the one teams care about.
+    _Leaderboard(
+        name="swe-bench-verified",
+        url=(
+            "https://raw.githubusercontent.com/SWE-bench/"
+            "swe-bench.github.io/master/data/leaderboards.json"
+        ),
+        max_score=100.0,
+        parser="swe_bench",
+    ),
     # LiveBench would be a great fit here (monthly contam-free eval)
     # but their public CSV URL has changed and the new endpoint isn't
     # documented. _parse_livebench is preserved at the bottom of the
@@ -238,12 +270,11 @@ async def _fetch_rows(
     hf_token: str | None = None,
 ) -> list[tuple[str, float]]:
     """Return [(model_name, score), ...] for the given leaderboard."""
-    if board.parser in ("hf_dataset_rows", "lmsys_arena_hf"):
-        # Both parsers consume HuggingFace datasets-server pages but
-        # interpret the row schema differently — pick the per-page
+    if board.parser in ("hf_dataset_rows", "lmsys_arena_hf", "mmlu_pro_hf"):
+        # All three parsers consume HuggingFace datasets-server pages
+        # but interpret the row schema differently — pick the per-page
         # parser by name. HF token is forwarded so datasets that
-        # require auth (most community-published leaderboards now do)
-        # don't 401.
+        # require auth don't 401.
         return await _fetch_hf_paginated(
             http, board.url, parser=board.parser, hf_token=hf_token
         )
@@ -262,6 +293,8 @@ async def _fetch_rows(
         return _parse_lmsys(text_body)
     if board.parser == "livebench":
         return _parse_livebench(text_body)
+    if board.parser == "swe_bench":
+        return _parse_swe_bench(text_body)
     return []
 
 
@@ -285,7 +318,11 @@ async def _fetch_hf_paginated(
     offset = 0
     total: int | None = None
     page_parser = (
-        _parse_lmsys_arena_hf if parser == "lmsys_arena_hf" else _parse_hf_dataset_rows
+        _parse_lmsys_arena_hf
+        if parser == "lmsys_arena_hf"
+        else _parse_mmlu_pro_hf
+        if parser == "mmlu_pro_hf"
+        else _parse_hf_dataset_rows
     )
     headers: dict[str, str] = {}
     if hf_token:
@@ -321,14 +358,17 @@ async def _fetch_hf_paginated(
 
 
 def _parse_lmsys_arena_hf(body: str) -> list[tuple[str, float]]:
-    """LMSys Chatbot Arena leaderboard rows from HuggingFace datasets-server.
+    """LMArena (was LMSys) Chatbot Arena rows from datasets-server.
 
-    Shape:
-      {"rows": [{"row": {"Model": "GPT-5", "Arena Score": 1421, ...}}]}
+    Current schema (lmarena-ai/leaderboard-dataset, config=text,
+    split=latest):
+      {"rows": [{"row": {"model_name": "gpt-5", "rating": 1421.5,
+                          "rank": 1, "vote_count": 12000,
+                          "organization": "OpenAI"}}]}
 
-    Match name is taken from ``Model`` (the human-readable display
-    name); the FM leaderboard ingestor's normalisation handles the
-    "GPT-5" → "openai-gpt-5" join. Score is the ELO rating.
+    Older schema (lmsys/chatbot_arena_leaderboard) used "Model" /
+    "Arena Score" — kept those as fallbacks so a future schema swap
+    doesn't immediately break the ingestor.
     """
     try:
         data = json.loads(body)
@@ -337,13 +377,94 @@ def _parse_lmsys_arena_hf(body: str) -> list[tuple[str, float]]:
     out: list[tuple[str, float]] = []
     for entry in data.get("rows") or []:
         row = (entry or {}).get("row") or {}
-        name = row.get("Model") or row.get("model") or row.get("Name")
+        name = (
+            row.get("model_name")
+            or row.get("Model")
+            or row.get("model")
+            or row.get("Name")
+        )
         score = (
-            row.get("Arena Score")
+            row.get("rating")
+            or row.get("Arena Score")
             or row.get("arena_score")
             or row.get("Elo")
-            or row.get("rating")
         )
+        if name is None or score is None:
+            continue
+        try:
+            out.append((str(name), float(score)))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _parse_mmlu_pro_hf(body: str) -> list[tuple[str, float]]:
+    """MMLU-Pro leaderboard rows from datasets-server.
+
+    Schema (TIGER-Lab/mmlu_pro_leaderboard_submission):
+      {"rows": [{"row": {"Models": "gpt-5", "Overall": 78.4,
+                          "biology": ..., "business": ..., ...}}]}
+
+    The score column is "Overall" — a 0–100 weighted average across
+    14 subject categories. Per-subject columns exist too but we only
+    surface the headline number here.
+    """
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return []
+    out: list[tuple[str, float]] = []
+    for entry in data.get("rows") or []:
+        row = (entry or {}).get("row") or {}
+        name = row.get("Models") or row.get("Model") or row.get("model_name")
+        score = row.get("Overall") or row.get("overall") or row.get("Average")
+        if name is None or score is None:
+            continue
+        try:
+            out.append((str(name), float(score)))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _parse_swe_bench(body: str) -> list[tuple[str, float]]:
+    """SWE-bench leaderboard from swe-bench.github.io.
+
+    Shape:
+      {
+        "leaderboards": [
+          {"name": "Verified", "results": [
+            {"name": "Claude Opus 4.7", "resolved": 73.4, ...},
+            ...
+          ]},
+          {"name": "Test", "results": [...]},
+          {"name": "Lite", "results": [...]},
+          ...
+        ]
+      }
+
+    We pull only the "Verified" board because it's the curated
+    quality-controlled split (the others have known broken instances).
+    Score is the ``resolved`` percentage — fraction of issues the
+    agent actually fixed, on a 0–100 scale.
+    """
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return []
+    boards = (data or {}).get("leaderboards") or []
+    target = next(
+        (b for b in boards if (b or {}).get("name") == "Verified"),
+        None,
+    )
+    if not target:
+        return []
+    out: list[tuple[str, float]] = []
+    for r in target.get("results") or []:
+        if not isinstance(r, dict):
+            continue
+        name = r.get("name") or r.get("model")
+        score = r.get("resolved") or r.get("score")
         if name is None or score is None:
             continue
         try:
