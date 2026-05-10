@@ -3,7 +3,11 @@ import Link from "next/link";
 import { api } from "@/lib/api-client";
 import type { IndexSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
-import { CapabilityRail } from "@/components/capability-rail";
+import {
+  CapabilityRail,
+  CapabilityRailSkeleton,
+  type CapabilityGroup,
+} from "@/components/capability-rail";
 import { IndexCard } from "@/components/index-card";
 import { MoverChip } from "@/components/mover-chip";
 import { TickerCard } from "@/components/ticker-card";
@@ -189,12 +193,15 @@ export default async function FloorPage() {
               </Link>
             ))}
           </div>
-          {/* CapabilityRail is now a client component — react-query
-              fetches per-capability in parallel, with its own
-              skeleton fallback while loading. The Suspense wrapper
-              that used to live here is gone since client components
-              don't suspend the same way server components do. */}
-          <CapabilityRail />
+          {/* CapabilityRail is server-rendered through one
+              /sectors/top fetch — wrapped in Suspense so its
+              latency doesn't gate first-byte. The CapabilityRailLoader
+              below distinguishes "still loading" / "fetch errored" /
+              "no data" so the user always knows whether to wait or to
+              click through to a sector page. */}
+          <Suspense fallback={<CapabilityRailSkeleton />}>
+            <CapabilityRailLoader />
+          </Suspense>
         </section>
 
         {/* New listings. */}
@@ -313,6 +320,32 @@ function IndexesGridSkeleton({ count }: { count: number }) {
       ))}
     </div>
   );
+}
+
+
+// ----------------------------------------------- CapabilityRailLoader
+
+// Async server component that does the one /sectors/top fetch and
+// hands the result to <CapabilityRail/>. Two failure modes:
+//
+//   • Endpoint not deployed yet (the API hasn't been redeployed
+//     since /sectors/top was added) — fetch throws ApiError(404).
+//   • Endpoint deployed but DB returned nothing (no agents tagged) —
+//     fetch returns an empty array.
+//
+// We pass `null` for the first case and `[]` for the second. The
+// rail renders different copy for each so the user knows whether to
+// wait for a deploy to finish or to come back when discovery has
+// admitted more agents.
+async function CapabilityRailLoader() {
+  let groups: CapabilityGroup[] | null;
+  try {
+    groups = await api.sectorsTop("capability", 3);
+  } catch (e) {
+    console.error("CapabilityRailLoader: /sectors/top failed", e);
+    groups = null;
+  }
+  return <CapabilityRail groups={groups} />;
 }
 
 

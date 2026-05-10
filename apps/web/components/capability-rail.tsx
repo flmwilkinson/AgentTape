@@ -1,30 +1,31 @@
-"use client";
-
 import Link from "next/link";
-import { useQueries } from "@tanstack/react-query";
 import { ArrowUpRight, Github, Globe } from "lucide-react";
-import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { MoverChip } from "@/components/mover-chip";
 import { CAPABILITIES } from "@/lib/taxonomy";
 
-// "Top 3 per capability" rail for the floor page. Each row links into
-// the agent's ticker page; the icons jump straight to the external
-// source — GitHub / homepage / HF model page — so a reader can go
-// from the home page to the actual codebase in one click.
+// "Top 3 per capability" rail for the floor page. Pure presentation —
+// the Floor page fetches /sectors/top server-side and passes the
+// groups in. Render contract:
 //
-// Why this is a CLIENT component (browser-side fetch) rather than a
-// server component:
-//   The Floor's other server-side fetches (movers, indexes, top
-//   agents) work fine, but ten parallel ``listAgents?tag_kind=...&
-//   tag_value=...`` calls from Vercel's edge function to the Hetzner
-//   API consistently came back empty in production. Same calls work
-//   reliably from the browser — that's how /search renders the same
-//   data without issue. The asymmetry is some combination of
-//   connection-pool exhaustion, region routing, or per-call cold
-//   start. Rather than chase the bug we use the path that's already
-//   proven to work, with react-query for the cache + Suspense-style
-//   skeleton via initialData/isPending.
+//   • groups === null  → upstream errored; render an actionable
+//                        "couldn't load" panel with a fallback link
+//                        per capability so the user is never staring
+//                        at silent empty boxes.
+//   • groups === []    → upstream returned, but no capability has any
+//                        admitted-and-tagged agents yet. Same panel
+//                        but with a different copy ("no listings yet").
+//   • groups[].agents.length === 0 for some entries  → silently drop
+//                        those capabilities; show the rest normally.
+//
+// Why this is a SERVER component (with data passed in):
+//   The previous version did 10 parallel /agents calls from the
+//   browser, which worked locally but timed out in production for
+//   half the capabilities under the 2s client budget — so the rail
+//   came back empty for real users. Routing the rail through one
+//   server-side /sectors/top fetch (cached by Next ISR) means the
+//   rail is now as reliable as /sectors and /search, which already
+//   work, and adds zero JS to the client bundle.
 
 const BLURBS: Record<string, string> = {
   "code-generation": "Write code, review PRs, ship features.",
@@ -39,88 +40,100 @@ const BLURBS: Record<string, string> = {
   voice: "Speak and listen in real time.",
 };
 
-const RAILS = CAPABILITIES.map((c) => ({
-  slug: c.slug,
-  label: c.label,
-  blurb: BLURBS[c.slug] ?? "",
-}));
+const RAIL_ORDER = new Map(CAPABILITIES.map((c, i) => [c.slug, i]));
 
-export function CapabilityRail() {
-  // One query per capability, all in parallel via useQueries. Each
-  // is independently cached for 5 minutes so flipping back to the
-  // Floor doesn't refetch immediately. Failed queries (timeouts,
-  // 5xx) gracefully resolve to an empty group rather than blanking
-  // the whole rail.
-  const queries = useQueries({
-    queries: RAILS.map((cap) => ({
-      queryKey: ["capability-rail", cap.slug],
-      queryFn: () =>
-        api.listAgents({
-          tag_kind: "capability",
-          tag_value: cap.slug,
-          sort: "score",
-          limit: 3,
-        }),
-      staleTime: 5 * 60 * 1000,
-      retry: 1,
-    })),
-  });
+export type CapabilityGroup = {
+  value: string;
+  display_name: string;
+  agents: {
+    id: string;
+    slug: string;
+    name: string;
+    entity_kind: string;
+    homepage_url: string | null;
+    github_repo: string | null;
+    score: {
+      agent_score: number | null;
+      delta_24h: number | null;
+    };
+  }[];
+};
 
-  const groups = RAILS.map((cap, i) => ({
-    cap,
-    items: queries[i].data?.items ?? [],
-    isLoading: queries[i].isLoading,
-  }));
+interface Props {
+  // Pass null when the upstream fetch errored, [] when it succeeded
+  // with no data. Lets us render a different empty-state copy for
+  // each so the user can act on what's actually wrong.
+  groups: CapabilityGroup[] | null;
+}
 
-  // While at least one query is still loading, render a skeleton
-  // grid so the section keeps its space rather than collapsing to
-  // zero height and jumping the page when results arrive.
-  const anyLoading = groups.some((g) => g.isLoading);
-
-  if (anyLoading) {
+export function CapabilityRail({ groups }: Props) {
+  // Upstream failed — give the user a working alternative instead
+  // of pretending nothing happened. The capability links below /are/
+  // a useful fallback because they hit /sectors/{kind}/{value},
+  // which is on a different code path than /sectors/top.
+  if (groups === null) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="animate-pulse rounded-md border border-border bg-card p-4 space-y-3"
-          >
-            <div className="h-3 w-20 rounded bg-muted/40" />
-            <div className="h-4 w-full rounded bg-muted/30" />
-            <div className="h-4 w-5/6 rounded bg-muted/30" />
-            <div className="h-4 w-4/6 rounded bg-muted/30" />
-          </div>
-        ))}
-      </div>
+      <FallbackPanel
+        kicker="Top-agents rail unavailable"
+        body={
+          <>
+            We couldn&apos;t load the live top-3 per capability — the
+            server returned an error. The capability cards below still
+            link through to the full sector pages (filters, compare,
+            scorecards) so you can browse without it.
+          </>
+        }
+      />
     );
   }
 
-  const filled = groups.filter((g) => g.items.length > 0);
-  if (filled.length === 0) return null;
+  const filtered = groups
+    .filter((g) => g.agents.length > 0 && BLURBS[g.value] !== undefined)
+    .sort(
+      (a, b) =>
+        (RAIL_ORDER.get(a.value) ?? 999) - (RAIL_ORDER.get(b.value) ?? 999),
+    );
+
+  if (filtered.length === 0) {
+    return (
+      <FallbackPanel
+        kicker="No listings yet"
+        body={
+          <>
+            No agents have been tagged + admitted into a capability yet.
+            New listings appear here automatically once the discovery
+            service tags and the scoring service rates them.
+          </>
+        }
+      />
+    );
+  }
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {filled.map(({ cap, items }) => (
+      {filtered.map((g) => (
         <div
-          key={cap.slug}
+          key={g.value}
           className="rounded-md border border-border bg-card"
         >
           <div className="flex items-baseline justify-between border-b border-border px-4 py-2.5">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                {cap.label}
+                {g.display_name}
               </div>
-              <div className="text-xs text-muted-foreground">{cap.blurb}</div>
+              <div className="text-xs text-muted-foreground">
+                {BLURBS[g.value]}
+              </div>
             </div>
             <Link
-              href={`/sectors/capability/${cap.slug}`}
+              href={`/sectors/capability/${g.value}`}
               className="text-[10px] font-mono uppercase tracking-wider text-primary hover:underline"
             >
               All →
             </Link>
           </div>
           <ul>
-            {items.map((a, i) => (
+            {g.agents.map((a, i) => (
               <li
                 key={a.id}
                 className="flex items-center gap-3 border-t border-border px-4 py-2.5 first:border-t-0"
@@ -138,7 +151,11 @@ export function CapabilityRail() {
                   {formatScore(a.score?.agent_score ?? null)}
                 </span>
                 {a.score?.delta_24h != null ? (
-                  <MoverChip delta={a.score.delta_24h} unit="score" variant="outline" />
+                  <MoverChip
+                    delta={a.score.delta_24h}
+                    unit="score"
+                    variant="outline"
+                  />
                 ) : null}
                 <ExternalLinks agent={a} />
               </li>
@@ -150,7 +167,55 @@ export function CapabilityRail() {
   );
 }
 
-function ExternalLinks({ agent }: { agent: AgentSummary }) {
+// Skeleton for Suspense-style boundaries while the fetch is in
+// flight. Imported by the Floor page directly.
+export function CapabilityRailSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-md border border-border bg-card p-4 space-y-3"
+        >
+          <div className="h-3 w-20 rounded bg-muted/40" />
+          <div className="h-4 w-full rounded bg-muted/30" />
+          <div className="h-4 w-5/6 rounded bg-muted/30" />
+          <div className="h-4 w-4/6 rounded bg-muted/30" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FallbackPanel({
+  kicker,
+  body,
+}: {
+  kicker: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-card/40 p-4 text-sm text-muted-foreground">
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-foreground/70">
+        {kicker}
+      </div>
+      <p className="max-w-2xl">{body}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {CAPABILITIES.map((c) => (
+          <Link
+            key={c.slug}
+            href={`/sectors/capability/${c.slug}`}
+            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs hover:border-primary/40 hover:bg-subtle"
+          >
+            {c.label} →
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExternalLinks({ agent }: { agent: CapabilityGroup["agents"][number] }) {
   const links: { href: string; icon: typeof Github; label: string }[] = [];
   if (agent.github_repo) {
     links.push({

@@ -177,6 +177,60 @@ async def enrich_agent(
 
 # ---------------------------------------------------------------- description
 
+# Common mojibake fixes. Triggered when a UTF-8 byte sequence has been
+# ASCII-replaced upstream (each byte → "?") or double-decoded as
+# Latin-1. Applied as exact substring substitutions because we know
+# which characters source data actually uses (smart quotes, dashes,
+# ellipsis); we don't want a general-purpose mojibake fixer rewriting
+# legitimate punctuation.
+#
+# The "???" entry in particular maps the three-question-mark
+# replacement of UTF-8 0xE2 0x80 0x99 (right single quote) back to a
+# plain apostrophe — that's the "Mistral???s" pattern.
+_MOJIBAKE_FIXES: list[tuple[str, str]] = [
+    # Three-byte smart-quote replacements (most common).
+    ("???s ", "'s "),
+    ("???t ", "'t "),
+    ("???re ", "'re "),
+    ("???ve ", "'ve "),
+    ("???ll ", "'ll "),
+    ("???d ", "'d "),
+    ("???m ", "'m "),
+    # Latin-1 double-decode patterns ("Mistralâ€™s").
+    ("â€™", "'"),
+    ("â€“", "-"),
+    ("â€”", "-"),
+    ("â€¦", "..."),
+    ("â€œ", '"'),
+    ("â€", '"'),
+    # Lone Unicode replacement character — drop it.
+    ("�", ""),
+]
+
+
+def _clean_text(s: str) -> str:
+    """Repair common mojibake patterns without touching valid Unicode.
+
+    The two patterns we see in real data:
+
+      1. Each byte of a multi-byte UTF-8 sequence ASCII-replaced with
+         "?". A right single quote (U+2019, 3 bytes in UTF-8) becomes
+         "???". This usually originates upstream — the OpenRouter and
+         Hugging Face API payloads occasionally show it — and we
+         can't guess from "???" alone what the original char was. We
+         match contraction patterns ("???s ", "???t ", ...) because
+         those are the high-frequency cases where the answer is
+         unambiguous.
+
+      2. UTF-8 bytes decoded as Latin-1 then re-encoded ("â€™"
+         for ' = U+2019). Easy to fix because the byte triple is
+         distinctive and never appears in legitimate text.
+    """
+    for bad, good in _MOJIBAKE_FIXES:
+        if bad in s:
+            s = s.replace(bad, good)
+    return s
+
 
 def _description(payload: dict[str, Any], fallback_name: str) -> str:
     raw = (
@@ -185,6 +239,7 @@ def _description(payload: dict[str, Any], fallback_name: str) -> str:
         or (payload.get("info") or {}).get("summary")
         or ""
     ).strip()
+    raw = _clean_text(raw)
     if not raw:
         return f"{fallback_name}: discovered AI agent."
     if len(raw) > 280:

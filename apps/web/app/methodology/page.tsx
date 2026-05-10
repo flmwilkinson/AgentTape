@@ -135,15 +135,19 @@ export default function MethodologyPage() {
         <H3>Headline AgentScore</H3>
         <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
 {`weights = { adoption: 0.35, quality: 0.30, momentum: 0.20, community: 0.15 }
-non_null = pillars where pillar ≠ Unrated
-total_w  = Σ weights[p] for p in non_null
-AgentScore = Σ (weights[p] / total_w) × pillar[p]   for p in non_null`}
+
+AgentScore = 0.35·adoption + 0.30·quality + 0.20·momentum + 0.15·community
+             (a missing pillar contributes 0)`}
         </pre>
         <p>
-          A pillar that's Unrated drops out of the blend; the remaining
-          weights re-normalize so the headline stays on the 0–100 scale.
-          If all four pillars are Unrated, the agent is Unrated overall —
-          its page shows the metadata sidebar but no composite.
+          Flat weighted sum. A pillar with no signals contributes
+          zero — no redistribution, no re-normalisation. The weights
+          add to 1.0 so the headline stays on the 0–100 scale. Missing
+          evidence costs you score: an Adoption-only agent with 75
+          tops out at 26.25, a four-pillar agent averaging 70 reaches
+          70. More data wins by construction. If every pillar is
+          Unrated, the agent is Unrated overall — its page shows the
+          metadata sidebar but no composite.
         </p>
 
         <H3>Source list per kind</H3>

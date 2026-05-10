@@ -773,18 +773,22 @@ async def movers(
         extra_where += " AND a.entity_kind = :entity_kind"
         params["entity_kind"] = entity_kind
 
-    # Bug fix: previously this CTE selected scores where
-    # computed_at >= :since, then took the EARLIEST score in that
-    # window as `then_score`. That measures change *within* the
-    # window, not change *vs the start of the window* — and for an
-    # agent with continuous 5-min ticks across the past 24h, those
-    # are nearly identical numbers so delta ~= 0 for everyone, the
-    # Floor's "Biggest 24h moves" filter (delta>0 / delta<0)
-    # filters everything out, and the page renders empty.
+    # Comparison strategy:
+    #   then_score = most-recent score on or before (now - window).
+    #   Required when an agent has score history older than the
+    #   window — that's the honest comparison.
     #
-    # Correct comparison: now_score = latest score, then_score =
-    # most-recent score on or before (now - window). Per-agent
-    # LATERAL JOINs do this without a window-function CTE.
+    # Fallback: when no pre-window score exists (the agent was
+    # admitted inside the window, or scoring history was wiped /
+    # interrupted), use the *earliest* score still inside the window.
+    # The delta then measures the within-window move rather than the
+    # window-vs-prior move; that's clearly noted in the response by
+    # the score_at_window_start field, but it keeps the page populated
+    # after outages instead of going blank.
+    #
+    # Why this matters: after a multi-hour scoring stall everyone's
+    # scores get rewritten in a tight cluster, so requiring a true
+    # pre-window row would empty the page until the window catches up.
     sql = f"""
         WITH latest AS (
             SELECT DISTINCT ON (s.agent_id)
@@ -795,16 +799,21 @@ async def movers(
             ORDER BY s.agent_id, s.computed_at DESC
         )
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
-               (l.now_score - past.then_score) AS delta,
-               past.then_score
+               (l.now_score - COALESCE(past.then_score, fallback.then_score)) AS delta,
+               COALESCE(past.then_score, fallback.then_score) AS then_score
         FROM latest l
         JOIN agents a ON a.id = l.agent_id
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
-        JOIN LATERAL (
+        LEFT JOIN LATERAL (
             SELECT s.agent_score AS then_score FROM scores s
             WHERE s.agent_id = a.id AND s.computed_at <= :since
             ORDER BY s.computed_at DESC LIMIT 1
         ) past ON true
+        LEFT JOIN LATERAL (
+            SELECT s.agent_score AS then_score FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at > :since
+            ORDER BY s.computed_at ASC LIMIT 1
+        ) fallback ON true
         LEFT JOIN LATERAL (
             SELECT s.agent_score AS score_24h_ago FROM scores s
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
@@ -813,10 +822,10 @@ async def movers(
         {RANKS_JOIN}
         {extra_joins}
         WHERE a.eligibility_status = 'admitted'
-          AND past.then_score IS NOT NULL
           AND l.now_score IS NOT NULL
+          AND COALESCE(past.then_score, fallback.then_score) IS NOT NULL
         {extra_where}
-        ORDER BY abs(l.now_score - past.then_score) DESC
+        ORDER BY abs(l.now_score - COALESCE(past.then_score, fallback.then_score)) DESC
         LIMIT :limit
     """
     rows = await session.execute(text(sql), params)

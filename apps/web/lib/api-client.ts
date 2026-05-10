@@ -381,6 +381,40 @@ export const api = {
       cache: "no-store",
     }),
 
+  // Top-N agents per tag value in a single response. Used by the
+  // Floor's capability rail — replaces a fan-out of N parallel
+  // /agents calls that ran into client-side timeouts in production.
+  sectorsTop: (
+    kind: "capability" | "deployment" | "maturity" = "capability",
+    top = 3,
+  ) =>
+    apiFetch<
+      {
+        value: string;
+        display_name: string;
+        agents: {
+          id: string;
+          slug: string;
+          name: string;
+          entity_kind: string;
+          homepage_url: string | null;
+          github_repo: string | null;
+          score: {
+            agent_score: number | null;
+            adoption: number | null;
+            quality: number | null;
+            momentum: number | null;
+            community: number | null;
+            score_24h_ago: number | null;
+            delta_24h: number | null;
+          };
+        }[];
+      }[]
+    >("/sectors/top", {
+      searchParams: { kind, top },
+      cache: "no-store",
+    }),
+
   events: (params: { kind?: string; limit?: number; offset?: number } = {}) =>
     apiFetch<Page<EventOut>>("/events", { searchParams: params, cache: "no-store" }),
 

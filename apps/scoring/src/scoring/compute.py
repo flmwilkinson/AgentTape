@@ -529,25 +529,45 @@ async def compute_for_agent(
 
 
 def _headline(pillars: PillarScores, settings: Settings) -> float | None:
-    """Weight-blended mean of non-null pillars. None if all are null."""
+    """Flat weighted sum. Missing pillar contributes zero.
+
+    Earlier versions of this function redistributed a missing pillar's
+    weight pro-rata to the others (so an agent with only Adoption=75
+    came out at AgentScore 75). That favoured agents with sparse data,
+    the opposite of the intent — AgentTape is a leaderboard of the
+    industry's top agents, so more evidence has to mean a higher score
+    and missing evidence has to cost.
+
+    The current rule is a flat weighted sum with the published weights:
+
+        AgentScore = 0.35·adoption + 0.30·quality
+                   + 0.20·momentum + 0.15·community
+
+    A pillar with no signals is treated as zero in the sum (not
+    redistributed and not dropped). Weights sum to 1.0 so the
+    headline stays on a 0–100 scale. Single-pillar agents still appear
+    on the leaderboard but their score is capped at the weight of that
+    pillar — Adoption-only with 75 maxes at 26.25, which is exactly
+    the punishment a one-signal MCP listing deserves.
+
+    Returns None only when *every* pillar is null — those agents stay
+    unranked and don't pollute the chart with synthetic zeros.
+    """
     weights = {
         "adoption": settings.weight_adoption,
         "quality": settings.weight_quality,
         "momentum": settings.weight_momentum,
         "community": settings.weight_community,
     }
-    contributions: list[tuple[float, float]] = []
-    for key in ("adoption", "quality", "momentum", "community"):
+    if all(getattr(pillars, k) is None for k in weights):
+        return None
+    total = 0.0
+    for key, w in weights.items():
         value = getattr(pillars, key)
         if value is None:
             continue
-        contributions.append((weights[key], value))
-    if not contributions:
-        return None
-    total_w = sum(w for w, _ in contributions)
-    if total_w <= 0:
-        return None
-    return sum(w * v for w, v in contributions) / total_w
+        total += w * value
+    return total
 
 
 # ----------------------------------------------------------- persist

@@ -236,9 +236,12 @@ export default async function AboutPage() {
         <div className="prose prose-zinc mt-4 max-w-none editorial space-y-4 text-base leading-relaxed text-foreground/90 md:text-lg">
           <p>
             A 0-100 headline backed by four pillars. The weights below
-            are the defaults; quality's 30% is redistributed pro-rata
-            when an agent is unrated so a young project isn't penalized
-            for the absence of benchmark coverage.
+            are the defaults and they sum to 1.0. The headline is a
+            flat weighted sum: a pillar with no signals contributes
+            zero, no redistribution. That's deliberate — more
+            evidence has to mean a higher score. An agent with only
+            Adoption tops out at 35; only the broadly-covered ones
+            reach the high 60s and 70s.
           </p>
           <ul className="list-disc pl-6">
             <li>

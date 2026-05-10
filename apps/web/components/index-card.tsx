@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatScore } from "@/lib/format";
 import type { IndexSummary } from "@/lib/api-client";
+import { INDEX_SUMMARIES } from "@/lib/index-summaries";
 import { MoverChip } from "@/components/mover-chip";
 import { NumberTick } from "@/components/number-tick";
 import { Sparkline } from "@/components/sparkline";
@@ -34,13 +35,19 @@ export function IndexCard({ index, history, topThree, className }: IndexCardProp
         className,
       )}
     >
-      <div className="flex items-baseline justify-between">
-        <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             Index
           </div>
           <div className="text-base font-medium leading-tight">
-            {index.name}
+            <span>{index.name}</span>
+            {INDEX_SUMMARIES[index.slug] && (
+              <span className="font-normal text-muted-foreground">
+                {": "}
+                {INDEX_SUMMARIES[index.slug]}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right">

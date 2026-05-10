@@ -452,9 +452,10 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
                   <div className="border-t border-border bg-subtle/30 px-4 py-3 text-sm">
                     {r.contributing.length === 0 ? (
                       <p className="text-muted-foreground">
-                        {r.key === "quality"
-                          ? "No benchmark results on file. Quality's 30% weight is redistributed pro-rata to the other pillars."
-                          : "No signals on file for this pillar yet — pillar is Unrated."}
+                        No signals on file for this pillar yet — it
+                        contributes 0 to the headline. The headline is
+                        a flat weighted sum, so a missing pillar costs
+                        its full weight (no redistribution).
                       </p>
                     ) : (
                       <>

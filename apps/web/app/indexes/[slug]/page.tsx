@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api, ApiError } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
+import { INDEX_SUMMARIES } from "@/lib/index-summaries";
 import { BackLink } from "@/components/back-link";
 import { CompareTrayToggle } from "@/components/compare-tray";
 import { IndexHistoryChart } from "@/components/index-history-chart";
@@ -92,6 +93,12 @@ export default async function IndexDetailPage({
           </div>
           <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl">
             {detail.name}
+            {INDEX_SUMMARIES[detail.slug] && (
+              <span className="font-normal text-muted-foreground">
+                {": "}
+                {INDEX_SUMMARIES[detail.slug]}
+              </span>
+            )}
           </h1>
           <p className="mt-2 text-xs text-muted-foreground">
             <a href="#rebalance-log" className="text-primary hover:underline">

@@ -3,13 +3,14 @@
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Fragment, Suspense, useRef, useState } from "react";
+import { Fragment, Suspense, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { CompareChart } from "@/components/compare-chart";
 import { MoverChip } from "@/components/mover-chip";
 import { PillarBar } from "@/components/pillar-bar";
 import { RankArrow } from "@/components/rank-arrow";
+import { SearchCombobox } from "@/components/search-combobox";
 
 // /compare — up to 5 agents side by side, with an overlay score chart,
 // per-agent cards, a "Best at X" verdict per agent, and a side-by-side
@@ -53,17 +54,29 @@ function ComparePageInner() {
   const slugs = raw
     ? raw.split(",").filter(Boolean).slice(0, MAX)
     : [legacyA, legacyB].filter((s): s is string => Boolean(s)).slice(0, MAX);
-  const [draft, setDraft] = useState("");
-  // Ref on the slug input so empty slot cards can scroll-and-focus it
-  // instead of routing the user away to /search and losing context.
-  const draftInputRef = useRef<HTMLInputElement>(null);
+  // Ref on the combobox wrapper so empty slot cards can scroll-and-
+  // focus it instead of routing the user away to /search.
+  const comboWrapRef = useRef<HTMLDivElement>(null);
   const focusDraftInput = () => {
-    const el = draftInputRef.current;
+    const el = comboWrapRef.current;
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Slight delay so the focus ring lands after the scroll settles.
-    setTimeout(() => el.focus(), 250);
+    const input = el.querySelector("input");
+    if (input) setTimeout(() => input.focus(), 250);
   };
+
+  // Stable Set so the combobox's exclude-list dependency doesn't
+  // change on every render (slugs is a fresh array each time).
+  const slugsKey = slugs.join(",");
+  const excludeSlugs = useMemo(
+    () => new Set(slugsKey ? slugsKey.split(",") : []),
+    [slugsKey],
+  );
+
+  function addSlug(slug: string) {
+    if (!slug || slugs.includes(slug) || slugs.length >= MAX) return;
+    setSlugs([...slugs, slug]);
+  }
 
   const detailQueries = useQueries({
     queries: slugs.map((slug) => ({
@@ -128,30 +141,20 @@ function ComparePageInner() {
         </p>
       </div>
 
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!draft || slugs.includes(draft) || slugs.length >= MAX) return;
-          setSlugs([...slugs, draft]);
-          setDraft("");
-        }}
-      >
-        <input
-          ref={draftInputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="agent-slug (e.g. autogpt, browser-use, anthropic-claude-haiku-latest)"
-          className="flex-1 min-w-[260px] rounded-md border border-border bg-card px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+      <div ref={comboWrapRef} className="max-w-xl">
+        <SearchCombobox
+          className="block w-full"
+          inputClassName="h-10 text-sm"
+          placeholder="Type a name (e.g. claude, autogpt, llama)…"
+          agentsOnly
+          excludeSlugs={excludeSlugs}
+          onSelectAgent={addSlug}
+          onEnter={(q) => addSlug(q.trim())}
         />
-        <button
-          type="submit"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-          disabled={!draft || slugs.length >= MAX}
-        >
-          <Plus className="h-4 w-4" /> Add
-        </button>
-      </form>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Pick from the suggestions, or hit Enter on a typed slug to add directly.
+        </p>
+      </div>
 
       {slugs.length === 0 && suggestions?.items && (
         <section>

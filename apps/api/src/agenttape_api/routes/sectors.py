@@ -191,3 +191,107 @@ async def get_sectors(
             }
         )
     return out
+
+
+@router.get("/top")
+async def get_sectors_top(
+    kind: str = Query("capability", pattern="^(capability|deployment|maturity)$"),
+    top: int = Query(3, ge=1, le=10),
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+) -> list[dict[str, Any]]:
+    """Top-N agents per tag value, in one query.
+
+    Why this endpoint exists: the Floor's "find the right agent" rail
+    used to fan out N parallel ``/agents?tag_kind=…`` calls (one per
+    capability), each running the heavy listing query (joins to
+    current_scores, two LATERALs, the global rank subquery). With ten
+    capabilities under a 2-second client-side timeout, enough of those
+    calls timed out that the rail came back empty for production
+    users — the same data /sectors and /search were happily serving
+    via single queries.
+
+    A single ROW_NUMBER OVER (PARTITION BY tag_value ORDER BY score)
+    does the same job in one round-trip and produces the exact shape
+    the rail needs: per tag value, the top-N agents with their slug,
+    name, score, and external links.
+
+    Each agent row carries only what the rail renders. If a richer
+    payload is needed downstream the caller can /agents/<slug> for
+    the detail.
+    """
+    rows = await session.execute(
+        text(
+            """
+            WITH ranked AS (
+                SELECT
+                    t.value AS tag_value,
+                    t.display_name,
+                    a.id, a.slug, a.name, a.entity_kind,
+                    a.homepage_url, a.github_repo,
+                    cs.agent_score AS agent_score,
+                    cs.adoption, cs.quality, cs.momentum, cs.community,
+                    s24.score_24h_ago,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY t.value
+                        ORDER BY cs.agent_score DESC NULLS LAST, a.slug ASC
+                    ) AS rn
+                FROM tags t
+                JOIN agent_tags at_ ON at_.tag_id = t.id
+                JOIN agents a ON a.id = at_.agent_id
+                LEFT JOIN current_scores cs ON cs.agent_id = a.id
+                LEFT JOIN LATERAL (
+                    SELECT s.agent_score AS score_24h_ago FROM scores s
+                    WHERE s.agent_id = a.id
+                      AND s.computed_at <= now() - interval '24 hours'
+                    ORDER BY s.computed_at DESC LIMIT 1
+                ) s24 ON true
+                WHERE t.kind = CAST(:kind AS tag_kind)
+                  AND a.eligibility_status = 'admitted'
+            )
+            SELECT * FROM ranked
+            WHERE rn <= :top
+            ORDER BY tag_value ASC, rn ASC
+            """
+        ),
+        {"kind": kind, "top": top},
+    )
+
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        bucket = groups.setdefault(
+            r.tag_value,
+            {
+                "value": r.tag_value,
+                "display_name": r.display_name,
+                "agents": [],
+            },
+        )
+        score_now = float(r.agent_score) if r.agent_score is not None else None
+        score_24h = float(r.score_24h_ago) if r.score_24h_ago is not None else None
+        delta_24h = (
+            score_now - score_24h
+            if score_now is not None and score_24h is not None
+            else None
+        )
+        bucket["agents"].append(
+            {
+                "id": str(r.id),
+                "slug": r.slug,
+                "name": r.name,
+                "entity_kind": r.entity_kind,
+                "homepage_url": r.homepage_url,
+                "github_repo": r.github_repo,
+                "score": {
+                    "agent_score": score_now,
+                    "adoption": float(r.adoption) if r.adoption is not None else None,
+                    "quality": float(r.quality) if r.quality is not None else None,
+                    "momentum": float(r.momentum) if r.momentum is not None else None,
+                    "community": (
+                        float(r.community) if r.community is not None else None
+                    ),
+                    "score_24h_ago": score_24h,
+                    "delta_24h": delta_24h,
+                },
+            }
+        )
+    return list(groups.values())

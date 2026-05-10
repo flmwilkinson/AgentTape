@@ -48,6 +48,20 @@ interface Props {
   // /search uses this to run the search inline (preserving mode).
   // Selecting a suggestion still navigates to that agent.
   onEnter?: (q: string) => void;
+  // Override the default agent-suggestion behavior. The /search and
+  // header consumers want a navigation, but /compare wants to add
+  // the slug to the comparison list and clear the box. When set, the
+  // combobox calls this and skips routing; the input is cleared and
+  // the panel closes after the call.
+  onSelectAgent?: (slug: string) => void;
+  // When onSelectAgent is set, /compare also wants to suppress tag
+  // suggestions (they don't make sense in a "pick one agent"
+  // context). This flag does that without coupling the combobox to
+  // /compare specifically.
+  agentsOnly?: boolean;
+  // /compare needs to filter out already-selected agents from the
+  // dropdown. Pass a Set of slugs to hide.
+  excludeSlugs?: Set<string>;
 }
 
 export function SearchCombobox({
@@ -56,6 +70,9 @@ export function SearchCombobox({
   placeholder = "Search agents, models…",
   initialQuery = "",
   onEnter,
+  onSelectAgent,
+  agentsOnly = false,
+  excludeSlugs,
 }: Props) {
   const router = useRouter();
   const [q, setQ] = useState(initialQuery);
@@ -75,14 +92,21 @@ export function SearchCombobox({
     const t = setTimeout(async () => {
       try {
         const list = await api.searchSuggest(trimmed, 8);
-        setSuggestions(list);
+        let filtered: Suggestion[] = list;
+        if (agentsOnly) filtered = filtered.filter((s) => s.kind === "agent");
+        if (excludeSlugs && excludeSlugs.size > 0) {
+          filtered = filtered.filter(
+            (s) => s.kind !== "agent" || !excludeSlugs.has(s.slug),
+          );
+        }
+        setSuggestions(filtered);
         setActive(0);
       } catch {
         setSuggestions([]);
       }
     }, 120);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, agentsOnly, excludeSlugs]);
 
   // Click-outside closes the panel.
   useEffect(() => {
@@ -102,6 +126,15 @@ export function SearchCombobox({
 
   function goSuggestion(s: Suggestion) {
     if (s.kind === "agent") {
+      // /compare and any other "pick a slug" caller can intercept
+      // selection — we hand them the slug and let them decide what
+      // to do (typically: add it to a list, clear the box, refocus).
+      if (onSelectAgent) {
+        setQ("");
+        setOpen(false);
+        onSelectAgent(s.slug);
+        return;
+      }
       go(s.slug);
       return;
     }
