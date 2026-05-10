@@ -136,28 +136,55 @@ export function CapabilityRail({ groups }: Props) {
             {g.agents.map((a, i) => (
               <li
                 key={a.id}
-                className="flex items-center gap-3 border-t border-border px-4 py-2.5 first:border-t-0"
+                className="border-t border-border px-3 py-2.5 first:border-t-0 sm:px-4"
               >
-                <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                  #{i + 1}
-                </span>
-                <Link
-                  href={`/agents/${a.slug}`}
-                  className="min-w-0 flex-1 truncate text-sm hover:text-primary"
-                >
-                  {a.name}
-                </Link>
-                <span className="num text-sm font-semibold">
-                  {formatScore(a.score?.agent_score ?? null)}
-                </span>
-                {a.score?.delta_24h != null ? (
-                  <MoverChip
-                    delta={a.score.delta_24h}
-                    unit="score"
-                    variant="outline"
-                  />
-                ) : null}
-                <ExternalLinks agent={a} />
+                {/* Two-line layout on phones (rank+name+score on top,
+                    delta + external links below) so a long agent name
+                    doesn't fight five sibling elements for ~340px of
+                    width. From sm: up the original single-row look
+                    is plenty. */}
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                    #{i + 1}
+                  </span>
+                  <Link
+                    href={`/agents/${a.slug}`}
+                    className="min-w-0 flex-1 truncate text-sm hover:text-primary"
+                  >
+                    {a.name}
+                  </Link>
+                  <span className="num shrink-0 text-sm font-semibold">
+                    {formatScore(a.score?.agent_score ?? null)}
+                  </span>
+                  <span className="hidden shrink-0 sm:inline-flex">
+                    {a.score?.delta_24h != null ? (
+                      <MoverChip
+                        delta={a.score.delta_24h}
+                        unit="score"
+                        variant="outline"
+                      />
+                    ) : null}
+                  </span>
+                  <span className="hidden shrink-0 sm:inline-flex">
+                    <ExternalLinks agent={a} />
+                  </span>
+                </div>
+                {(a.score?.delta_24h != null ||
+                  a.github_repo ||
+                  a.homepage_url) && (
+                  <div className="mt-1.5 flex items-center justify-between sm:hidden">
+                    {a.score?.delta_24h != null ? (
+                      <MoverChip
+                        delta={a.score.delta_24h}
+                        unit="score"
+                        variant="outline"
+                      />
+                    ) : (
+                      <span />
+                    )}
+                    <ExternalLinks agent={a} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

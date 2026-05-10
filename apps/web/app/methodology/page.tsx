@@ -85,7 +85,7 @@ export default function MethodologyPage() {
           near 50 on each axis.
         </p>
         <div className="overflow-x-auto rounded-md border border-border bg-card">
-          <table className="num w-full min-w-[420px] text-sm">
+          <table className="num w-full text-sm">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-3 py-2 text-left font-medium">Signal</th>
@@ -167,7 +167,7 @@ Foundation model:   AgentScore = 0.30·adoption + 0.40·quality
           — and they shouldn't be forced into the same column.
         </p>
         <div className="overflow-x-auto rounded-md border border-border bg-card">
-          <table className="num w-full min-w-[640px] text-sm">
+          <table className="num w-full text-sm [&_td]:break-words [&_th]:break-words">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-3 py-2 text-left font-medium">Pillar</th>

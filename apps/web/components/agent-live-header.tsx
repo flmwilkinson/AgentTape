@@ -278,16 +278,17 @@ function TagGroups({
             {KIND_LABEL[kind] ?? kind}
           </span>
           {grouped.get(kind)!.map((t) => {
-            // model_dep chips link straight to the model's page so a
-            // reader can jump from "Cursor is built on Claude Opus 4.7"
-            // to that model's ticker in one click. Other kinds stay
-            // static — the sector landing pages are reachable via the
-            // /sectors page.
+            // model_dep chips link to the family's sector page —
+            // /sectors/model_dep/<family> lists every app tagged with
+            // that family, which is what a reader who clicked "Built
+            // on Claude" actually wants ("show me other Claude
+            // apps"). The tag value is a family slug ('claude',
+            // 'gpt', ...), never a specific FM slug.
             if (t.kind === "model_dep") {
               return (
                 <Link
                   key={`${t.kind}:${t.value}`}
-                  href={`/agents/${t.value}`}
+                  href={`/sectors/model_dep/${t.value}`}
                   className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-[11px] text-primary hover:bg-primary/10"
                 >
                   {t.display_name}

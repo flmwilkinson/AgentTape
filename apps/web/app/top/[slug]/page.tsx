@@ -235,9 +235,11 @@ export default async function SectorLandingPage({
         </p>
       </header>
 
-      {/* The ranked list — the actual content for the page. */}
+      {/* The ranked list — the actual content for the page. Five
+          numeric-light columns fit on a 320px phone naturally; the
+          old min-w-[640px] forced horizontal scroll for no benefit. */}
       <section className="overflow-x-auto rounded-md border border-border bg-card">
-        <table className="num w-full min-w-[640px] text-sm">
+        <table className="num w-full text-sm">
           <thead className="text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-3 py-2 text-right">#</th>

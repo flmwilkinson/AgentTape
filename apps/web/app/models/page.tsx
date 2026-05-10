@@ -238,7 +238,7 @@ export default function ModelsPage() {
       </div>
 
       {isLoading ? (
-        <section className="overflow-x-auto rounded-md border border-border bg-card">
+        <section className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
           <table className="num w-full min-w-[640px] text-sm">
             <tbody>
               <TableSkeleton rows={8} cols={6} />

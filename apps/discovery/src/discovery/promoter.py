@@ -340,7 +340,12 @@ async def _admit(
             "github": _extract_github(payload, source_id, src_enum),
             "hforg": _extract_hf_org(payload, src_enum),
             "hfmodels": _extract_hf_models(payload, src_enum),
-            "packages": json.dumps(_extract_packages(payload, src_enum)),
+            "packages": json.dumps(
+                _merge_packages(
+                    _extract_packages(payload, src_enum),
+                    enrichment.detected_packages,
+                )
+            ),
             "arxiv": _extract_arxiv(payload, src_enum),
             "via": via.value,
             "score": score,
@@ -364,10 +369,23 @@ async def _admit(
             {"v": str(embedding), "id": agent_id},
         )
 
-    # Tags.
+    # Tags from rule-based enrichment (capability / deployment / etc.).
     for kind, values in enrichment.tags.items():
         for value in values:
             await _attach_tag(session, agent_id, kind, value)
+
+    # Auto-detected model dependency families ("powered by Claude" →
+    # model_dep:claude). Manual seed entries override at runtime via
+    # the same _attach_tag path; ON CONFLICT DO NOTHING means re-runs
+    # are idempotent.
+    for family in enrichment.model_dep_families:
+        await _attach_tag(
+            session,
+            agent_id,
+            "model_dep",
+            family,
+            display_name=family.title(),
+        )
 
     # Mark candidate as promoted.
     await session.execute(
@@ -425,9 +443,17 @@ async def _reject(
 
 
 async def _attach_tag(
-    session: AsyncSession, agent_id: UUID, kind: str, value: str
+    session: AsyncSession,
+    agent_id: UUID,
+    kind: str,
+    value: str,
+    *,
+    display_name: str | None = None,
 ) -> None:
-    # Idempotent upsert on tags + agent_tags.
+    # Idempotent upsert on tags + agent_tags. display_name defaults to a
+    # title-cased version of the value; pass an explicit override when the
+    # tag is human-named (e.g. model_dep family chips: "Claude" not "claude").
+    display = display_name or value.replace("-", " ").title()
     await session.execute(
         text(
             """
@@ -436,7 +462,7 @@ async def _attach_tag(
             ON CONFLICT (kind, value) DO NOTHING
             """
         ),
-        {"kind": kind, "value": value, "display": value.replace("-", " ").title()},
+        {"kind": kind, "value": value, "display": display},
     )
     res = await session.execute(
         text(
@@ -518,6 +544,21 @@ def _extract_packages(
     if source == DiscoverySource.PYPI and payload.get("name"):
         out["pypi"] = payload["name"]
     return out
+
+
+def _merge_packages(
+    primary: dict[str, str], detected: dict[str, str]
+) -> dict[str, str]:
+    """Merge auto-detected package names with what the source already
+    provides. The source-of-truth (npm/pypi scout payload) wins on
+    conflict; auto-detect just fills in missing keys. That way an npm
+    discovery still has its own scope-prefixed package name, and only
+    the GitHub-discovered repos pick up package_names from the file
+    detector."""
+    merged = dict(primary)
+    for k, v in detected.items():
+        merged.setdefault(k, v)
+    return merged
 
 
 def _extract_arxiv(

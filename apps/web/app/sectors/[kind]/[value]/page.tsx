@@ -17,7 +17,17 @@ import { SectorMembersPanel } from "@/components/sector-members-panel";
 // The same shape as /indexes/[slug] so the mental model stays
 // consistent: "another index, just one rolled up by capability".
 
-const VALID_KINDS = ["capability", "deployment", "maturity", "domain", "license"];
+const VALID_KINDS = [
+  "capability",
+  "deployment",
+  "maturity",
+  "domain",
+  "license",
+  // model_dep — family-level "Built on" sector. Apps tagged with
+  // model_dep:claude end up listed at /sectors/model_dep/claude, the
+  // landing reachable from the chip on each agent header.
+  "model_dep",
+];
 
 // 5-minute ISR. Cached HTML keeps serving when the backend is slow or
 // unreachable. Trade-off: a 5-minute lag on cohort moves vs a hard
@@ -29,11 +39,19 @@ interface PageParams {
   searchParams: Promise<{ ek?: string }>;
 }
 
-// Capability / deployment / maturity sectors mix applications and
-// foundation models, but the user's question on these pages is
-// almost always "what app should I use" — so they default to apps.
-// License / domain pages don't have that bias and stay all-kinds.
-const APPS_DEFAULT_KINDS = new Set(["capability", "deployment", "maturity"]);
+// Capability / deployment / maturity / model_dep sectors mix
+// applications and foundation models in principle, but the user's
+// question on these pages is almost always "what app should I use" —
+// so they default to apps. model_dep tags only ever apply to
+// applications anyway (an FM doesn't depend on itself), so the
+// default is correct on that page. License / domain pages don't
+// have that bias and stay all-kinds.
+const APPS_DEFAULT_KINDS = new Set([
+  "capability",
+  "deployment",
+  "maturity",
+  "model_dep",
+]);
 
 type EkFilter = "application" | "foundation_model" | "all";
 

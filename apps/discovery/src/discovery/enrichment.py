@@ -147,6 +147,17 @@ LICENSE_NORMALIZE: dict[str, str] = {
 class Enrichment:
     description: str
     tags: dict[str, list[str]]
+    # Auto-detected at enrichment time. Promoter merges these with
+    # whatever the candidate payload already has.
+    #   • detected_packages — { "npm": "<name>", "pypi": "<name>" }
+    #     extracted from package.json / pyproject.toml on the GitHub
+    #     repo's default branch. Empty when no repo, or repo has no
+    #     publishable packaging file, or fetch failed.
+    #   • model_dep_families — list of family slugs ("claude", "gpt",
+    #     "gemini", ...) detected in the description. The promoter
+    #     writes them as model_dep tags after admission.
+    detected_packages: dict[str, str]
+    model_dep_families: list[str]
 
 
 # ---------------------------------------------------------------- public
@@ -172,7 +183,24 @@ async def enrich_agent(
         except Exception as e:  # noqa: BLE001
             log.debug("optional LLM enrichment skipped: %s", e)
 
-    return Enrichment(description=desc, tags=tags)
+    # Auto-detect package_names from the GitHub repo (best-effort).
+    repo = candidate_payload.get("github_repo") or candidate_payload.get("full_name")
+    detected_packages: dict[str, str] = {}
+    if repo:
+        try:
+            detected_packages = await detect_packages_from_github(repo)
+        except Exception as e:  # noqa: BLE001
+            log.debug("package auto-detect skipped for %s: %s", repo, e)
+
+    # Auto-detect model dependency families from the description.
+    model_dep_families = detect_model_dep_families(desc)
+
+    return Enrichment(
+        description=desc,
+        tags=tags,
+        detected_packages=detected_packages,
+        model_dep_families=model_dep_families,
+    )
 
 
 # ---------------------------------------------------------------- description
@@ -446,3 +474,125 @@ async def _voyage_embedding(settings: Settings, text: str) -> list[float] | None
         if len(vec) < 1536:
             vec = vec + [0.0] * (1536 - len(vec))
         return vec[:1536]
+
+
+# ----------------------------------------------- package auto-detect
+
+# pyproject.toml `[project]` name extractor — robust enough for the
+# common case (PEP 621 name = "..."). Tomllib would be cleaner but
+# keeps us off a 3.11+ dependency floor.
+_PYPROJECT_NAME = re.compile(
+    r"^\s*name\s*=\s*\"(?P<name>[A-Za-z0-9._-]+)\"",
+    re.MULTILINE,
+)
+
+
+async def detect_packages_from_github(repo: str) -> dict[str, str]:
+    """Read package.json + pyproject.toml from a GitHub repo's default
+    branch and return a dict of detected ecosystem -> package name.
+
+    repo: ``"owner/name"`` form. Uses raw.githubusercontent.com which
+    follows the default branch via the ``HEAD`` ref alias, so it works
+    regardless of whether the project uses ``main`` or ``master`` (or
+    something exotic). Two GET requests, capped at 3s each — slow
+    repos / network blips bail out silently and leave the row's
+    package_names empty for the seed file or the next run to fix.
+
+    Best-effort by design: we accept that monorepos / private workspace
+    packages will produce a noisy auto-detect occasionally. The seed
+    file's manual mapping always wins (the promoter merges, never
+    overwrites).
+    """
+    import httpx
+
+    out: dict[str, str] = {}
+    base = f"https://raw.githubusercontent.com/{repo}/HEAD"
+    async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as http:
+        # package.json — JSON, the standard root file for npm projects.
+        try:
+            r = await http.get(f"{base}/package.json")
+            if r.status_code == 200:
+                import json as _json
+                data = _json.loads(r.text)
+                name = data.get("name")
+                # Skip workspace placeholder names that aren't published.
+                if isinstance(name, str) and name and not name.startswith("@types/"):
+                    out["npm"] = name
+        except Exception as e:  # noqa: BLE001
+            log.debug("package.json fetch failed for %s: %s", repo, e)
+
+        # pyproject.toml — fall back to setup.cfg if absent. The PEP 621
+        # `[project] name = "..."` is what most modern Python projects
+        # use; the legacy `setup.py` name field is harder to parse
+        # statically so we don't bother.
+        try:
+            r = await http.get(f"{base}/pyproject.toml")
+            if r.status_code == 200:
+                m = _PYPROJECT_NAME.search(r.text)
+                if m:
+                    out["pypi"] = m.group("name")
+        except Exception as e:  # noqa: BLE001
+            log.debug("pyproject.toml fetch failed for %s: %s", repo, e)
+
+    return out
+
+
+# --------------------------------------------- model_dep family detect
+
+# Family-level regexes. Keep these specific enough that "we don't use
+# Claude" doesn't trigger — match phrasings that commit the project to
+# the model. Order doesn't matter; the result set is a sorted list of
+# unique families.
+_MODEL_DEP_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Claude — Anthropic.
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+(?:anthropic[' ’]?s\s+)?claude\b",
+                re.IGNORECASE), "claude"),
+    # GPT / ChatGPT / OpenAI — collapse onto a single "gpt" family.
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+(?:openai[' ’]?s\s+)?(?:gpt|chatgpt)\b",
+                re.IGNORECASE), "gpt"),
+    # Gemini — Google.
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+(?:google[' ’]?s\s+)?gemini\b",
+                re.IGNORECASE), "gemini"),
+    # DeepSeek.
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+deepseek\b",
+                re.IGNORECASE), "deepseek"),
+    # Llama (Meta).
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+(?:meta[' ’]?s\s+)?llama\b",
+                re.IGNORECASE), "llama"),
+    # Mistral.
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+mistral\b",
+                re.IGNORECASE), "mistral"),
+    # Qwen (Alibaba).
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+qwen\b",
+                re.IGNORECASE), "qwen"),
+    # Grok (xAI).
+    (re.compile(r"\b(?:powered\s+by|built\s+on|uses|using|integrates\s+with|"
+                r"works\s+with|via)\s+(?:xai[' ’]?s\s+)?grok\b",
+                re.IGNORECASE), "grok"),
+]
+
+
+def detect_model_dep_families(text: str) -> list[str]:
+    """Pull family-level model dependencies out of free text.
+
+    Conservative on purpose: only matches when the description
+    *commits* the project to a model ("powered by Claude", "built on
+    GPT-4"). Bare mentions like "supports Claude and GPT" are caught
+    too — the prefix list is intentionally generous because we'd
+    rather over-tag than miss the headline case. The display chip
+    just says "Built on Claude" so a false positive is low-cost.
+    """
+    if not text:
+        return []
+    found: set[str] = set()
+    for pattern, family in _MODEL_DEP_PATTERNS:
+        if pattern.search(text):
+            found.add(family)
+    return sorted(found)
