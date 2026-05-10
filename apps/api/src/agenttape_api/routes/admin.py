@@ -66,9 +66,18 @@ async def status_page(
         _admitted_count(session),
         _pending_review_count(session),
     )
-    last_signals, last_rebalances, ws, redis_lag = await asyncio.gather(
+    (
+        last_signals,
+        last_rebalances,
+        recent_admissions,
+        benchmarks_coverage,
+        ws,
+        redis_lag,
+    ) = await asyncio.gather(
         _last_signal_per_source(session),
         _last_rebalance_per_index(session),
+        _recent_admissions(session),
+        _benchmarks_coverage(session),
         _ws_connections(),
         _redis_ping_ms(),
     )
@@ -77,6 +86,8 @@ async def status_page(
         "candidates_pending_review": pending,
         "last_signal_per_source": last_signals,
         "last_rebalance_per_index": last_rebalances,
+        "recent_admissions": recent_admissions,
+        "benchmarks_coverage": benchmarks_coverage,
         "ws_connections": ws,
         "redis_lag_ms": redis_lag,
     }
@@ -144,6 +155,59 @@ async def _last_rebalance_per_index(session: AsyncSession) -> list[dict[str, Any
             "index": r.slug,
             "last_at": r.last_at.isoformat() if r.last_at else None,
             "total_rebalances": int(r.total),
+        }
+        for r in rows
+    ]
+
+
+async def _recent_admissions(session: AsyncSession) -> list[dict[str, Any]]:
+    """Last 24h of admitted agents, newest first. Capped at 30 rows so
+    the admin payload stays small on a busy day."""
+    rows = await session.execute(
+        text(
+            """
+            SELECT slug, name, discovered_via, discovered_at, entity_kind
+            FROM agents
+            WHERE eligibility_status = 'admitted'
+              AND discovered_at > now() - interval '24 hours'
+            ORDER BY discovered_at DESC
+            LIMIT 30
+            """
+        )
+    )
+    return [
+        {
+            "slug": r.slug,
+            "name": r.name,
+            "discovered_via": r.discovered_via,
+            "discovered_at": r.discovered_at.isoformat() if r.discovered_at else None,
+            "entity_kind": r.entity_kind,
+        }
+        for r in rows
+    ]
+
+
+async def _benchmarks_coverage(session: AsyncSession) -> list[dict[str, Any]]:
+    """Per-leaderboard match count + last update — answers "which
+    leaderboards are firing and how many models did each match"."""
+    rows = await session.execute(
+        text(
+            """
+            SELECT b.name,
+                   count(br.id) AS matches,
+                   max(br.captured_at) AS last_at
+            FROM benchmarks b
+            LEFT JOIN benchmark_results br ON br.benchmark_id = b.id
+            GROUP BY b.name
+            ORDER BY matches DESC, b.name
+            """
+        )
+    )
+    return [
+        {
+            "name": r.name,
+            "matches": int(r.matches),
+            "last_at": r.last_at.isoformat() if r.last_at else None,
         }
         for r in rows
     ]
