@@ -106,6 +106,27 @@ async def run_promoter(session: AsyncSession, settings: Settings | None = None) 
             admitted += 1
             continue
 
+        # Architectural rule: an "agent" must have a deployable
+        # artifact — a GitHub repo, a published package, or an HF
+        # model id. Without one, it's documentation, marketing copy
+        # or a research paper, not a thing a user can run. The arxiv
+        # scout used to violate this with paper-as-candidate emits;
+        # we patched the scout but pending old candidates still
+        # exist in the queue. Defense in depth: reject here too so
+        # any future scout that forgets the rule can't pollute the
+        # index.
+        has_artifact = bool(
+            p.get("github_repo")
+            or p.get("full_name")
+            or p.get("packages")
+            or p.get("hf_model_ids")
+            or p.get("id")  # HF model/space id
+        )
+        if not has_artifact:
+            await _reject(session, cand_id, 0.0, {"no_deployable_artifact": True})
+            rejected += 1
+            continue
+
         score, reasons = score_candidate(p, source)
         if score >= settings.auto_admit_threshold:
             await _admit(
