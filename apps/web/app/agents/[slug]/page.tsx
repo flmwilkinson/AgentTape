@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Download, ExternalLink, Github } from "lucide-react";
 import type { Metadata } from "next";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { AgentBadgeSnippet } from "@/components/agent-badge-snippet";
 import { AgentLiveHeader } from "@/components/agent-live-header";
@@ -70,11 +70,17 @@ export default async function AgentPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Only 404 on a genuine 404 — see indexes/[slug]/page.tsx for the
+  // explanation. Transient timeouts/5xx must NOT get cached as
+  // "not found" by ISR.
   let agent;
   try {
     agent = await api.getAgent(slug);
-  } catch {
-    notFound();
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      notFound();
+    }
+    throw e;
   }
   const [signals, similar, benchmarks] = await Promise.all([
     api.agentSignals(slug, { window: "30d" }).catch(() => []),

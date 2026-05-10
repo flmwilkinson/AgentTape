@@ -773,30 +773,38 @@ async def movers(
         extra_where += " AND a.entity_kind = :entity_kind"
         params["entity_kind"] = entity_kind
 
+    # Bug fix: previously this CTE selected scores where
+    # computed_at >= :since, then took the EARLIEST score in that
+    # window as `then_score`. That measures change *within* the
+    # window, not change *vs the start of the window* — and for an
+    # agent with continuous 5-min ticks across the past 24h, those
+    # are nearly identical numbers so delta ~= 0 for everyone, the
+    # Floor's "Biggest 24h moves" filter (delta>0 / delta<0)
+    # filters everything out, and the page renders empty.
+    #
+    # Correct comparison: now_score = latest score, then_score =
+    # most-recent score on or before (now - window). Per-agent
+    # LATERAL JOINs do this without a window-function CTE.
     sql = f"""
-        WITH base AS (
-            SELECT s.agent_id,
-                   FIRST_VALUE(s.agent_score) OVER (
-                       PARTITION BY s.agent_id ORDER BY s.computed_at DESC
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                   ) AS now_score,
-                   FIRST_VALUE(s.agent_score) OVER (
-                       PARTITION BY s.agent_id ORDER BY s.computed_at ASC
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                   ) AS then_score,
-                   ROW_NUMBER() OVER (PARTITION BY s.agent_id ORDER BY s.computed_at DESC) AS rn
+        WITH latest AS (
+            SELECT DISTINCT ON (s.agent_id)
+                s.agent_id,
+                s.agent_score AS now_score,
+                s.computed_at AS now_at
             FROM scores s
-            WHERE s.computed_at >= :since
-        ),
-        deltas AS (
-            SELECT agent_id, now_score, then_score, (now_score - then_score) AS delta
-            FROM base WHERE rn = 1
+            ORDER BY s.agent_id, s.computed_at DESC
         )
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS},
-               d.delta, d.then_score
-        FROM deltas d
-        JOIN agents a ON a.id = d.agent_id
+               (l.now_score - past.then_score) AS delta,
+               past.then_score
+        FROM latest l
+        JOIN agents a ON a.id = l.agent_id
         LEFT JOIN current_scores cs ON cs.agent_id = a.id
+        JOIN LATERAL (
+            SELECT s.agent_score AS then_score FROM scores s
+            WHERE s.agent_id = a.id AND s.computed_at <= :since
+            ORDER BY s.computed_at DESC LIMIT 1
+        ) past ON true
         LEFT JOIN LATERAL (
             SELECT s.agent_score AS score_24h_ago FROM scores s
             WHERE s.agent_id = a.id AND s.computed_at <= now() - interval '24 hours'
@@ -805,8 +813,10 @@ async def movers(
         {RANKS_JOIN}
         {extra_joins}
         WHERE a.eligibility_status = 'admitted'
+          AND past.then_score IS NOT NULL
+          AND l.now_score IS NOT NULL
         {extra_where}
-        ORDER BY abs(d.delta) DESC
+        ORDER BY abs(l.now_score - past.then_score) DESC
         LIMIT :limit
     """
     rows = await session.execute(text(sql), params)

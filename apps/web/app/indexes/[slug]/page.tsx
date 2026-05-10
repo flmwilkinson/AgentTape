@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { formatScore, relativeTime } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
 import { CompareTrayToggle } from "@/components/compare-tray";
@@ -33,6 +33,9 @@ export async function generateMetadata({
       },
     };
   } catch {
+    // Metadata fetch failure shouldn't poison ISR — fall back to the
+    // slug as the page title and let the page-level handler decide
+    // 404 vs error vs cached-good-page.
     return { title: slug };
   }
 }
@@ -43,11 +46,19 @@ export default async function IndexDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  // Only call notFound() on a genuine 404 from the API. Timeouts,
+  // 5xx, and network errors get re-thrown so Next.js's error
+  // boundary (or the existing ISR cached page) handles them — and,
+  // critically, ISR doesn't cache the resulting "not found" state
+  // for 5 minutes when the API was just slow.
   let detail;
   try {
     detail = await api.getIndex(slug);
-  } catch {
-    notFound();
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      notFound();
+    }
+    throw e;
   }
   const [history, rebalances] = await Promise.all([
     api.indexHistory(slug, "30d").catch(() => []),

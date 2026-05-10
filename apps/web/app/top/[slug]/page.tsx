@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
 import { MoverChip } from "@/components/mover-chip";
@@ -174,8 +174,18 @@ export default async function SectorLandingPage({
   const def = BY_SLUG[slug];
   if (!def) notFound();
 
-  const detail = await api.getIndex(def.index_slug).catch(() => null);
-  if (!detail) notFound();
+  // Only treat real 404s as "not found". Transient errors get
+  // re-thrown so ISR doesn't cache the page as 404 and serve it
+  // for 5 minutes after the API recovers.
+  let detail;
+  try {
+    detail = await api.getIndex(def.index_slug);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      notFound();
+    }
+    throw e;
+  }
 
   const jsonLd = {
     "@context": "https://schema.org",

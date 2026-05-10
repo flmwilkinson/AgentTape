@@ -20,6 +20,23 @@ const API_BASE =
 // kicks in on a hung connection.
 const DEFAULT_TIMEOUT_MS = 2000;
 
+// Typed error so callers can distinguish a real 404 (resource gone)
+// from a transient failure (timeout, 5xx, network blip). The
+// per-page handlers used to call notFound() on ANY exception, which
+// caused Next.js ISR to cache transient timeout failures as 404
+// pages for 5 minutes — that's the "go to /indexes/fm-50 → 404 →
+// refresh → page renders" bug. Now they can branch on .status.
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string, path: string) {
+    super(`${status}: ${path}${body ? ` — ${body.slice(0, 200)}` : ""}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & {
@@ -59,7 +76,7 @@ export async function apiFetch<T>(
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${path}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
+    throw new ApiError(res.status, detail, path);
   }
   return (await res.json()) as T;
 }
