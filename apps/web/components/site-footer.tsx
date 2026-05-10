@@ -55,6 +55,21 @@ const BUILD: FooterColumn = {
       href: "https://github.com/flmwilkinson/AgentTape",
       label: "GitHub",
     },
+    // Feature requests + discussions go through GitHub. The "new
+    // issue with template" URL form prefills the body from the
+    // ISSUE_TEMPLATE file in the repo (.github/ISSUE_TEMPLATE/
+    // feature_request.md), so requests come in with the same
+    // structure and don't need a separate intake form here.
+    {
+      href:
+        "https://github.com/flmwilkinson/AgentTape/issues/new?" +
+        "template=feature_request.md&labels=enhancement",
+      label: "Request a feature",
+    },
+    {
+      href: "https://github.com/flmwilkinson/AgentTape/discussions",
+      label: "Discussions",
+    },
   ],
 };
 
@@ -112,10 +127,15 @@ export function SiteFooter() {
           {/* On mobile this is a 2-col grid: Product on the left,
               Reading + Build stacked on the right. On desktop
               md:contents flattens both wrappers so the columns live
-              directly under the parent grid (3 more cols → 4 total). */}
+              directly under the parent grid (3 more cols → 4 total).
+              ``max-md:`` prefix on space-y-6 confines the vertical
+              gap to mobile — without it, ``& > * + *`` on the
+              flattened wrapper still resolves between Reading and
+              Build as siblings on desktop and bumps Build down a
+              row visually. */}
           <div className="grid grid-cols-2 gap-8 md:contents">
             <ColumnBlock col={PRODUCT} />
-            <div className="space-y-6 md:contents">
+            <div className="max-md:space-y-6 md:contents">
               <ColumnBlock col={READING} />
               <ColumnBlock col={BUILD} />
             </div>
