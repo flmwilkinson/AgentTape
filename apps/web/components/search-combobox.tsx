@@ -146,14 +146,18 @@ export function SearchCombobox({
   }
 
   function runFullSearch() {
-    setOpen(false);
     const v = q.trim();
     if (onEnter) {
       // Caller wants to handle the submit themselves (e.g. /search
-      // updating URL params while preserving mode).
+      // updating URL params while preserving mode). Don't close the
+      // panel — /search filters live as the user types, so Enter
+      // committing the URL while leaving suggestions visible matches
+      // the natural "explore" interaction. Header consumers don't
+      // pass onEnter and still get the page-route behaviour below.
       onEnter(v);
       return;
     }
+    setOpen(false);
     router.push(v ? `/search?q=${encodeURIComponent(v)}` : "/search");
   }
 

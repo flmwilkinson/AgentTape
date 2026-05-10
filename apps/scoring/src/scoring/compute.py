@@ -121,6 +121,12 @@ ANCHORS: dict[SignalSource, float] = {
     # = score 50 — that's "real ecosystem traction, not a one-off".
     # Top FMs (Claude, GPT) clear several thousand and so peg at 100.
     SignalSource.GITHUB_REPOS_USING_MODEL: 100,
+    # Tech-news mentions in the last 30 days (TechCrunch, Verge,
+    # VentureBeat, Ars Technica, MIT Tech Review, MarkTechPost,
+    # Synced). Anchor at 5 — "named in a handful of articles in the
+    # last month" is the median household-name threshold; the truly
+    # famous flagships (GPT-5, Claude releases) saturate above 30.
+    SignalSource.NEWS_MENTIONS_30D: 5,
 }
 
 
@@ -183,6 +189,10 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.PRODUCTHUNT_UPVOTES,
         SignalSource.DOCKER_PULLS_30D,
         SignalSource.CRATES_DOWNLOADS_90D,
+        # Mainstream tech-press coverage. Captures household-name
+        # apps the social signals undercount (e.g. enterprise tools
+        # that aren't on HN much).
+        SignalSource.NEWS_MENTIONS_30D,
     ],
     "quality": [
         SignalSource.BENCHMARK_SCORE,
@@ -230,6 +240,10 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         # because the user-facing question is "how popular is the
         # model" — community matters but ecosystem reach matters more.
         SignalSource.GITHUB_REPOS_USING_MODEL,
+        # Tech-press coverage. The household-name signal the GPT/
+        # Claude/Gemini flagships would otherwise undercount on
+        # Hacker News alone.
+        SignalSource.NEWS_MENTIONS_30D,
     ],
     "quality": [
         SignalSource.BENCHMARK_SCORE,

@@ -571,6 +571,7 @@ const PILLAR_SOURCES_APP: Record<string, string[]> = {
     "producthunt_upvotes",
     "docker_pulls_30d",
     "crates_downloads_90d",
+    "news_mentions_30d",
   ],
   quality: [
     "benchmark_score",
@@ -609,6 +610,7 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "wikipedia_views_30d",
     "openrouter_token_volume_30d",
     "github_repos_using_model",
+    "news_mentions_30d",
   ],
   quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
@@ -653,6 +655,7 @@ const SIGNAL_LABEL: Record<string, string> = {
   openrouter_token_volume_30d: "OpenRouter tokens (30d)",
   github_first_response_hours_30d: "First-response hours (30d, median)",
   github_repos_using_model: "GitHub repos using this model",
+  news_mentions_30d: "Tech-news mentions (30d)",
 };
 
 function fmtCount(n: number): string {

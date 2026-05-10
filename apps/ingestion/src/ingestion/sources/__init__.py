@@ -37,6 +37,7 @@ from ingestion.sources.huggingface import (
     HFTrendingRankIngestor,
 )
 from ingestion.sources.mcp import MCPRegistryListedIngestor
+from ingestion.sources.news_mentions import NewsMentionsIngestor
 from ingestion.sources.packages import NPMWeeklyIngestor, PyPIMonthlyIngestor
 from ingestion.sources.producthunt import ProductHuntUpvotesIngestor
 from ingestion.sources.reddit import (
@@ -72,6 +73,7 @@ __all__ = [
     "HNMentions7dIngestor",
     "Ingestor",
     "MCPRegistryListedIngestor",
+    "NewsMentionsIngestor",
     "NPMWeeklyIngestor",
     "OpenRouterTokenVolume30dIngestor",
     "ProductHuntUpvotesIngestor",

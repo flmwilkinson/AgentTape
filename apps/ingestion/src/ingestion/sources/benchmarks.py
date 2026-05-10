@@ -36,6 +36,7 @@ from bs4 import BeautifulSoup
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
+from ingestion.sources.name_tokens import search_tokens, word_boundary_regex
 
 log = logging.getLogger(__name__)
 
@@ -104,18 +105,23 @@ def _best_score_for_agent(a: AgentRow, pages: dict[str, str]) -> float | None:
     """Best-effort: scan each page for the agent's identifying tokens
     and pluck the first number on the same row.
 
-    This is intentionally simple. A site-specific parser would be more
-    accurate; the goal here is for the slow tier to *do something*
-    plausible across five layouts we don't control.
+    Word-boundary matching is critical for FMs — naive substring
+    containment makes ``gpt-5`` match every ``gpt-5-mini`` /
+    ``gpt-5-pro`` row on a leaderboard, so a model picks up its
+    sibling's score. The shared ``word_boundary_regex`` helper enforces
+    "matches the whole token, surrounded by non-alphanumerics" so
+    ``gpt-5`` and ``gpt-5-mini`` no longer collide.
     """
     tokens = _identifying_tokens(a)
+    if not tokens:
+        return None
+    pattern = word_boundary_regex(tokens)
     best: float | None = None
     for html in pages.values():
         soup = BeautifulSoup(html, "html.parser")
         for tr in soup.find_all(["tr", "li"]):
             text = tr.get_text(" ", strip=True)
-            tl = text.lower()
-            if not any(tok in tl for tok in tokens):
+            if not pattern.search(text):
                 continue
             m = NUMBER.search(text)
             if not m:
@@ -129,11 +135,18 @@ def _best_score_for_agent(a: AgentRow, pages: dict[str, str]) -> float | None:
 
 
 def _identifying_tokens(a: AgentRow) -> list[str]:
-    tokens = [a.slug.lower()]
+    """Build a token list per agent. For FMs, defer to
+    ``search_tokens`` which knows how to derive clean display names
+    ("GPT-5") from the slug + facts. For applications, use the slug,
+    repo last segment, and HF model ids — the existing logic.
+    """
+    if a.entity_kind == "foundation_model":
+        return search_tokens(a)
+    tokens = [a.slug]
     if a.github_repo:
-        last = a.github_repo.split("/")[-1].lower()
-        if len(last) >= 4:  # skip noisy two-letter org repos
+        last = a.github_repo.split("/")[-1]
+        if len(last) >= 4:
             tokens.append(last)
     for hf_id in a.hf_model_ids or []:
-        tokens.append(hf_id.lower())
+        tokens.append(hf_id)
     return tokens

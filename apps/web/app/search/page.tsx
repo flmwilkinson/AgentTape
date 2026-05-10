@@ -126,10 +126,10 @@ function SearchPageInner() {
         <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-4xl">
           {kind && value ? (
             <>
-              All <span className="font-mono text-2xl">{value}</span> agents.
+              All <span className="font-mono text-2xl">{value}</span>.
             </>
           ) : (
-            <>Find an agent.</>
+            <>Find an agent or model.</>
           )}
         </h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
@@ -143,7 +143,9 @@ function SearchPageInner() {
             <>
               Type starts-of-name first (Gemini → Gemini matches first). Switch
               to <span className="font-medium">vibe</span> to search by
-              embedding similarity (when configured).
+              embedding similarity (when configured). Hits include both
+              applications and foundation models — use the Kind tab to
+              narrow.
             </>
           )}
         </p>

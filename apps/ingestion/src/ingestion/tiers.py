@@ -38,6 +38,7 @@ from ingestion.sources import (
     HNMentions7dIngestor,
     Ingestor,
     MCPRegistryListedIngestor,
+    NewsMentionsIngestor,
     NPMWeeklyIngestor,
     OpenRouterTokenVolume30dIngestor,
     ProductHuntUpvotesIngestor,
@@ -102,6 +103,10 @@ SLOW: list[type[Ingestor]] = [
     # and the GitHub Code Search API is the slowest of our github
     # endpoints (30 req/min authenticated).
     GithubReposUsingModelIngestor,
+    # News mentions across a curated set of tech-news RSS feeds.
+    # Slow because the feeds only refresh ~daily and the signal
+    # ("is this in the news") doesn't move minute-to-minute.
+    NewsMentionsIngestor,
 ]
 
 

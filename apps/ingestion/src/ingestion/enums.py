@@ -40,6 +40,9 @@ class SignalSource(str, enum.Enum):
     # Migration 0009 — Total GitHub repos referencing a foundation
     # model's name. Drives FM Community. Cumulative, not windowed.
     GITHUB_REPOS_USING_MODEL = "github_repos_using_model"
+    # Migration 0010. Mentions across curated tech-news RSS feeds
+    # (TechCrunch, Verge, VentureBeat, Ars Technica, MIT Tech Review).
+    NEWS_MENTIONS_30D = "news_mentions_30d"
 
 
 class EventKind(str, enum.Enum):

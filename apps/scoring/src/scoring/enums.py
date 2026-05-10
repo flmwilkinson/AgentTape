@@ -38,6 +38,9 @@ class SignalSource(str, enum.Enum):
     GITHUB_FIRST_RESPONSE_HOURS_30D = "github_first_response_hours_30d"
     # Migration 0009.
     GITHUB_REPOS_USING_MODEL = "github_repos_using_model"
+    # Migration 0010. Mentions across curated tech-news RSS feeds.
+    # Drives Adoption for both apps and FMs.
+    NEWS_MENTIONS_30D = "news_mentions_30d"
 
 
 class EventKind(str, enum.Enum):

@@ -215,6 +215,40 @@ async def enrich_agent(
 # The "???" entry in particular maps the three-question-mark
 # replacement of UTF-8 0xE2 0x80 0x99 (right single quote) back to a
 # plain apostrophe — that's the "Mistral???s" pattern.
+# Catch the regular Unicode replacement char too — same character
+# class, two literal codepoints (?, U+FFFD).
+_MOJI_CHARCLASS = "[?�]"
+
+_MOJIBAKE_REGEX_FIXES: list[tuple[re.Pattern[str], str]] = [
+    # Smart-quote contractions: "OpenAI???s" / "OpenAI���s" / "donâ€™t".
+    # The run of 3 q-mark-likes (or the â€™ trigraph) stands in for
+    # U+2019 (right single quote). word-boundary on the right keeps
+    # us from over-matching mid-word.
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=s\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=t\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=re\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=ve\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=ll\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=d\b)", re.IGNORECASE), "'"),
+    (re.compile(rf"{_MOJI_CHARCLASS}{{3}}(?=m\b)", re.IGNORECASE), "'"),
+    # Smart-quote between letters with no leading word boundary
+    # (catches "we???re", "you???ll" etc when prior patterns don't match).
+    (re.compile(rf"(?<=[a-zA-Z]){_MOJI_CHARCLASS}{{3}}(?=[a-zA-Z])"), "'"),
+    # Latin-1 double-decode triplet — distinctive enough to rewrite
+    # blindly, never appears in legitimate text.
+    (re.compile(r"â€™"), "'"),  # â€™ -> '
+    (re.compile(r"â€“"), "-"),  # â€“ -> -
+    (re.compile(r"â€”"), "-"),  # â€” -> -
+    (re.compile(r"â€¦"), "..."),  # â€¦ -> ...
+    (re.compile(r"â€œ"), "\""),  # â€œ -> "
+    # Lone Unicode replacement character — drop.
+    (re.compile(r"�"), ""),
+]
+
+# Legacy literal-string list — kept only because the SQL pre-filter
+# in repair_mojibake.py builds a LIKE clause from these to avoid
+# loading every row. Wider charclass below ensures we still rewrite
+# correctly via the regex pass.
 _MOJIBAKE_FIXES: list[tuple[str, str]] = [
     # Three-byte smart-quote replacements (most common).
     ("???s ", "'s "),
@@ -239,24 +273,25 @@ _MOJIBAKE_FIXES: list[tuple[str, str]] = [
 def _clean_text(s: str) -> str:
     """Repair common mojibake patterns without touching valid Unicode.
 
-    The two patterns we see in real data:
+    Three flavours show up in real data:
 
       1. Each byte of a multi-byte UTF-8 sequence ASCII-replaced with
-         "?". A right single quote (U+2019, 3 bytes in UTF-8) becomes
-         "???". This usually originates upstream — the OpenRouter and
-         Hugging Face API payloads occasionally show it — and we
-         can't guess from "???" alone what the original char was. We
-         match contraction patterns ("???s ", "???t ", ...) because
-         those are the high-frequency cases where the answer is
-         unambiguous.
+         literal "?". A right single quote (U+2019, 3 bytes in UTF-8)
+         becomes "???". OpenRouter / HF API payloads ship like this
+         intermittently.
 
-      2. UTF-8 bytes decoded as Latin-1 then re-encoded ("â€™"
-         for ' = U+2019). Easy to fix because the byte triple is
-         distinctive and never appears in legitimate text.
+      2. Same thing but the replacement char is the Unicode
+         replacement codepoint U+FFFD (renders as "?" in most fonts,
+         "□" in others). The regex character class catches both.
+
+      3. UTF-8 bytes decoded as Latin-1 then re-encoded ("â€™" for
+         U+2019). Distinctive byte triplet, safe to rewrite blind.
+
+    Idempotent — running it on already-clean text is a no-op because
+    the replacement chars (', -, ", ...) don't contain "?" or U+FFFD.
     """
-    for bad, good in _MOJIBAKE_FIXES:
-        if bad in s:
-            s = s.replace(bad, good)
+    for pattern, replacement in _MOJIBAKE_REGEX_FIXES:
+        s = pattern.sub(replacement, s)
     return s
 
 

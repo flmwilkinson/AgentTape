@@ -14,6 +14,7 @@ import feedparser
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
+from ingestion.sources.name_tokens import search_tokens
 
 log = logging.getLogger(__name__)
 
@@ -37,16 +38,23 @@ class ArxivIngestor(Ingestor):
         sem = asyncio.Semaphore(2)
 
         async def one(a: AgentRow) -> SignalReading | None:
-            term = a.github_repo or a.slug
-            if not term:
+            # Build a single OR-of-quoted-tokens search rather than
+            # multiple round-trips. For FMs that means the openrouter
+            # id, the clean name ("GPT-5"), the no-provider slug, and
+            # the full slug all participate. arXiv's search syntax
+            # supports OR across quoted phrases via "all:"X" OR "Y"".
+            tokens = search_tokens(a)
+            if not tokens:
                 return None
-            quoted = f'"{term}"'
+            # Cap at 4 to keep the URL short — arxiv's tolerant of
+            # complex queries but no need to exceed it.
+            ored = " OR ".join(f'"{t}"' for t in tokens[:4])
             async with sem:
                 try:
                     r = await self._http.get(
                         ARXIV_API,
                         params={
-                            "search_query": f"all:{quoted}",
+                            "search_query": f"all:({ored})",
                             "max_results": 100,
                         },
                     )

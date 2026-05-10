@@ -87,6 +87,8 @@ const ANCHORS: Record<string, number> = {
   // Migration 0008 anchors.
   openrouter_token_volume_30d: 1_000_000_000,
   github_first_response_hours_30d: 24,
+  // Migration 0010 — tech-news mention count.
+  news_mentions_30d: 5,
 };
 
 const APPLICATION_PILLARS = {
@@ -100,6 +102,7 @@ const APPLICATION_PILLARS = {
     "producthunt_upvotes",
     "docker_pulls_30d",
     "crates_downloads_90d",
+    "news_mentions_30d",
   ],
   quality: [
     "benchmark_score",
@@ -141,6 +144,7 @@ const FOUNDATION_MODEL_PILLARS = {
     // Repos calling this model — the most direct answer to "how
     // widely have application developers adopted this model".
     "github_repos_using_model",
+    "news_mentions_30d",
   ],
   quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
@@ -189,6 +193,7 @@ const SOURCE_LABELS: Record<string, string> = {
   google_trends_score: "Google Trends",
   benchmark_score: "Benchmark score",
   arxiv_citations: "arXiv citations",
+  news_mentions_30d: "Tech-news mentions (30d)",
 };
 
 // Each signal has prerequisites on the agent record. github_stars

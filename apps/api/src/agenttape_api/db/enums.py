@@ -85,6 +85,12 @@ class SignalSource(str, enum.Enum):
     # Difference from github_mentions_7d: no time window — measures
     # *total ecosystem usage*, not recent activity. Drives FM Community.
     GITHUB_REPOS_USING_MODEL = "github_repos_using_model"
+    # Migration 0010. Mentions across curated tech-news RSS feeds
+    # (TechCrunch, Verge, VentureBeat, Ars Technica, MIT Tech Review).
+    # Distinct from hn_mentions_7d (forum only): captures mainstream
+    # press coverage, which is the question "is this a household
+    # name yet" — drives Adoption for both apps and FMs.
+    NEWS_MENTIONS_30D = "news_mentions_30d"
 
 
 class EventKind(str, enum.Enum):
