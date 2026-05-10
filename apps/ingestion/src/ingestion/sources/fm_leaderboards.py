@@ -68,20 +68,17 @@ LEADERBOARDS: list[_Leaderboard] = [
     # parquet rows via the same datasets-server endpoint as Open LLM —
     # different parser because the column names differ ("Model" instead
     # of "eval_name", "Arena Score" instead of "Average").
-    # LMSys / LMArena Chatbot Arena. The community renamed this from
-    # "lmsys" to "lmarena-ai" — the old dataset returns 404. This is
-    # the gold-standard "which model is actually best to talk to"
-    # signal derived from blind pairwise human votes.
-    _Leaderboard(
-        name="lmsys-arena",
-        url=(
-            "https://datasets-server.huggingface.co/rows"
-            "?dataset=lmarena-ai%2Fchatbot-arena-leaderboard"
-            "&config=default&split=train"
-        ),
-        max_score=None,  # ELO is unbounded
-        parser="lmsys_arena_hf",
-    ),
+    # LMSys / LMArena Chatbot Arena was here but neither the
+    # original `lmsys/chatbot_arena_leaderboard` nor the renamed
+    # `lmarena-ai/chatbot-arena-leaderboard` HF dataset paths return
+    # data anymore (both 404). LMArena now publishes results on
+    # lmarena.ai as a JS-rendered page rather than a structured
+    # endpoint. Adding it back requires either:
+    #   1. Finding the canonical HF dataset path (community renames
+    #      happen — check huggingface.co/lmarena-ai or huggingface.co/lmsys)
+    #   2. Or scraping the lmarena.ai HTML, which is brittle.
+    # The _parse_lmsys_arena_hf helper stays in the file so we can
+    # wire it back up the moment we find the working URL.
     # LiveBench would be a great fit here (monthly contam-free eval)
     # but their public CSV URL has changed and the new endpoint isn't
     # documented. _parse_livebench is preserved at the bottom of the
