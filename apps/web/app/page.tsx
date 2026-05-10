@@ -189,9 +189,12 @@ export default async function FloorPage() {
               </Link>
             ))}
           </div>
-          <Suspense fallback={<CapabilityRailSkeleton />}>
-            <CapabilityRail />
-          </Suspense>
+          {/* CapabilityRail is now a client component — react-query
+              fetches per-capability in parallel, with its own
+              skeleton fallback while loading. The Suspense wrapper
+              that used to live here is gone since client components
+              don't suspend the same way server components do. */}
+          <CapabilityRail />
         </section>
 
         {/* New listings. */}
@@ -312,23 +315,6 @@ function IndexesGridSkeleton({ count }: { count: number }) {
   );
 }
 
-function CapabilityRailSkeleton() {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="animate-pulse rounded-md border border-border bg-card p-4 space-y-3"
-        >
-          <div className="h-3 w-20 rounded bg-muted/40" />
-          <div className="h-4 w-full rounded bg-muted/30" />
-          <div className="h-4 w-5/6 rounded bg-muted/30" />
-          <div className="h-4 w-4/6 rounded bg-muted/30" />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------- helpers
 

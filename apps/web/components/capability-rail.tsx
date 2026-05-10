@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useQueries } from "@tanstack/react-query";
 import { ArrowUpRight, Github, Globe } from "lucide-react";
 import { api, type AgentSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
@@ -10,8 +13,18 @@ import { CAPABILITIES } from "@/lib/taxonomy";
 // source — GitHub / homepage / HF model page — so a reader can go
 // from the home page to the actual codebase in one click.
 //
-// Capabilities + their order come from lib/taxonomy.ts so this rail
-// stays aligned with /trending filters and the search combobox.
+// Why this is a CLIENT component (browser-side fetch) rather than a
+// server component:
+//   The Floor's other server-side fetches (movers, indexes, top
+//   agents) work fine, but ten parallel ``listAgents?tag_kind=...&
+//   tag_value=...`` calls from Vercel's edge function to the Hetzner
+//   API consistently came back empty in production. Same calls work
+//   reliably from the browser — that's how /search renders the same
+//   data without issue. The asymmetry is some combination of
+//   connection-pool exhaustion, region routing, or per-call cold
+//   start. Rather than chase the bug we use the path that's already
+//   proven to work, with react-query for the cache + Suspense-style
+//   skeleton via initialData/isPending.
 
 const BLURBS: Record<string, string> = {
   "code-generation": "Write code, review PRs, ship features.",
@@ -32,22 +45,55 @@ const RAILS = CAPABILITIES.map((c) => ({
   blurb: BLURBS[c.slug] ?? "",
 }));
 
-export async function CapabilityRail() {
-  // Six small tag-filtered queries in parallel — total round-trip is
-  // dominated by the slowest, ~50–100 ms in dev.
-  const groups = await Promise.all(
-    RAILS.map(async (cap) => {
-      const page = await api
-        .listAgents({
+export function CapabilityRail() {
+  // One query per capability, all in parallel via useQueries. Each
+  // is independently cached for 5 minutes so flipping back to the
+  // Floor doesn't refetch immediately. Failed queries (timeouts,
+  // 5xx) gracefully resolve to an empty group rather than blanking
+  // the whole rail.
+  const queries = useQueries({
+    queries: RAILS.map((cap) => ({
+      queryKey: ["capability-rail", cap.slug],
+      queryFn: () =>
+        api.listAgents({
           tag_kind: "capability",
           tag_value: cap.slug,
           sort: "score",
           limit: 3,
-        })
-        .catch(() => ({ items: [] as AgentSummary[], total: 0, limit: 3, offset: 0 }));
-      return { cap, items: page.items };
-    }),
-  );
+        }),
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    })),
+  });
+
+  const groups = RAILS.map((cap, i) => ({
+    cap,
+    items: queries[i].data?.items ?? [],
+    isLoading: queries[i].isLoading,
+  }));
+
+  // While at least one query is still loading, render a skeleton
+  // grid so the section keeps its space rather than collapsing to
+  // zero height and jumping the page when results arrive.
+  const anyLoading = groups.some((g) => g.isLoading);
+
+  if (anyLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="animate-pulse rounded-md border border-border bg-card p-4 space-y-3"
+          >
+            <div className="h-3 w-20 rounded bg-muted/40" />
+            <div className="h-4 w-full rounded bg-muted/30" />
+            <div className="h-4 w-5/6 rounded bg-muted/30" />
+            <div className="h-4 w-4/6 rounded bg-muted/30" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const filled = groups.filter((g) => g.items.length > 0);
   if (filled.length === 0) return null;
