@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
-import type { IndexSummary } from "@/lib/api-client";
+import type { AgentSummary, IndexSummary } from "@/lib/api-client";
 import { formatScore } from "@/lib/format";
 import {
   CapabilityRail,
@@ -325,27 +325,82 @@ function IndexesGridSkeleton({ count }: { count: number }) {
 
 // ----------------------------------------------- CapabilityRailLoader
 
-// Async server component that does the one /sectors/top fetch and
-// hands the result to <CapabilityRail/>. Two failure modes:
+// The rail's data comes from the *existing* /agents endpoint — same
+// path /search and /sectors already use, no new endpoint needed. We
+// pull a generous slice (top 200 by score) once, server-side, then
+// group locally by capability tag and take the top-3 per group.
 //
-//   • Endpoint not deployed yet (the API hasn't been redeployed
-//     since /sectors/top was added) — fetch throws ApiError(404).
-//   • Endpoint deployed but DB returned nothing (no agents tagged) —
-//     fetch returns an empty array.
+// Why not the dedicated /sectors/top endpoint we added earlier:
+// requiring a new endpoint means the rail stays broken until the API
+// host (Hetzner) is redeployed. The /agents path is already live in
+// production and returns tags inline on every summary, so grouping
+// in code beats waiting for ops. /sectors/top stays in the codebase
+// as an optimisation we can switch to when convenient.
 //
-// We pass `null` for the first case and `[]` for the second. The
-// rail renders different copy for each so the user knows whether to
-// wait for a deploy to finish or to come back when discovery has
-// admitted more agents.
+// Two failure modes worth distinguishing in the UI:
+//
+//   • Fetch errored (ApiError, timeout, 5xx) → groups = null.
+//     The rail renders "Top-agents rail unavailable" with sector
+//     fallback links so the user can still browse.
+//   • Fetch succeeded but no admitted agent has a capability tag →
+//     groups = []. The rail renders "No listings yet".
 async function CapabilityRailLoader() {
   let groups: CapabilityGroup[] | null;
   try {
-    groups = await api.sectorsTop("capability", 3);
+    const page = await api.listAgents({ sort: "score", limit: 200 });
+    groups = groupAgentsByCapability(page.items, 3);
   } catch (e) {
-    console.error("CapabilityRailLoader: /sectors/top failed", e);
+    console.error("CapabilityRailLoader: /agents fetch failed", e);
     groups = null;
   }
   return <CapabilityRail groups={groups} />;
+}
+
+const CAP_DISPLAY: Record<string, string> = Object.fromEntries(
+  CAPABILITIES.map((c) => [c.slug, c.label]),
+);
+
+function groupAgentsByCapability(
+  agents: AgentSummary[],
+  topN: number,
+): CapabilityGroup[] {
+  // Bucket each agent under every capability tag it carries (an
+  // agent can be tagged with up to two capabilities by the discovery
+  // rules — it's fair for both to consider it). Within each bucket
+  // we then take the highest-scoring topN. The input is already
+  // score-sorted so a single linear pass is enough.
+  const buckets = new Map<string, AgentSummary[]>();
+  for (const a of agents) {
+    const caps = (a.tags ?? []).filter((t) => t.kind === "capability");
+    for (const t of caps) {
+      const slug = t.value;
+      if (!CAP_DISPLAY[slug]) continue;
+      const bucket = buckets.get(slug) ?? [];
+      if (bucket.length < topN) {
+        bucket.push(a);
+        buckets.set(slug, bucket);
+      }
+    }
+  }
+  return Array.from(buckets.entries()).map(([slug, items]) => ({
+    value: slug,
+    display_name:
+      items[0]?.tags?.find(
+        (t) => t.kind === "capability" && t.value === slug,
+      )?.display_name ?? CAP_DISPLAY[slug],
+    agents: items.map((a) => ({
+      id: a.id,
+      slug: a.slug,
+      name: a.name,
+      entity_kind: a.entity_kind,
+      homepage_url: a.homepage_url,
+      github_repo: a.github_repo,
+      score: {
+        agent_score: a.score?.agent_score ?? null,
+        delta_24h: a.score?.delta_24h ?? null,
+      },
+    })),
+  }));
 }
 
 

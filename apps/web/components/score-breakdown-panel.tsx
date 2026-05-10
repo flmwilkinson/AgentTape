@@ -261,6 +261,18 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
     queryFn: () => api.agentScoreHistory(slug, window),
   });
 
+  // Benchmarks live in their own table (benchmark_results) on the
+  // backend, not in the signals stream. Without this the Quality
+  // pillar display showed "0 signals" while the stored Quality score
+  // was non-null — same data, different fetch path. Pull benchmarks
+  // separately and project them into the signal-state map under the
+  // synthetic "benchmark_score" source name so the rest of the
+  // breakdown UI treats them as a normal Quality signal.
+  const { data: benchmarks } = useQuery({
+    queryKey: ["agent-benchmarks", slug],
+    queryFn: () => api.agentBenchmarks(slug),
+  });
+
   const points = (history ?? []).map((p) => ({
     t: new Date(p.captured_at).getTime(),
     agent_score: p.agent_score,
@@ -276,7 +288,11 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
       : APPLICATION_PILLARS;
 
   // Latest reading per signal source + 24h-old reading for delta.
-  const sigState = useMemo(() => buildSignalState(signals), [signals]);
+  // Benchmarks are merged in here so Quality reads as a real signal.
+  const sigState = useMemo(
+    () => buildSignalState(signals, benchmarks ?? []),
+    [signals, benchmarks],
+  );
 
   // Time-series of raw values per source — fuels the per-signal
   // sparkline that replaces the old standalone /signals chart panel.
@@ -290,8 +306,20 @@ export function ScoreBreakdownPanel({ slug, agent, signals }: Props) {
       );
       out.set(s.source, sorted.map((p) => p.value));
     }
+    // Benchmark sparkline = mean of latest score per benchmark, time-
+    // ordered. Each benchmark contributes one point per capture.
+    const bms = (benchmarks ?? []).slice().sort(
+      (a, b) =>
+        new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime(),
+    );
+    if (bms.length > 0) {
+      const series = bms.map((b) =>
+        b.max_score && b.max_score > 0 ? (b.score / b.max_score) * 100 : b.score,
+      );
+      out.set("benchmark_score", series);
+    }
     return out;
-  }, [signals]);
+  }, [signals, benchmarks]);
 
   const applicabilityFn = (s: string) => applicabilityFor(s, agent);
   const rows: PillarRow[] = [
@@ -561,7 +589,18 @@ interface SignalState {
   prior24h: number | null;
 }
 
-function buildSignalState(signals: SignalSeries[]): Map<string, SignalState> {
+type BenchmarkRow = {
+  benchmark_id: string;
+  benchmark_name: string;
+  captured_at: string;
+  score: number;
+  max_score: number | null;
+};
+
+function buildSignalState(
+  signals: SignalSeries[],
+  benchmarks: BenchmarkRow[] = [],
+): Map<string, SignalState> {
   const out = new Map<string, SignalState>();
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   for (const s of signals) {
@@ -576,6 +615,30 @@ function buildSignalState(signals: SignalSeries[]): Map<string, SignalState> {
     );
     const prior = olderPts.length > 0 ? olderPts.at(-1)!.value : null;
     out.set(s.source, { latest: latest.value, prior24h: prior });
+  }
+  // Benchmarks → synthetic "benchmark_score" signal. Mirrors the
+  // backend formula in scoring/compute._agent_benchmark_score: each
+  // benchmark normalised against its own max_score, then averaged.
+  // That way the panel's "1/2 signals" count and headline maths line
+  // up with what the scoring service actually computed.
+  if (benchmarks.length > 0) {
+    const latestPerBm = new Map<string, BenchmarkRow>();
+    for (const b of benchmarks) {
+      const prev = latestPerBm.get(b.benchmark_id);
+      if (
+        !prev ||
+        new Date(b.captured_at).getTime() > new Date(prev.captured_at).getTime()
+      ) {
+        latestPerBm.set(b.benchmark_id, b);
+      }
+    }
+    const normalized = Array.from(latestPerBm.values()).map((b) =>
+      b.max_score && b.max_score > 0 ? (b.score / b.max_score) * 100 : b.score,
+    );
+    if (normalized.length > 0) {
+      const mean = normalized.reduce((a, b) => a + b, 0) / normalized.length;
+      out.set("benchmark_score", { latest: mean, prior24h: null });
+    }
   }
   return out;
 }
