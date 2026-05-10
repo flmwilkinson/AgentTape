@@ -68,30 +68,19 @@ LEADERBOARDS: list[_Leaderboard] = [
     # parquet rows via the same datasets-server endpoint as Open LLM —
     # different parser because the column names differ ("Model" instead
     # of "eval_name", "Arena Score" instead of "Average").
+    # LMSys / LMArena Chatbot Arena. The community renamed this from
+    # "lmsys" to "lmarena-ai" — the old dataset returns 404. This is
+    # the gold-standard "which model is actually best to talk to"
+    # signal derived from blind pairwise human votes.
     _Leaderboard(
         name="lmsys-arena",
         url=(
             "https://datasets-server.huggingface.co/rows"
-            "?dataset=lmsys%2Fchatbot_arena_leaderboard"
+            "?dataset=lmarena-ai%2Fchatbot-arena-leaderboard"
             "&config=default&split=train"
         ),
         max_score=None,  # ELO is unbounded
         parser="lmsys_arena_hf",
-    ),
-    # BigCode Models Leaderboard. Public HF dataset, scores models on
-    # HumanEval / MBPP / MultiPL-E. Direct fit for "best AI coding
-    # agent" queries since coding-capable FMs are the spine of the
-    # CODE-25 / agent-engine selection question. Same datasets-server
-    # parser shape as Open LLM (eval_name + Average column).
-    _Leaderboard(
-        name="bigcode-models",
-        url=(
-            "https://datasets-server.huggingface.co/rows"
-            "?dataset=bigcode%2Fbigcode-models-leaderboard"
-            "&config=default&split=train"
-        ),
-        max_score=100.0,
-        parser="hf_dataset_rows",
     ),
     # LiveBench would be a great fit here (monthly contam-free eval)
     # but their public CSV URL has changed and the new endpoint isn't
