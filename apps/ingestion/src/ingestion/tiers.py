@@ -37,6 +37,7 @@ from ingestion.sources import (
     HFTrendingRankIngestor,
     HNMentions7dIngestor,
     Ingestor,
+    MastodonMentions7dIngestor,
     MCPRegistryListedIngestor,
     NewsMentionsIngestor,
     NPMWeeklyIngestor,
@@ -69,6 +70,11 @@ MEDIUM: list[type[Ingestor]] = [
     MCPRegistryListedIngestor,
     StackOverflowQuestions7dIngestor,
     GithubMentions7dIngestor,
+    # Mastodon search across a few large instances — sister of
+    # Bluesky but heavier per query (federated). Medium tier
+    # because the conversation moves slower than Bluesky's fast
+    # tier but still benefits from sub-daily refresh.
+    MastodonMentions7dIngestor,
     # Migration 0007 — Priority A/B signal ingestors at the medium
     # cadence. They're either GitHub-token-rate-bounded (releases,
     # close-rate) or external API soft-rate (Docker, Crates, Discord).

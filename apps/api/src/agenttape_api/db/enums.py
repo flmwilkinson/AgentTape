@@ -85,12 +85,16 @@ class SignalSource(str, enum.Enum):
     # Difference from github_mentions_7d: no time window — measures
     # *total ecosystem usage*, not recent activity. Drives FM Community.
     GITHUB_REPOS_USING_MODEL = "github_repos_using_model"
-    # Migration 0010. Mentions across curated tech-news RSS feeds
-    # (TechCrunch, Verge, VentureBeat, Ars Technica, MIT Tech Review).
-    # Distinct from hn_mentions_7d (forum only): captures mainstream
-    # press coverage, which is the question "is this a household
-    # name yet" — drives Adoption for both apps and FMs.
+    # Migration 0010. Mentions across mainstream tech press. The
+    # producer is GDELT (≈150k outlets indexed) with a curated RSS
+    # fallback if GDELT is unreachable. Distinct from
+    # hn_mentions_7d (forum only): captures the household-name
+    # question — drives Adoption for both apps and FMs.
     NEWS_MENTIONS_30D = "news_mentions_30d"
+    # Migration 0011. Mastodon public-search hit count across a few
+    # large instances. Sister signal to bluesky_mentions_7d, captures
+    # the FOSS-aligned slice of the AI conversation.
+    MASTODON_MENTIONS_7D = "mastodon_mentions_7d"
 
 
 class EventKind(str, enum.Enum):

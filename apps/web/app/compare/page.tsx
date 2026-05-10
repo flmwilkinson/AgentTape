@@ -586,6 +586,7 @@ const PILLAR_SOURCES_APP: Record<string, string[]> = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_releases_90d",
     "google_trends_score",
   ],
@@ -595,6 +596,7 @@ const PILLAR_SOURCES_APP: Record<string, string[]> = {
     "hn_points_7d",
     "reddit_points_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "hf_likes",
     "discord_members",
   ],
@@ -605,6 +607,7 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_stars",
     "github_mentions_7d",
     "wikipedia_views_30d",
@@ -618,6 +621,7 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_mentions_7d",
     "google_trends_score",
     "openrouter_token_volume_30d",
@@ -656,6 +660,7 @@ const SIGNAL_LABEL: Record<string, string> = {
   github_first_response_hours_30d: "First-response hours (30d, median)",
   github_repos_using_model: "GitHub repos using this model",
   news_mentions_30d: "Tech-news mentions (30d)",
+  mastodon_mentions_7d: "Mastodon mentions (7d)",
 };
 
 function fmtCount(n: number): string {

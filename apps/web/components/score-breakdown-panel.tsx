@@ -87,8 +87,12 @@ const ANCHORS: Record<string, number> = {
   // Migration 0008 anchors.
   openrouter_token_volume_30d: 1_000_000_000,
   github_first_response_hours_30d: 24,
-  // Migration 0010 — tech-news mention count.
-  news_mentions_30d: 5,
+  // Migration 0010 — tech-news mentions (GDELT). Anchor bumped from
+  // 5 to 30 when GDELT replaced the 7-feed RSS scan as the primary
+  // producer (much wider corpus → higher typical counts).
+  news_mentions_30d: 30,
+  // Migration 0011 — Mastodon public-search mentions.
+  mastodon_mentions_7d: 5,
 };
 
 const APPLICATION_PILLARS = {
@@ -117,6 +121,7 @@ const APPLICATION_PILLARS = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_releases_90d",
     "google_trends_score",
   ],
@@ -126,6 +131,7 @@ const APPLICATION_PILLARS = {
     "hn_points_7d",
     "reddit_points_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "hf_likes",
     "discord_members",
   ],
@@ -137,6 +143,7 @@ const FOUNDATION_MODEL_PILLARS = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_stars",
     "github_mentions_7d",
     "wikipedia_views_30d",
@@ -152,6 +159,7 @@ const FOUNDATION_MODEL_PILLARS = {
     "hn_mentions_7d",
     "reddit_mentions_7d",
     "bluesky_mentions_7d",
+    "mastodon_mentions_7d",
     "github_mentions_7d",
     "google_trends_score",
     "openrouter_token_volume_30d",
@@ -194,6 +202,7 @@ const SOURCE_LABELS: Record<string, string> = {
   benchmark_score: "Benchmark score",
   arxiv_citations: "arXiv citations",
   news_mentions_30d: "Tech-news mentions (30d)",
+  mastodon_mentions_7d: "Mastodon mentions (7d)",
 };
 
 // Each signal has prerequisites on the agent record. github_stars

@@ -36,6 +36,7 @@ from ingestion.sources.huggingface import (
     HFLikesIngestor,
     HFTrendingRankIngestor,
 )
+from ingestion.sources.mastodon_mentions import MastodonMentions7dIngestor
 from ingestion.sources.mcp import MCPRegistryListedIngestor
 from ingestion.sources.news_mentions import NewsMentionsIngestor
 from ingestion.sources.packages import NPMWeeklyIngestor, PyPIMonthlyIngestor
@@ -72,6 +73,7 @@ __all__ = [
     "HFTrendingRankIngestor",
     "HNMentions7dIngestor",
     "Ingestor",
+    "MastodonMentions7dIngestor",
     "MCPRegistryListedIngestor",
     "NewsMentionsIngestor",
     "NPMWeeklyIngestor",

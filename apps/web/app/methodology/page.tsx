@@ -79,9 +79,18 @@ const ANCHOR_ROWS: AnchorRow[] = [
   { signal: "Reddit mentions (7d)", anchor: "10" },
   { signal: "Reddit points (7d)", anchor: "100" },
   { signal: "Bluesky mentions (7d)", anchor: "10" },
+  {
+    signal: "Mastodon mentions (7d)",
+    anchor: "5",
+    notes: "federated; sums unique status URLs across mastodon.social, infosec.exchange, hachyderm.io, sigmoid.social, fosstodon.org",
+  },
   { signal: "Stack Overflow questions (7d)", anchor: "5" },
   { signal: "Product Hunt upvotes", anchor: "100" },
-  { signal: "Tech-news mentions (30d)", anchor: "5", notes: "TechCrunch + Verge + VentureBeat + Ars + MIT TR + MarkTechPost + Synced" },
+  {
+    signal: "Tech-news mentions (30d)",
+    anchor: "30",
+    notes: "GDELT primary (~150k outlets); curated RSS scan as fallback",
+  },
   { signal: "Wikipedia views (30d)", anchor: "100,000" },
   { signal: "Discord members", anchor: "5,000" },
   { signal: "Google Trends score", anchor: "30", notes: "input is already 0-100; anchor is the value-where-score-is-50" },
@@ -126,6 +135,7 @@ const PILLAR_SOURCES: PillarSource[] = [
       "HN mentions (7d)",
       "Reddit mentions (7d)",
       "Bluesky mentions (7d)",
+      "Mastodon mentions (7d)",
       "Wikipedia views (30d)",
       "Tech-news mentions (30d)",
     ],
@@ -150,6 +160,7 @@ const PILLAR_SOURCES: PillarSource[] = [
       "HN mentions (7d ROC)",
       "Reddit mentions (7d ROC)",
       "Bluesky mentions (7d ROC)",
+      "Mastodon mentions (7d ROC)",
       "Google Trends",
     ],
     foundation_model: [
@@ -159,6 +170,7 @@ const PILLAR_SOURCES: PillarSource[] = [
       "HN mentions (7d ROC)",
       "Reddit mentions (7d ROC)",
       "Bluesky mentions (7d ROC)",
+      "Mastodon mentions (7d ROC)",
       "Google Trends",
     ],
   },
@@ -170,6 +182,7 @@ const PILLAR_SOURCES: PillarSource[] = [
       "HN points (7d)",
       "Reddit points (7d)",
       "Bluesky mentions (7d)",
+      "Mastodon mentions (7d)",
       "HF likes",
       "Discord members",
     ],
@@ -325,9 +338,10 @@ export default function MethodologyPage() {
                 <td className="px-3 py-2 text-muted-foreground">
                   GitHub forks / contributors / 7-day commits · HF
                   downloads + likes · npm + PyPI counts · Docker /
-                  Crates downloads · Reddit mentions + points · Stack
-                  Overflow questions · Product Hunt upvotes · MCP
-                  registry presence · arXiv citations.
+                  Crates downloads · Reddit mentions + points ·
+                  Mastodon mentions (federated) · Stack Overflow
+                  questions · Product Hunt upvotes · MCP registry
+                  presence · arXiv citations.
                 </td>
               </tr>
               <tr className="align-top">
@@ -339,7 +353,7 @@ export default function MethodologyPage() {
                   close-rate / first-response hours · GitHub repos
                   using model (FM only) · Wikipedia views · Discord
                   members · Google Trends · OpenRouter token volume ·
-                  Tech-news mentions.
+                  Tech-news mentions (GDELT, ~150k outlets).
                 </td>
               </tr>
             </tbody>

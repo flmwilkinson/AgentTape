@@ -121,12 +121,18 @@ ANCHORS: dict[SignalSource, float] = {
     # = score 50 — that's "real ecosystem traction, not a one-off".
     # Top FMs (Claude, GPT) clear several thousand and so peg at 100.
     SignalSource.GITHUB_REPOS_USING_MODEL: 100,
-    # Tech-news mentions in the last 30 days (TechCrunch, Verge,
-    # VentureBeat, Ars Technica, MIT Tech Review, MarkTechPost,
-    # Synced). Anchor at 5 — "named in a handful of articles in the
-    # last month" is the median household-name threshold; the truly
-    # famous flagships (GPT-5, Claude releases) saturate above 30.
-    SignalSource.NEWS_MENTIONS_30D: 5,
+    # Tech-news mentions in the last 30 days. Producer is GDELT
+    # (~150k outlets) with the curated RSS list as a fallback.
+    # Anchor at 30 because the GDELT corpus is much wider than the
+    # old RSS-only signal — saturating at 250 (the API ceiling)
+    # keeps the truly famous flagships pegged near 100, and
+    # 30 articles in a month is a fair "household name" threshold.
+    SignalSource.NEWS_MENTIONS_30D: 30,
+    # Mastodon mentions across a few large instances. Sister of
+    # Bluesky — anchor at 5 (lower than Bluesky's 10) because
+    # Mastodon's federated public-search returns less than Bluesky's
+    # global firehose for the same agent.
+    SignalSource.MASTODON_MENTIONS_7D: 5,
 }
 
 
@@ -207,6 +213,10 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.HN_MENTIONS_7D,
         SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
+        # Mastodon mirrors Bluesky on the federated side — both
+        # appear in adoption (level) and momentum (rate), neither in
+        # community (would triple-count the same conversation).
+        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.GITHUB_RELEASES_90D,
         SignalSource.GOOGLE_TRENDS_SCORE,
     ],
@@ -216,6 +226,9 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.HN_POINTS_7D,
         SignalSource.REDDIT_POINTS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
+        # Mastodon mirrors Bluesky's pattern — community for apps
+        # captures contributor + commentator engagement together.
+        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.HF_LIKES,
         SignalSource.DISCORD_MEMBERS,
     ],
@@ -227,6 +240,7 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.HN_MENTIONS_7D,
         SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.GITHUB_STARS,
         SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.WIKIPEDIA_VIEWS_30D,
@@ -258,16 +272,17 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.HN_MENTIONS_7D,
         SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.GOOGLE_TRENDS_SCORE,
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
     "community": [
-        # Note: BLUESKY_MENTIONS_7D and GITHUB_REPOS_USING_MODEL were
-        # removed here — Bluesky already feeds Adoption + Momentum;
-        # repos-using-model now feeds Adoption (where ecosystem reach
-        # belongs). Each signal lives in exactly one pillar to keep
-        # the mean-of-scaled-signals math clean.
+        # Note: BLUESKY_MENTIONS_7D, MASTODON_MENTIONS_7D and
+        # GITHUB_REPOS_USING_MODEL were removed here — the social
+        # signals already feed Adoption + Momentum, repos-using-
+        # model feeds Adoption. Each signal lives in exactly one
+        # pillar to keep the mean-of-scaled-signals math clean.
         SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.REDDIT_POINTS_7D,
