@@ -14,11 +14,24 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
-// 2s is the practical ceiling for "user notices delay". Below that
-// people perceive the page as "loading" rather than "broken". When
-// the backend is healthy a fetch finishes in ~50–200 ms; this only
-// kicks in on a hung connection.
-const DEFAULT_TIMEOUT_MS = 2000;
+// Adaptive timeout. Two contexts have different requirements:
+//
+// - **SSR / ISR** (server component on Vercel): the user is already
+//   waiting on first byte. Bailing at 2s means a slow-API moment
+//   produces an empty cached page that gets served for the next
+//   5 minutes — worse than waiting an extra 6 seconds. Vercel's
+//   default function timeout is 10s, so 8s leaves headroom.
+// - **Client interaction** (refetches, react-query, search): the
+//   user wants quick "loading vs broken" feedback. 2s is the
+//   perception threshold for "broken".
+//
+// Detected by `typeof window === 'undefined'` at call time. Server
+// components see undefined, client components see the global.
+const SSR_TIMEOUT_MS = 8000;
+const CLIENT_TIMEOUT_MS = 2000;
+function defaultTimeout(): number {
+  return typeof window === "undefined" ? SSR_TIMEOUT_MS : CLIENT_TIMEOUT_MS;
+}
 
 // Typed error so callers can distinguish a real 404 (resource gone)
 // from a transient failure (timeout, 5xx, network blip). The
@@ -44,7 +57,7 @@ export async function apiFetch<T>(
     timeoutMs?: number;
   } = {},
 ): Promise<T> {
-  const { searchParams, timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+  const { searchParams, timeoutMs = defaultTimeout(), ...rest } = init;
   let url = `${API_BASE}${path}`;
   if (searchParams) {
     const qs = new URLSearchParams();

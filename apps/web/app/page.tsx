@@ -24,13 +24,14 @@ import { CAPABILITIES } from "@/lib/taxonomy";
 // fold — useful context but not what someone showing up for the first
 // time needs to see first.
 
-// 5-minute ISR cache. Vercel keeps the last successful render around
-// and re-validates in the background. When the backend is slow or
-// down, visitors still get the cached HTML (a few minutes stale) —
-// massively better than a 10-second blank screen followed by a hard
-// error. Only after the cache expires AND a fresh fetch fails do we
-// show the partial-data fallbacks below.
-export const revalidate = 300;
+// 60-second ISR for the Floor. Shorter than other pages because the
+// Floor is a "live ticker" — staleness > 1 minute is visible to
+// users. Each ISR regen now gets an 8-second SSR fetch budget (see
+// api-client.ts) instead of 2s, so flaky cache-regens that used to
+// produce empty pages are much rarer. Combined with the
+// throw-on-all-empty guard below, a transient API blip can no
+// longer poison the cache for 5 minutes.
+export const revalidate = 60;
 
 // Fallbacks rendered when the API is unreachable or returns an
 // unexpected shape. Each top-level fetch is wrapped with .catch so
@@ -54,6 +55,18 @@ export default async function FloorPage() {
     indexes.length === 0 &&
     movers24h.length === 0 &&
     recent.length === 0;
+
+  // ISR cache hygiene: when ALL four top-level fetches come back
+  // empty, the upstream is broken, not "quiet" — and this rendering
+  // would otherwise replace the previous good cached HTML for the
+  // next ISR cycle, leaving users staring at the "Backend
+  // unreachable" banner for a minute even after the API recovered.
+  // Throwing here aborts the regen so Next keeps serving the
+  // previous good cache while still attempting fresh regens on the
+  // next request.
+  if (apiOffline) {
+    throw new Error("Floor regen aborted: all top-level fetches empty");
+  }
 
   const agents = agentsPage.items;
   const top24h = movers24h
