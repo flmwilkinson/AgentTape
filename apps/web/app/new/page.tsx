@@ -16,10 +16,23 @@ import { WatchToggle } from "@/components/watch-toggle";
 // constantly, which read as broken rather than alive. Page freshness
 // is communicated by the relative-time stamp on each row instead.
 
+type Kind = "all" | "application" | "foundation_model";
+
+const KINDS: { v: Kind; label: string }[] = [
+  { v: "all", label: "All" },
+  { v: "application", label: "Applications" },
+  { v: "foundation_model", label: "Foundation models" },
+];
+
 export default function DiscoveryPage() {
+  const [kind, setKind] = useState<Kind>("all");
   const { data: initial } = useQuery({
-    queryKey: ["recent-discoveries"],
-    queryFn: () => api.recentDiscoveries(30),
+    queryKey: ["recent-discoveries", kind],
+    queryFn: () =>
+      api.recentDiscoveries(
+        30,
+        kind === "all" ? undefined : kind,
+      ),
   });
   const [stream, setStream] = useState<AgentSummary[]>([]);
 
@@ -45,11 +58,15 @@ export default function DiscoveryPage() {
     },
   });
 
-  // Merge: live first (newest), then initial. De-dupe by slug.
+  // Merge: live first (newest), then initial. De-dupe by slug. Apply
+  // the Kind filter to the merged stream too — the WS feed produces
+  // both kinds, so without this the filter would only catch the
+  // server-rendered slice.
   const seen = new Set<string>();
   const merged = [...stream, ...(initial ?? [])].filter((a) => {
     if (seen.has(a.slug)) return false;
     seen.add(a.slug);
+    if (kind !== "all" && a.entity_kind !== kind) return false;
     return true;
   });
 
@@ -67,6 +84,23 @@ export default function DiscoveryPage() {
           npm/PyPI, arXiv, and Hacker News on its own schedule.
           Admitted agents land here first.
         </p>
+      </div>
+
+      <div className="mb-4 inline-flex rounded-md border border-border bg-card p-0.5">
+        {KINDS.map((k) => (
+          <button
+            key={k.v}
+            type="button"
+            onClick={() => setKind(k.v)}
+            className={`rounded-sm px-3 py-1 text-xs font-mono uppercase tracking-wider transition-colors ${
+              kind === k.v
+                ? "bg-subtle text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {k.label}
+          </button>
+        ))}
       </div>
 
       <ol className="space-y-2">

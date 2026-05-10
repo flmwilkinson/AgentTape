@@ -134,20 +134,29 @@ export default function MethodologyPage() {
 
         <H3>Headline AgentScore</H3>
         <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
-{`weights = { adoption: 0.35, quality: 0.30, momentum: 0.20, community: 0.15 }
+{`Application:        AgentScore = 0.40·adoption + 0.20·quality
+                                + 0.10·momentum  + 0.30·community
+Foundation model:   AgentScore = 0.30·adoption + 0.40·quality
+                                + 0.10·momentum  + 0.20·community
 
-AgentScore = 0.35·adoption + 0.30·quality + 0.20·momentum + 0.15·community
-             (a missing pillar contributes 0)`}
+(missing pillar contributes 0)`}
         </pre>
         <p>
-          Flat weighted sum. A pillar with no signals contributes
-          zero — no redistribution, no re-normalisation. The weights
-          add to 1.0 so the headline stays on the 0–100 scale. Missing
-          evidence costs you score: an Adoption-only agent with 75
-          tops out at 26.25, a four-pillar agent averaging 70 reaches
-          70. More data wins by construction. If every pillar is
-          Unrated, the agent is Unrated overall — its page shows the
-          metadata sidebar but no composite.
+          Flat weighted sum, but the weight set differs by entity kind.
+          Applications win on adoption + community: real-world install
+          counts (npm, PyPI, Docker) and contributor investment matter
+          more than benchmarks (most apps don't have any) or short-
+          term star velocity. Foundation models tilt the other way —
+          benchmarks are the thing that actually distinguishes them,
+          and adoption is read through "how widely is this model
+          called from other repos" rather than HF stars alone. Both
+          weight sets sum to 1.0 so headlines stay 0–100, and a
+          pillar with no signals contributes zero (no redistribution,
+          no re-normalisation). Missing evidence costs you score:
+          single-pillar agents stay listed but capped at the weight
+          of that pillar. If every pillar is Unrated, the agent is
+          Unrated overall — its page shows the metadata sidebar but no
+          composite.
         </p>
 
         <H3>Source list per kind</H3>
@@ -210,20 +219,21 @@ scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
           small positive bias for "newly visible".
         </p>
 
-        <H3>Worked example: Claude Opus 4.7</H3>
+        <H3>Worked example: Claude Opus 4.7 (foundation model)</H3>
         <p>
           Suppose latest signals: HN 47 mentions (7d), Bluesky 18, Reddit
           12, benchmark Open LLM Average 87.6, no HF mirror.
         </p>
         <pre className="rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
 {`Adoption sources (FM):
-  hn_mentions_7d        scaled(47, 10)      = 80.7
-  bluesky_mentions_7d   scaled(18, 10)      = 63.0
-  reddit_mentions_7d    scaled(12, 10)      = 53.6
-  hf_downloads_30d      no reading          → skipped
-  github_stars          no reading          → skipped
-  github_mentions_7d    no reading          → skipped
-  → Adoption = mean(80.7, 63.0, 53.6) = 65.8
+  hn_mentions_7d              scaled(47, 10)      = 80.7
+  bluesky_mentions_7d         scaled(18, 10)      = 63.0
+  reddit_mentions_7d          scaled(12, 10)      = 53.6
+  hf_downloads_30d            no reading          → skipped
+  github_stars                no reading          → skipped
+  github_mentions_7d          no reading          → skipped
+  github_repos_using_model    scaled(420, 100)    = 81.3
+  → Adoption = mean(80.7, 63.0, 53.6, 81.3) = 69.7
 
 Quality sources:
   benchmark_score = 87.6  → 87.6 (no transform)
@@ -233,14 +243,44 @@ Momentum (7d ROC, hypothetical +20% mention growth):
   → ~58.8
 
 Community sources (FM):
-  bluesky_mentions_7d   scaled(18, 10)      = 63.0
-  reddit_points_7d      scaled(240, 100)    = 59.4
-  → Community = 61.2
+  reddit_points_7d            scaled(240, 100)    = 59.4
+  → Community = 59.4
 
-Headline (all four pillars present):
-  0.35 × 65.8 + 0.30 × 87.6 + 0.20 × 58.8 + 0.15 × 61.2
-  = 23.0 + 26.3 + 11.8 + 9.2
-  = 70.3`}
+Headline (FM weights 0.30 / 0.40 / 0.10 / 0.20):
+  0.30 × 69.7 + 0.40 × 87.6 + 0.10 × 58.8 + 0.20 × 59.4
+  = 20.91 + 35.04 + 5.88 + 11.88
+  = 73.7`}
+        </pre>
+
+        <H3>Worked example: claude-code (application)</H3>
+        <p>
+          GitHub stars 122k, npm install volume reflected, contributors
+          52, forks 20.2k, no benchmark on file.
+        </p>
+        <pre className="rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
+{`Adoption sources (App):
+  github_stars            scaled(122k, 1k)    = 100.0
+  npm_weekly              scaled(50k, 1k)     = 87.5
+  stackoverflow_q_7d      scaled(2, 5)        = 30.7
+  producthunt_upvotes     scaled(412, 100)    = 80.8
+  → Adoption = mean(100.0, 87.5, 30.7, 80.8) = 74.8
+
+Quality:
+  no benchmark on file    → Unrated → contributes 0
+
+Momentum (7d ROC, ~5% star growth on a mature project):
+  → ~52.5
+
+Community sources (App):
+  github_contributors     scaled(52, 30)      = 73.6
+  github_forks            scaled(20.2k, 200)  = 100.0
+  hn_points_7d            scaled(180, 100)    = 56.9
+  → Community = mean(73.6, 100.0, 56.9) = 76.8
+
+Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
+  0.40 × 74.8 + 0.20 × 0 + 0.10 × 52.5 + 0.30 × 76.8
+  = 29.92 + 0 + 5.25 + 23.04
+  = 58.2`}
         </pre>
 
         <H3>Why some agents are Unrated</H3>

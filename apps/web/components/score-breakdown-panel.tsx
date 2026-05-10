@@ -138,6 +138,9 @@ const FOUNDATION_MODEL_PILLARS = {
     "github_mentions_7d",
     "wikipedia_views_30d",
     "openrouter_token_volume_30d",
+    // Repos calling this model — the most direct answer to "how
+    // widely have application developers adopted this model".
+    "github_repos_using_model",
   ],
   quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
@@ -149,17 +152,10 @@ const FOUNDATION_MODEL_PILLARS = {
     "google_trends_score",
     "openrouter_token_volume_30d",
   ],
-  // Bluesky removed: it already feeds Adoption (level) + Momentum
-  // (rate). Triple-counting the same reading inflates community.
-  // github_repos_using_model added: ecosystem usage for
-  // closed-weight flagships (Claude, GPT, Gemini) without HF / GH
-  // pages of their own.
-  community: [
-    "hf_likes",
-    "github_contributors",
-    "reddit_points_7d",
-    "github_repos_using_model",
-  ],
+  // Each signal in exactly one pillar — Bluesky lives in Adoption +
+  // Momentum, github_repos_using_model lives in Adoption (ecosystem
+  // reach), so neither appears here a second time.
+  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
 };
 
 const SOURCE_LABELS: Record<string, string> = {

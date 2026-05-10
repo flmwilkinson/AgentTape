@@ -608,6 +608,7 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "github_mentions_7d",
     "wikipedia_views_30d",
     "openrouter_token_volume_30d",
+    "github_repos_using_model",
   ],
   quality: ["benchmark_score", "arxiv_citations"],
   momentum: [
@@ -619,15 +620,10 @@ const PILLAR_SOURCES_FM: Record<string, string[]> = {
     "google_trends_score",
     "openrouter_token_volume_30d",
   ],
-  // Bluesky removed: it's already in Adoption (level) + Momentum (rate).
-  // github_repos_using_model added: ecosystem-usage signal for
-  // closed-weight flagships that have no HF or GitHub home of their own.
-  community: [
-    "hf_likes",
-    "github_contributors",
-    "reddit_points_7d",
-    "github_repos_using_model",
-  ],
+  // Each FM signal lives in exactly one pillar so the mean-of-scaled-
+  // signals math stays clean. github_repos_using_model is in Adoption
+  // (ecosystem reach), Bluesky is Adoption + Momentum.
+  community: ["hf_likes", "github_contributors", "reddit_points_7d"],
 };
 const SIGNAL_LABEL: Record<string, string> = {
   github_stars: "GitHub stars",

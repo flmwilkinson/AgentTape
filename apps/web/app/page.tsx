@@ -346,7 +346,15 @@ function IndexesGridSkeleton({ count }: { count: number }) {
 async function CapabilityRailLoader() {
   let groups: CapabilityGroup[] | null;
   try {
-    const page = await api.listAgents({ sort: "score", limit: 200 });
+    // entity_kind=application — the rail answers "what app should I
+    // use to do X", which is by definition an application question.
+    // Foundation models are surfaced via /models, the FM-50 index,
+    // and the per-agent "Built on" chip rather than mixed in here.
+    const page = await api.listAgents({
+      sort: "score",
+      limit: 200,
+      entity_kind: "application",
+    });
     groups = groupAgentsByCapability(page.items, 3);
   } catch (e) {
     console.error("CapabilityRailLoader: /agents fetch failed", e);

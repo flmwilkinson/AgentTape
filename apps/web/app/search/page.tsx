@@ -44,8 +44,22 @@ function SearchPageInner() {
   const mode = (params.get("mode") as "text" | "vibe" | null) ?? "text";
   const kind = params.get("kind");
   const value = params.get("value");
+  // Entity-kind tab. Search and tag-listing both return mixed
+  // results; users frequently want either "just apps" or "just
+  // models" — that's what /trending and /new already expose, so
+  // /search gets the same control. Filter is applied client-side
+  // post-fetch so the request stays one round-trip.
+  const ek = (params.get("ek") as "all" | "application" | "foundation_model" | null) ?? "all";
 
-  function setQuery(next: Partial<{ q: string; mode: "text" | "vibe"; kind: string | null; value: string | null }>) {
+  function setQuery(
+    next: Partial<{
+      q: string;
+      mode: "text" | "vibe";
+      kind: string | null;
+      value: string | null;
+      ek: "all" | "application" | "foundation_model";
+    }>,
+  ) {
     const cur = new URLSearchParams(params.toString());
     if (next.q !== undefined) {
       next.q ? cur.set("q", next.q) : cur.delete("q");
@@ -56,6 +70,9 @@ function SearchPageInner() {
     }
     if (next.value !== undefined) {
       next.value ? cur.set("value", next.value) : cur.delete("value");
+    }
+    if (next.ek !== undefined) {
+      next.ek === "all" ? cur.delete("ek") : cur.set("ek", next.ek);
     }
     router.replace(`/search?${cur.toString()}`);
   }
@@ -86,7 +103,18 @@ function SearchPageInner() {
     queryFn: api.tags,
   });
 
-  const hits = searchData?.hits ?? [];
+  const allHits = searchData?.hits ?? [];
+  const allFilter = filterData?.items ?? [];
+  // Apply Kind filter post-fetch so the entire UI (results, facets,
+  // filter pane) reads consistently with the chosen tab.
+  const hits =
+    ek === "all"
+      ? allHits
+      : allHits.filter((h) => h.agent.entity_kind === ek);
+  const filteredFilter =
+    ek === "all"
+      ? allFilter
+      : allFilter.filter((a) => a.entity_kind === ek);
   const facets = searchData?.facets ?? {};
 
   return (
@@ -126,9 +154,9 @@ function SearchPageInner() {
           stays on the page and runs the search using the current
           mode (text or vibe). Selecting a suggestion still jumps to
           its detail page. */}
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:flex-wrap">
         <SearchCombobox
-          className="flex-1"
+          className="flex-1 min-w-[260px]"
           inputClassName="h-11 text-sm"
           placeholder="autonomous browser agent, claude, gemini…"
           initialQuery={q}
@@ -148,6 +176,29 @@ function SearchPageInner() {
               )}
             >
               {m === "vibe" && <Sparkles className="h-3 w-3" />} {m}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+          {(
+            [
+              { v: "all" as const, label: "All" },
+              { v: "application" as const, label: "Apps" },
+              { v: "foundation_model" as const, label: "Models" },
+            ]
+          ).map((k) => (
+            <button
+              key={k.v}
+              type="button"
+              onClick={() => setQuery({ ek: k.v })}
+              className={cn(
+                "rounded-sm px-3 py-2 text-xs font-mono uppercase tracking-wider transition-colors",
+                ek === k.v
+                  ? "bg-subtle text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {k.label}
             </button>
           ))}
         </div>
@@ -221,7 +272,7 @@ function SearchPageInner() {
                 similarity={h.similarity}
               />
             ))}
-          {!q && filterData?.items.map((a) => (
+          {!q && filteredFilter.map((a) => (
             <AgentSearchHit key={a.id} agent={a} />
           ))}
           {!q && !filterData && (

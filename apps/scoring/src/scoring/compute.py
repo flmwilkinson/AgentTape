@@ -224,6 +224,12 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         # production traffic" on FMs. Routinely diverges from
         # benchmark and HF download rankings.
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
+        # Number of GitHub repos calling this model. The most direct
+        # public answer to "how widely is this model adopted by app
+        # developers". Lives in adoption rather than community
+        # because the user-facing question is "how popular is the
+        # model" — community matters but ecosystem reach matters more.
+        SignalSource.GITHUB_REPOS_USING_MODEL,
     ],
     "quality": [
         SignalSource.BENCHMARK_SCORE,
@@ -243,17 +249,14 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
     ],
     "community": [
-        # Note: BLUESKY_MENTIONS_7D was removed here — it already
-        # feeds Adoption (level) and Momentum (rate of change). Having
-        # it in Community too was a triple-count of the same row.
+        # Note: BLUESKY_MENTIONS_7D and GITHUB_REPOS_USING_MODEL were
+        # removed here — Bluesky already feeds Adoption + Momentum;
+        # repos-using-model now feeds Adoption (where ecosystem reach
+        # belongs). Each signal lives in exactly one pillar to keep
+        # the mean-of-scaled-signals math clean.
         SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.REDDIT_POINTS_7D,
-        # Total GitHub repos calling this model. Best signal we have
-        # for community traction on closed-weight flagships (Claude,
-        # GPT, Gemini) that have no HF page and no GitHub repo of
-        # their own. See sources/github_repos_using_model.py.
-        SignalSource.GITHUB_REPOS_USING_MODEL,
     ],
 }
 
@@ -538,27 +541,36 @@ def _headline(pillars: PillarScores, settings: Settings) -> float | None:
     industry's top agents, so more evidence has to mean a higher score
     and missing evidence has to cost.
 
-    The current rule is a flat weighted sum with the published weights:
+    Weights are now entity-kind specific (see config.Settings):
 
-        AgentScore = 0.35·adoption + 0.30·quality
-                   + 0.20·momentum + 0.15·community
+        Application    : 0.40 adoption + 0.20 quality
+                       + 0.10 momentum + 0.30 community
+        Foundation mdl : 0.30 adoption + 0.40 quality
+                       + 0.10 momentum + 0.20 community
 
-    A pillar with no signals is treated as zero in the sum (not
-    redistributed and not dropped). Weights sum to 1.0 so the
-    headline stays on a 0–100 scale. Single-pillar agents still appear
-    on the leaderboard but their score is capped at the weight of that
-    pillar — Adoption-only with 75 maxes at 26.25, which is exactly
-    the punishment a one-signal MCP listing deserves.
+    Both sets sum to 1.0 so headlines stay on the 0-100 scale. A pillar
+    with no signals contributes zero (not redistributed). Single-pillar
+    agents still appear on the leaderboard but their score is capped
+    at the weight of that pillar.
 
     Returns None only when *every* pillar is null — those agents stay
     unranked and don't pollute the chart with synthetic zeros.
     """
-    weights = {
-        "adoption": settings.weight_adoption,
-        "quality": settings.weight_quality,
-        "momentum": settings.weight_momentum,
-        "community": settings.weight_community,
-    }
+    kind = pillars.inputs.get("kind", "application")
+    if kind == "foundation_model":
+        weights = {
+            "adoption": settings.weight_fm_adoption,
+            "quality": settings.weight_fm_quality,
+            "momentum": settings.weight_fm_momentum,
+            "community": settings.weight_fm_community,
+        }
+    else:
+        weights = {
+            "adoption": settings.weight_app_adoption,
+            "quality": settings.weight_app_quality,
+            "momentum": settings.weight_app_momentum,
+            "community": settings.weight_app_community,
+        }
     if all(getattr(pillars, k) is None for k in weights):
         return None
     total = 0.0

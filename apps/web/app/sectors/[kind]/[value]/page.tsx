@@ -26,6 +26,22 @@ export const revalidate = 300;
 
 interface PageParams {
   params: Promise<{ kind: string; value: string }>;
+  searchParams: Promise<{ ek?: string }>;
+}
+
+// Capability / deployment / maturity sectors mix applications and
+// foundation models, but the user's question on these pages is
+// almost always "what app should I use" — so they default to apps.
+// License / domain pages don't have that bias and stay all-kinds.
+const APPS_DEFAULT_KINDS = new Set(["capability", "deployment", "maturity"]);
+
+type EkFilter = "application" | "foundation_model" | "all";
+
+function parseEk(raw: string | undefined, kind: string): EkFilter {
+  if (raw === "application" || raw === "foundation_model" || raw === "all") {
+    return raw;
+  }
+  return APPS_DEFAULT_KINDS.has(kind) ? "application" : "all";
 }
 
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
@@ -37,8 +53,10 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
   };
 }
 
-export default async function SectorDetailPage({ params }: PageParams) {
+export default async function SectorDetailPage({ params, searchParams }: PageParams) {
   const { kind, value } = await params;
+  const sp = await searchParams;
+  const ek = parseEk(sp.ek, kind);
   if (!VALID_KINDS.includes(kind)) notFound();
 
   // Members are server-loaded; the chart is now a client component
@@ -51,6 +69,7 @@ export default async function SectorDetailPage({ params }: PageParams) {
       tag_value: value,
       sort: "score",
       limit: 100,
+      entity_kind: ek === "all" ? undefined : ek,
     }).catch(() => null),
   ]);
 
@@ -137,6 +156,9 @@ export default async function SectorDetailPage({ params }: PageParams) {
       </div>
 
       <div className="container py-8 md:py-12 space-y-8 pb-24 md:pb-12">
+        {APPS_DEFAULT_KINDS.has(kind) && (
+          <KindTabs kind={kind} value={value} active={ek} />
+        )}
         <SectorMembersPanel members={members.items} />
 
         <p className="hairline pt-6 text-xs text-muted-foreground">
@@ -156,4 +178,46 @@ function pretty(value: string): string {
     .split("-")
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" ");
+}
+
+// Kind tabs — let the reader switch between Apps (default), Foundation
+// models, or All without leaving the page. URL-driven via ?ek= so the
+// chosen view is shareable. Plain links rather than client state so
+// the page stays a server component and the back button works.
+function KindTabs({
+  kind,
+  value,
+  active,
+}: {
+  kind: string;
+  value: string;
+  active: EkFilter;
+}) {
+  const opts: { v: EkFilter; label: string }[] = [
+    { v: "application", label: "Applications" },
+    { v: "foundation_model", label: "Foundation models" },
+    { v: "all", label: "All" },
+  ];
+  return (
+    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+      {opts.map((o) => {
+        const href = `/sectors/${kind}/${value}${
+          o.v === "application" ? "" : `?ek=${o.v}`
+        }`;
+        return (
+          <Link
+            key={o.v}
+            href={href}
+            className={`rounded-sm px-3 py-1 text-xs font-mono uppercase tracking-wider transition-colors ${
+              active === o.v
+                ? "bg-subtle text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {o.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
 }

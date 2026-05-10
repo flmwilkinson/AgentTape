@@ -1122,8 +1122,16 @@ async def list_events(
 
 
 async def recent_admissions(
-    session: AsyncSession, *, limit: int
+    session: AsyncSession,
+    *,
+    limit: int,
+    entity_kind: str | None = None,
 ) -> list[dict[str, Any]]:
+    extra_where = ""
+    params: dict[str, Any] = {"limit": limit}
+    if entity_kind:
+        extra_where = " AND a.entity_kind = :entity_kind"
+        params["entity_kind"] = entity_kind
     sql = f"""
         SELECT {AGENT_COLS}, {SCORE_COLS}, {SCORE_24H_COL}, {RANKS_COLS}
         FROM agents a
@@ -1134,9 +1142,9 @@ async def recent_admissions(
             ORDER BY s.computed_at DESC LIMIT 1
         ) s24 ON true
         {RANKS_JOIN}
-        WHERE a.eligibility_status = 'admitted'
+        WHERE a.eligibility_status = 'admitted'{extra_where}
         ORDER BY a.discovered_at DESC
         LIMIT :limit
     """
-    rows = await session.execute(text(sql), {"limit": limit})
+    rows = await session.execute(text(sql), params)
     return [_row_to_agent_summary(r) for r in rows]

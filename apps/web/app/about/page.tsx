@@ -238,31 +238,27 @@ export default async function AboutPage() {
         </h2>
         <div className="prose prose-zinc mt-4 max-w-none editorial space-y-4 text-base leading-relaxed text-foreground/90 md:text-lg">
           <p>
-            A 0-100 headline backed by four pillars. The weights below
-            are the defaults and they sum to 1.0. The headline is a
-            flat weighted sum: a pillar with no signals contributes
-            zero, no redistribution. That's deliberate — more
-            evidence has to mean a higher score. An agent with only
-            Adoption tops out at 35; only the broadly-covered ones
-            reach the high 60s and 70s.
+            A 0-100 headline backed by four pillars. Weights are
+            entity-kind specific — applications and foundation models
+            have different "what makes them good" profiles, so they
+            score on different blends. Both sets sum to 1.0. The
+            headline is a flat weighted sum: a missing pillar
+            contributes zero, no redistribution. More evidence wins by
+            construction.
           </p>
           <ul className="list-disc pl-6">
             <li>
-              <strong>Adoption (35%)</strong>: z-score across stars,
-              downloads, package counts, registry presence
+              <strong>Applications (0.40 / 0.20 / 0.10 / 0.30):</strong>{" "}
+              adoption + community matter most. Most apps have no
+              benchmarks, so quality stays a tie-breaker; momentum is
+              a small bonus rather than dominant. Real-world install
+              counts and contributor investment win.
             </li>
             <li>
-              <strong>Quality (30%)</strong>: mean z-score across
-              benchmark results. <em>Unrated</em> when no benchmark
-              exists, never zero
-            </li>
-            <li>
-              <strong>Momentum (20%)</strong>: 7-day and 30-day
-              rate-of-change blend on adoption signals
-            </li>
-            <li>
-              <strong>Community (15%)</strong>: contributors, HN
-              points, Reddit points
+              <strong>Foundation models (0.30 / 0.40 / 0.10 / 0.20):</strong>{" "}
+              benchmarks differentiate. Adoption is read partly through
+              "how widely is this model called from other repos" — the
+              clearest public proxy for production traffic.
             </li>
           </ul>
           <p>

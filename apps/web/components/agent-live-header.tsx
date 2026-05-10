@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDeltaPct, formatScore } from "@/lib/format";
@@ -230,10 +231,18 @@ function DerivedBadges({
 // dense and made similar chips harder to scan. Grouping puts the
 // kind label once per group and lets the values themselves carry the
 // chip — much closer to how a reader expects metadata to render.
-const KIND_ORDER = ["capability", "deployment", "license", "maturity", "domain"];
+const KIND_ORDER = [
+  "capability",
+  "deployment",
+  "model_dep",
+  "license",
+  "maturity",
+  "domain",
+];
 const KIND_LABEL: Record<string, string> = {
   capability: "Capabilities",
   deployment: "Deployment",
+  model_dep: "Built on",
   license: "License",
   maturity: "Maturity",
   domain: "Domain",
@@ -268,16 +277,34 @@ function TagGroups({
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 mr-1">
             {KIND_LABEL[kind] ?? kind}
           </span>
-          {grouped.get(kind)!.map((t) => (
-            <span
-              key={`${t.kind}:${t.value}`}
-              className={cn(
-                "rounded-full border border-border bg-subtle px-2.5 py-0.5 text-[11px] text-foreground/85",
-              )}
-            >
-              {t.display_name}
-            </span>
-          ))}
+          {grouped.get(kind)!.map((t) => {
+            // model_dep chips link straight to the model's page so a
+            // reader can jump from "Cursor is built on Claude Opus 4.7"
+            // to that model's ticker in one click. Other kinds stay
+            // static — the sector landing pages are reachable via the
+            // /sectors page.
+            if (t.kind === "model_dep") {
+              return (
+                <Link
+                  key={`${t.kind}:${t.value}`}
+                  href={`/agents/${t.value}`}
+                  className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-[11px] text-primary hover:bg-primary/10"
+                >
+                  {t.display_name}
+                </Link>
+              );
+            }
+            return (
+              <span
+                key={`${t.kind}:${t.value}`}
+                className={cn(
+                  "rounded-full border border-border bg-subtle px-2.5 py-0.5 text-[11px] text-foreground/85",
+                )}
+              >
+                {t.display_name}
+              </span>
+            );
+          })}
         </div>
       ))}
     </div>

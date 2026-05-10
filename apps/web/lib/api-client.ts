@@ -418,9 +418,12 @@ export const api = {
   events: (params: { kind?: string; limit?: number; offset?: number } = {}) =>
     apiFetch<Page<EventOut>>("/events", { searchParams: params, cache: "no-store" }),
 
-  recentDiscoveries: (limit = 12) =>
+  recentDiscoveries: (
+    limit = 12,
+    entity_kind?: "application" | "foundation_model",
+  ) =>
     apiFetch<AgentSummary[]>("/discovery/recent", {
-      searchParams: { limit },
+      searchParams: { limit, entity_kind },
       cache: "no-store",
     }),
 };

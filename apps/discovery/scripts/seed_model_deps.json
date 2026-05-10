@@ -1,0 +1,29 @@
+{
+  "_README": [
+    "Seed list for the model_dep tag — which foundation model each app",
+    "is built on. Add entries here as you find them; the script reads",
+    "this file and inserts tags for every agent slug that exists in",
+    "the database (silently skips unknowns).",
+    "",
+    "Format: { \"<agent slug>\": [\"<fm slug>\", ...] }. An agent can be",
+    "tagged with multiple models — Cursor speaks to Claude AND GPT, etc.",
+    "",
+    "Slug naming follows AgentTape's convention (lowercase, dashes).",
+    "Model slugs are typically the OpenRouter ID flattened (e.g.",
+    "'anthropic/claude-opus-4.7' -> 'anthropic-claude-opus-4-7').",
+    "Run apps/discovery/scripts/seed_model_deps.py to apply."
+  ],
+  "claude-code": ["anthropic-claude-opus-4-7"],
+  "cline": ["anthropic-claude-opus-4-7"],
+  "opencode": ["anthropic-claude-opus-4-7"],
+  "cursor": ["anthropic-claude-opus-4-7", "openai-gpt-5"],
+  "aider": ["anthropic-claude-opus-4-7", "openai-gpt-5"],
+  "continue": ["anthropic-claude-opus-4-7"],
+  "claude-mem": ["anthropic-claude-opus-4-7"],
+  "deepclaude": ["deepseek-deepseek-v4-pro"],
+  "codex-mcp-server": ["openai-gpt-5-2-codex"],
+  "browser-use": ["anthropic-claude-opus-4-7", "openai-gpt-5"],
+  "gptme": ["openai-gpt-5", "anthropic-claude-opus-4-7"],
+  "openclaude": ["anthropic-claude-opus-4-7"],
+  "ralph-claude-code": ["anthropic-claude-opus-4-7"]
+}
