@@ -382,11 +382,13 @@ export const api = {
     }),
 
   // Top-N agents per tag value in a single response. Used by the
-  // Floor's capability rail — replaces a fan-out of N parallel
-  // /agents calls that ran into client-side timeouts in production.
+  // Floor's capability rail — one ROW_NUMBER OVER PARTITION BY
+  // query, vastly cheaper than a 200-row /agents listing with all
+  // its LATERAL joins. ``entity_kind`` lets the rail stay apps-only.
   sectorsTop: (
     kind: "capability" | "deployment" | "maturity" = "capability",
     top = 3,
+    entity_kind?: "application" | "foundation_model",
   ) =>
     apiFetch<
       {
@@ -411,7 +413,7 @@ export const api = {
         }[];
       }[]
     >("/sectors/top", {
-      searchParams: { kind, top },
+      searchParams: { kind, top, entity_kind },
       cache: "no-store",
     }),
 

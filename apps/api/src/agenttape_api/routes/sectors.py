@@ -197,6 +197,9 @@ async def get_sectors(
 async def get_sectors_top(
     kind: str = Query("capability", pattern="^(capability|deployment|maturity)$"),
     top: int = Query(3, ge=1, le=10),
+    entity_kind: str | None = Query(
+        None, pattern="^(application|foundation_model)$"
+    ),
     session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
     """Top-N agents per tag value, in one query.
@@ -219,9 +222,14 @@ async def get_sectors_top(
     payload is needed downstream the caller can /agents/<slug> for
     the detail.
     """
+    extra_where = ""
+    params: dict[str, Any] = {"kind": kind, "top": top}
+    if entity_kind:
+        extra_where = " AND a.entity_kind = :entity_kind"
+        params["entity_kind"] = entity_kind
     rows = await session.execute(
         text(
-            """
+            f"""
             WITH ranked AS (
                 SELECT
                     t.value AS tag_value,
@@ -246,14 +254,14 @@ async def get_sectors_top(
                     ORDER BY s.computed_at DESC LIMIT 1
                 ) s24 ON true
                 WHERE t.kind = CAST(:kind AS tag_kind)
-                  AND a.eligibility_status = 'admitted'
+                  AND a.eligibility_status = 'admitted'{extra_where}
             )
             SELECT * FROM ranked
             WHERE rn <= :top
             ORDER BY tag_value ASC, rn ASC
             """
         ),
-        {"kind": kind, "top": top},
+        params,
     )
 
     groups: dict[str, dict[str, Any]] = {}

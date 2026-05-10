@@ -40,17 +40,22 @@ export const revalidate = 60;
 // Fallbacks rendered when the API is unreachable or returns an
 // unexpected shape. Each top-level fetch is wrapped with .catch so
 // a single dead endpoint doesn't take the page down.
-const EMPTY_AGENTS_PAGE = { items: [], total: 0, limit: 60, offset: 0 };
+const EMPTY_AGENTS_PAGE = { items: [], total: 0, limit: 30, offset: 0 };
 
 export default async function FloorPage() {
   // Each call independently catches — if the backend is down, the
   // page still renders, just with empty sections that show
   // "temporarily unavailable" hints. We fan out in parallel and let
   // each piece succeed or fail on its own.
+  //
+  // Limits sized to actual display: ticker shows ~30 cells,
+  // balanceMovers takes top 2 of each kind from the movers list
+  // (4 cards rendered max). Asking for 60 in each was double
+  // billing on the API every ISR regen.
   const [agentsPage, indexes, movers24h, recent] = await Promise.all([
-    api.listAgents({ sort: "score", limit: 60 }).catch(() => EMPTY_AGENTS_PAGE),
+    api.listAgents({ sort: "score", limit: 30 }).catch(() => EMPTY_AGENTS_PAGE),
     api.listIndexes().catch(() => []),
-    api.movers("1d", 60).catch(() => []),
+    api.movers("1d", 30).catch(() => []),
     api.recentDiscoveries(8).catch(() => []),
   ]);
 
@@ -343,41 +348,46 @@ function IndexesGridSkeleton({ count }: { count: number }) {
 
 // ----------------------------------------------- CapabilityRailLoader
 
-// The rail's data comes from the *existing* /agents endpoint — same
-// path /search and /sectors already use, no new endpoint needed. We
-// pull a generous slice (top 200 by score) once, server-side, then
-// group locally by capability tag and take the top-3 per group.
+// Loads top-3 apps per capability via /sectors/top. That endpoint
+// runs a single ROW_NUMBER OVER (PARTITION BY tag_value) which is an
+// order of magnitude cheaper than a 200-row /agents listing — the
+// /agents query carries LATERAL joins and a global ranks subquery
+// that dwarf the rail's actual data needs.
 //
-// Why not the dedicated /sectors/top endpoint we added earlier:
-// requiring a new endpoint means the rail stays broken until the API
-// host (Hetzner) is redeployed. The /agents path is already live in
-// production and returns tags inline on every summary, so grouping
-// in code beats waiting for ops. /sectors/top stays in the codebase
-// as an optimisation we can switch to when convenient.
+// Falls back to /agents + client-side grouping if /sectors/top errors
+// (older API, transient 5xx). The fallback path is the slower one
+// but keeps the rail rendering instead of going blank.
 //
 // Two failure modes worth distinguishing in the UI:
 //
-//   • Fetch errored (ApiError, timeout, 5xx) → groups = null.
-//     The rail renders "Top-agents rail unavailable" with sector
-//     fallback links so the user can still browse.
+//   • Both paths failed → groups = null → "Top-agents rail unavailable"
+//     with sector fallback links so the user can still browse.
 //   • Fetch succeeded but no admitted agent has a capability tag →
-//     groups = []. The rail renders "No listings yet".
+//     groups = [] → "No listings yet".
 async function CapabilityRailLoader() {
-  let groups: CapabilityGroup[] | null;
+  let groups: CapabilityGroup[] | null = null;
   try {
-    // entity_kind=application — the rail answers "what app should I
-    // use to do X", which is by definition an application question.
-    // Foundation models are surfaced via /models, the FM-50 index,
-    // and the per-agent "Built on" chip rather than mixed in here.
-    const page = await api.listAgents({
-      sort: "score",
-      limit: 200,
-      entity_kind: "application",
-    });
-    groups = groupAgentsByCapability(page.items, 3);
-  } catch (e) {
-    console.error("CapabilityRailLoader: /agents fetch failed", e);
-    groups = null;
+    const top = await api.sectorsTop("capability", 3, "application");
+    groups = top;
+  } catch (primaryErr) {
+    console.warn(
+      "CapabilityRailLoader: /sectors/top failed, falling back to /agents",
+      primaryErr,
+    );
+    try {
+      const page = await api.listAgents({
+        sort: "score",
+        limit: 200,
+        entity_kind: "application",
+      });
+      groups = groupAgentsByCapability(page.items, 3);
+    } catch (fallbackErr) {
+      console.error(
+        "CapabilityRailLoader: fallback /agents failed",
+        fallbackErr,
+      );
+      groups = null;
+    }
   }
   return <CapabilityRail groups={groups} />;
 }
