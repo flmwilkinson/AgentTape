@@ -101,25 +101,11 @@ export default async function FloorPage() {
   return (
     <div>
       <TickerTape initial={agents.slice(0, 30)} />
+      {/* WelcomeBanner now carries the AgentScore explainer as its
+          final sentence — one dismissable box instead of two boxes
+          stacked. Returning visitors who've X'd it stay X'd via
+          localStorage. */}
       <WelcomeBanner />
-
-      {/* Permanent one-liner under the ticker. The WelcomeBanner
-          above explains what AgentTape is once and then disappears,
-          but a first-time visitor scrolling past the marquee still
-          needs a key to read score numbers in context. This sentence
-          stays. Plain language on purpose: a streaming row of
-          "javaguide 58.7" means nothing without "more activity +
-          quality = higher number". */}
-      <div className="border-b border-border bg-card/40">
-        <div className="container py-2.5 text-xs text-muted-foreground md:text-sm">
-          Higher <span className="font-medium text-foreground">AgentScore</span>{" "}
-          = more public activity and quality across {" "}
-          <Link href="/methodology" className="text-primary underline-offset-2 hover:underline">
-            four pillars
-          </Link>
-          . Click any name for the signals behind it.
-        </div>
-      </div>
 
       {apiOffline && (
         <div className="border-b border-loss/30 bg-loss-subtle">

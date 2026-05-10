@@ -56,7 +56,9 @@ export function WelcomeBanner() {
             <a href="/methodology" className="text-primary underline-offset-2 hover:underline">
               published
             </a>
-            .
+            . Higher AgentScore = more public activity and quality
+            across four pillars; click any name for the signals
+            behind it.
           </span>
         </div>
         <button
