@@ -163,20 +163,60 @@ export function CompareNavLink({ className }: { className?: string }) {
 }
 
 // "+" button to drop on any agent row or card. Auto-shows the
-// in/out state from localStorage; clicking toggles.
+// in/out state from localStorage; clicking toggles. Pass
+// ``showLabel`` to render a chip-shaped button with text — used on
+// the agent detail header where the feature deserves visibility,
+// vs the icon-only form used in dense table rows.
 export function CompareTrayToggle({
   slug,
   size = "sm",
+  showLabel = false,
   className,
 }: {
   slug: string;
   size?: "sm" | "md";
+  showLabel?: boolean;
   className?: string;
 }) {
   const slugs = useCompareTray();
   const inTray = slugs.includes(slug);
   const full = slugs.length >= COMPARE_TRAY_MAX && !inTray;
   const iconCls = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+
+  if (showLabel) {
+    return (
+      <button
+        type="button"
+        onClick={() => toggleCompareTray(slug)}
+        disabled={full}
+        aria-label={inTray ? "Remove from compare tray" : "Add to compare tray"}
+        title={
+          full ? "Compare tray is full (5 max)" : "Compare with up to 4 others"
+        }
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+          inTray
+            ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+            : full
+              ? "border-border text-muted-foreground/50 cursor-not-allowed"
+              : "border-border bg-card text-foreground/85 hover:bg-subtle",
+          className,
+        )}
+      >
+        {inTray ? (
+          <Check className={iconCls} strokeWidth={2.5} />
+        ) : (
+          <Plus className={iconCls} strokeWidth={2.25} />
+        )}
+        {inTray
+          ? `In tray (${slugs.length}/${COMPARE_TRAY_MAX})`
+          : full
+            ? "Tray full"
+            : "Compare"}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"

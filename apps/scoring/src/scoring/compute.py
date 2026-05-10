@@ -548,27 +548,24 @@ async def compute_for_agent(
 def _headline(pillars: PillarScores, settings: Settings) -> float | None:
     """Flat weighted sum. Missing pillar contributes zero.
 
-    Earlier versions of this function redistributed a missing pillar's
-    weight pro-rata to the others (so an agent with only Adoption=75
-    came out at AgentScore 75). That favoured agents with sparse data,
-    the opposite of the intent — AgentTape is a leaderboard of the
-    industry's top agents, so more evidence has to mean a higher score
-    and missing evidence has to cost.
+    The "missing = 0" rule does the work: a pillar with no signals
+    contributes nothing, so the maximum any one pillar can buy is its
+    own weight. A 1-pillar agent with Adoption at 100 caps at 40 (its
+    weight × 100). A 4-pillar agent rated 70 across the board reaches
+    70. More data structurally beats less data — no separate
+    multiplier needed.
 
-    Weights are now entity-kind specific (see config.Settings):
+    Weights are entity-kind specific (see config.Settings):
 
         Application    : 0.40 adoption + 0.20 quality
                        + 0.10 momentum + 0.30 community
         Foundation mdl : 0.30 adoption + 0.40 quality
                        + 0.10 momentum + 0.20 community
 
-    Both sets sum to 1.0 so headlines stay on the 0-100 scale. A pillar
-    with no signals contributes zero (not redistributed). Single-pillar
-    agents still appear on the leaderboard but their score is capped
-    at the weight of that pillar.
+    Both sets sum to 1.0 so headlines stay on the 0-100 scale.
 
     Returns None only when *every* pillar is null — those agents stay
-    unranked and don't pollute the chart with synthetic zeros.
+    unranked and don't pollute the leaderboard with synthetic zeros.
     """
     kind = pillars.inputs.get("kind", "application")
     if kind == "foundation_model":

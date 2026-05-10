@@ -40,6 +40,16 @@ class OpenRouterModelsScout(Scout):
             model_id = m.get("id")
             if not model_id:
                 continue
+            # Skip OpenRouter routing aliases (":nitro" / ":fast" /
+            # ":online") — those are speed / capability routing tiers
+            # of an existing canonical model, not separate models.
+            # Admitting them creates "Claude Opus 4.7 (Fast)" rows
+            # that show up in /similar and confuse readers. ":free"
+            # is left alone — it is a real distinct billing tier
+            # that some models *only* exist in.
+            if _is_routing_alias(model_id):
+                log.debug("openrouter: skipping routing alias %s", model_id)
+                continue
             pricing = m.get("pricing") or {}
             top = m.get("top_provider") or {}
             yield Candidate(
@@ -73,3 +83,16 @@ def _to_per_million(rate: str | float | None) -> float | None:
         return float(rate) * 1_000_000
     except (TypeError, ValueError):
         return None
+
+
+# Routing-alias suffixes — OpenRouter offers these as faster /
+# differently-routed variants of the canonical model. They are not
+# distinct models for our purposes and pollute the catalogue when
+# admitted as separate rows. ":free" is intentionally absent — some
+# models only exist in a free tier, and that's a real billing
+# distinction worth surfacing.
+_ROUTING_ALIASES = (":nitro", ":fast", ":online", ":beta", ":extended")
+
+
+def _is_routing_alias(model_id: str) -> bool:
+    return any(model_id.endswith(s) for s in _ROUTING_ALIASES)

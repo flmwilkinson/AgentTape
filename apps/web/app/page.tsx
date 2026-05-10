@@ -98,6 +98,24 @@ export default async function FloorPage() {
       <TickerTape initial={agents.slice(0, 30)} />
       <WelcomeBanner />
 
+      {/* Permanent one-liner under the ticker. The WelcomeBanner
+          above explains what AgentTape is once and then disappears,
+          but a first-time visitor scrolling past the marquee still
+          needs a key to read score numbers in context. This sentence
+          stays. Plain language on purpose: a streaming row of
+          "javaguide 58.7" means nothing without "more activity +
+          quality = higher number". */}
+      <div className="border-b border-border bg-card/40">
+        <div className="container py-2.5 text-xs text-muted-foreground md:text-sm">
+          Higher <span className="font-medium text-foreground">AgentScore</span>{" "}
+          = more public activity and quality across {" "}
+          <Link href="/methodology" className="text-primary underline-offset-2 hover:underline">
+            four pillars
+          </Link>
+          . Click any name for the signals behind it.
+        </div>
+      </div>
+
       {apiOffline && (
         <div className="border-b border-loss/30 bg-loss-subtle">
           <div className="container py-3 text-sm">
@@ -138,26 +156,12 @@ export default async function FloorPage() {
           </section>
         )}
 
-        {/* Trending Up + Trending Down. */}
-        <section>
-          <BigHead
-            kicker="Trending"
-            title="Biggest 24h moves."
-            hint="Top gainers and decliners over the last 24 hours, by AgentScore."
-            trailingHref="/trending"
-            trailingLabel="Full feed →"
-          />
-          <div className="grid gap-3 md:grid-cols-2">
-            <MoverList title="Gainers · 24h" items={top24h} emptyHint="No upward movement yet today." />
-            <MoverList title="Decliners · 24h" items={drops24h} emptyHint="No declines today." />
-          </div>
-        </section>
-
-        {/* Find-an-agent surface — capability rail with chip shortcuts
-            up top. One section instead of two: the chips give a
-            10-capability overview, the rail below shows the leading
-            stocks in each. Click "All →" on any rail to drill into
-            the full sector page (filters + compare). */}
+        {/* Find-an-agent surface — promoted to sit just below the
+            day's headline because it's the genuine onboarding ramp.
+            First-time visitors who don't yet know which agents
+            exist need this before "biggest 24h moves" makes any
+            sense. The capability chips give a 10-category overview,
+            the rail below shows the leading stocks in each. */}
         <section>
           <div className="mb-4 flex flex-wrap items-baseline justify-between gap-4">
             <div>
@@ -201,6 +205,21 @@ export default async function FloorPage() {
           <Suspense fallback={<CapabilityRailSkeleton />}>
             <CapabilityRailLoader />
           </Suspense>
+        </section>
+
+        {/* Trending Up + Trending Down. */}
+        <section>
+          <BigHead
+            kicker="Trending"
+            title="Biggest 24h moves."
+            hint="Top gainers and decliners over the last 24 hours, by AgentScore."
+            trailingHref="/trending"
+            trailingLabel="Full feed →"
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <MoverList title="Gainers · 24h" items={top24h} emptyHint="No upward movement yet today." />
+            <MoverList title="Decliners · 24h" items={drops24h} emptyHint="No declines today." />
+          </div>
         </section>
 
         {/* New listings. */}

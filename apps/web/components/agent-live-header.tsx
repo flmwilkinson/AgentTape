@@ -10,6 +10,7 @@ import { MoverChip } from "@/components/mover-chip";
 import { NumberTick } from "@/components/number-tick";
 import { PillarBar } from "@/components/pillar-bar";
 import { WatchToggle } from "@/components/watch-toggle";
+import { CompareTrayToggle } from "@/components/compare-tray";
 import { useWebSocket, type WsFrame } from "@/lib/ws";
 
 // The big-name + score + pillars block at the top of an agent ticker
@@ -76,7 +77,8 @@ export function AgentLiveHeader({ agent }: Props) {
             )}
             Live
           </span>
-          <span className="ml-auto md:ml-0">
+          <span className="ml-auto inline-flex items-center gap-1.5 md:ml-0">
+            <CompareTrayToggle slug={agent.slug} showLabel />
             <WatchToggle slug={agent.slug} showLabel />
           </span>
         </div>

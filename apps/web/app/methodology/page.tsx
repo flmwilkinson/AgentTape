@@ -1,10 +1,37 @@
+import { execSync } from "node:child_process";
+import path from "node:path";
 import Link from "next/link";
 
 export const metadata = {
   title: "Methodology",
   description:
-    "How AgentTape discovers, scores, and indexes AI agents. The page journalists screenshot.",
+    "How AgentTape discovers, scores, and indexes AI agents and foundation models — the formula, the pillar weights, the signal anchors, and the manipulation rules.",
 };
+
+// Resolve the methodology page's last commit timestamp at build time.
+// `git log -1 --format=%cI` gives an ISO-8601 string. We try git
+// because file mtime on Vercel is the build time, not the meaningful
+// "when was this rule last changed" answer. Falls back gracefully:
+// outside a git repo, in a sandboxed CI without .git, or when the
+// path query fails, we render a generic "current" line instead of
+// crashing the page.
+function lastRevisedISO(): string | null {
+  try {
+    // Run from the page's own directory so the relative path inside
+    // ``execSync`` resolves regardless of the CWD next runs under.
+    const here = path.dirname(__filename);
+    const stdout = execSync('git log -1 --format=%cI -- "page.tsx"', {
+      cwd: here,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return stdout || null;
+  } catch {
+    return null;
+  }
+}
+
+const LAST_REVISED = lastRevisedISO();
 
 export default function MethodologyPage() {
   return (
@@ -134,29 +161,34 @@ export default function MethodologyPage() {
 
         <H3>Headline AgentScore</H3>
         <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
-{`Application:        AgentScore = 0.40·adoption + 0.20·quality
-                                + 0.10·momentum  + 0.30·community
-Foundation model:   AgentScore = 0.30·adoption + 0.40·quality
-                                + 0.10·momentum  + 0.20·community
+{`Application:      AgentScore = 0.40·adoption + 0.20·quality
+                              + 0.10·momentum + 0.30·community
+Foundation model: AgentScore = 0.30·adoption + 0.40·quality
+                              + 0.10·momentum + 0.20·community
 
 (missing pillar contributes 0)`}
         </pre>
         <p>
-          Flat weighted sum, but the weight set differs by entity kind.
-          Applications win on adoption + community: real-world install
-          counts (npm, PyPI, Docker) and contributor investment matter
-          more than benchmarks (most apps don't have any) or short-
-          term star velocity. Foundation models tilt the other way —
-          benchmarks are the thing that actually distinguishes them,
-          and adoption is read through "how widely is this model
-          called from other repos" rather than HF stars alone. Both
-          weight sets sum to 1.0 so headlines stay 0–100, and a
-          pillar with no signals contributes zero (no redistribution,
-          no re-normalisation). Missing evidence costs you score:
-          single-pillar agents stay listed but capped at the weight
-          of that pillar. If every pillar is Unrated, the agent is
-          Unrated overall — its page shows the metadata sidebar but no
-          composite.
+          Flat weighted sum. The "missing pillar = 0" rule does the
+          work: each pillar can only buy you up to its own weight, so
+          a 1-pillar Adoption-only agent caps at 40 (its weight × 100),
+          a 2-pillar Adoption + Community agent caps at 70, a 3-pillar
+          one (no Quality) caps at 80, and only a 4-pillar agent can
+          reach 100. More data structurally beats less data — no
+          separate multiplier on top.
+        </p>
+        <p>
+          The weight sets differ by entity kind. Applications win on
+          adoption + community: real-world install counts (npm, PyPI,
+          Docker) and contributor investment matter more than
+          benchmarks (most apps don't have any) or short-term star
+          velocity. Foundation models tilt the other way — benchmarks
+          are the thing that actually distinguishes them, and adoption
+          is read through "how widely is this model called from other
+          repos" rather than HF stars alone. Both weight sets sum to
+          1.0 so headlines stay on the 0–100 scale. If every pillar is
+          Unrated, the agent is Unrated overall — its page shows the
+          metadata sidebar but no composite.
         </p>
 
         <H3>Source list per kind</H3>
@@ -324,7 +356,19 @@ Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
 
       <hr className="my-16 border-border" />
       <p className="text-xs text-muted-foreground">
-        Last revised on rebalance. Comments and corrections at{" "}
+        Last revised{" "}
+        {LAST_REVISED ? (
+          <time dateTime={LAST_REVISED}>
+            {new Date(LAST_REVISED).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </time>
+        ) : (
+          "on the most recent deploy"
+        )}
+        . Comments and corrections at{" "}
         <a href="https://github.com/flmwilkinson/AgentTape/issues" className="text-primary hover:underline">github.com/flmwilkinson/AgentTape/issues</a>.
       </p>
     </article>
