@@ -15,6 +15,7 @@ from ingestion.config import Settings
 from ingestion.enums import SignalSource
 from ingestion.sources.arxiv import ArxivIngestor
 from ingestion.sources.base import AgentRow
+from ingestion.sources.benchmarks import BenchmarksIngestor
 from ingestion.sources.github import GithubStarsIngestor
 from ingestion.sources.hackernews import HNMentions7dIngestor
 from ingestion.sources.huggingface import (
@@ -263,6 +264,85 @@ async def test_arxiv_mentions_counts_entries():
     finally:
         await ing.aclose()
     assert readings and readings[0].value == 3.0
+
+
+# ---------------------------------------------------------------- benchmarks
+
+
+async def test_benchmarks_emits_per_benchmark_and_mean():
+    """fetch() must populate both outputs from one pass:
+
+    - ``_per_benchmark`` (side store, consumed by run() to write
+      benchmark_results rows) — one hit per (agent, site) match
+    - return value: one SignalReading per agent whose value is the
+      mean of normalised per-benchmark scores. The mean preserves
+      the existing dedupe + spike machinery on the signals table
+      and matches what _agent_benchmark_score does at pillar time,
+      so the two views stay numerically consistent.
+    """
+    settings = Settings()
+    a = _agent(slug="acme-agent", entity_kind="application")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        # Match the agent on two per-benchmark llm-stats pages with
+        # different scores. Other pages return 404 (silently skipped).
+        if "/benchmarks/gpqa" in url:
+            return httpx.Response(
+                200,
+                text="<table><tr><td>acme-agent</td><td>80.0%</td></tr></table>",
+            )
+        if "/benchmarks/humaneval" in url:
+            return httpx.Response(
+                200,
+                text="<table><tr><td>acme-agent</td><td>60.0%</td></tr></table>",
+            )
+        return httpx.Response(404)
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    assert len(readings) == 1
+    r = readings[0]
+    assert r.source == SignalSource.BENCHMARK_SCORE
+    # Mean of normalised (max_score=100 → percentages used as-is): 70.0
+    assert r.value == pytest.approx(70.0)
+
+    by_slug = {hit.site.slug: hit.score for hit in ing._per_benchmark}
+    assert by_slug == {"gpqa-diamond": 80.0, "humaneval": 60.0}
+
+
+async def test_benchmarks_skips_agent_with_no_hits():
+    """An agent that doesn't appear on any leaderboard page emits
+    no signal reading and no per-benchmark hits — the ingestor must
+    under-emit rather than fabricate."""
+    settings = Settings()
+    # No github_repo on purpose — the default fixture's "example/agent"
+    # tail-segment ("agent") would token-match "other-agent" below and
+    # mask the empty-result case we're testing for.
+    a = _agent(
+        slug="nobody-knows-me",
+        github_repo=None,
+        entity_kind="application",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Page returns 200 but doesn't contain our agent's tokens.
+        return httpx.Response(
+            200, text="<table><tr><td>other-agent</td><td>99.0%</td></tr></table>"
+        )
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    assert readings == []
+    assert ing._per_benchmark == []
 
 
 async def test_semantic_scholar_sums_citations():
