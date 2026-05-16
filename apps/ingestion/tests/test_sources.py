@@ -315,6 +315,61 @@ async def test_benchmarks_emits_per_benchmark_and_mean():
     assert by_slug == {"gpqa-diamond": 80.0, "humaneval": 60.0}
 
 
+async def test_benchmarks_ignores_version_digits_in_model_name():
+    """Regression test for the prod bug where the legacy first-number
+    extractor returned ``5`` from ``GPT-5`` cells and ``4.5`` from
+    ``Claude Opus 4-5`` cells — making every llm-stats subpage scrape
+    return version digits instead of real scores.
+
+    The fix is cell-based: walk <td> cells right-to-left, pick the
+    rightmost cell that parses to a score-shaped value. The name
+    cell (which contains the version) is rejected because its text
+    has no standalone score-shaped number — the version digits are
+    welded to word characters via hyphens.
+    """
+    # Real-shape FM agent — search_tokens() will derive "gpt-5" etc.
+    a = _agent(
+        slug="openai-gpt-5",
+        entity_kind="foundation_model",
+        github_repo=None,
+        facts={
+            "openrouter_id": "openai/gpt-5",
+            "display_name": "GPT-5",
+        },
+    )
+
+    settings = Settings()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        # llm-stats-shaped row: model in first cell, $price cells, score last.
+        # Pre-fix: regex grabbed "5" from "gpt-5". Post-fix: walks cells,
+        # rightmost is "78.4%" → returns 78.4.
+        if "/benchmarks/gpqa" in url:
+            return httpx.Response(
+                200,
+                text=(
+                    "<table><tr>"
+                    "<td>OpenAI: GPT-5</td>"
+                    "<td>$2.00</td><td>$10.00</td>"
+                    "<td>78.4%</td>"
+                    "</tr></table>"
+                ),
+            )
+        return httpx.Response(404)
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    assert len(readings) == 1
+    assert readings[0].value == pytest.approx(78.4)
+    by_slug = {hit.site.slug: hit.score for hit in ing._per_benchmark}
+    assert by_slug == {"gpqa-diamond": 78.4}
+
+
 async def test_benchmarks_skips_agent_with_no_hits():
     """An agent that doesn't appear on any leaderboard page emits
     no signal reading and no per-benchmark hits — the ingestor must

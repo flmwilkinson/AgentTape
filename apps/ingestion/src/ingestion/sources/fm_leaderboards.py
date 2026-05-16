@@ -81,7 +81,19 @@ LEADERBOARDS: list[_Leaderboard] = [
             "?dataset=lmarena-ai%2Fleaderboard-dataset"
             "&config=text&split=latest"
         ),
-        max_score=None,  # Bradley-Terry / Elo unbounded
+        # Elo is unbounded in theory but in practice clusters in
+        # 800-1500 for live frontier models. We anchor max_score at
+        # 1500 so a top-tier model (e.g. Claude Opus / GPT-5 / Gemini
+        # Pro at ~1450-1500 Elo) maps to ~97-100 on the 0-100 quality
+        # scale, mid-tier models (~1200) land at ~80, and unrated
+        # weak models (~900) at ~60.
+        # Was None previously: with NULL max_score, _agent_benchmark_score
+        # used the raw Elo as-is, so every agent matched on lmarena got
+        # a raw value of 1200+ averaged into their Quality. That swamped
+        # other benchmarks and clamped to 100 — visible in the prod
+        # data as a "perfect score" cluster for any FM only matched on
+        # lmarena (mistral-large, llama-3.3, gemma, etc.).
+        max_score=1500.0,
         parser="lmsys_arena_hf",
     ),
     # MMLU-Pro leaderboard (TIGER-Lab community submission). Expanded
@@ -197,10 +209,15 @@ class FMLeaderboardsIngestor(Ingestor):
                             break
                 if aid is None:
                     continue
-                await _upsert_result(
+                # _upsert_result now insert-on-change: returns False
+                # when the score is unchanged from the last reading.
+                # Count matched whether or not we wrote — match rate
+                # is a leaderboard-quality signal, write rate is a
+                # storage-cost signal.
+                if await _upsert_result(
                     session, aid, bench_ids[board.name], captured, score
-                )
-                written += 1
+                ):
+                    written += 1
                 matched += 1
             matched_per_board[board.name] = matched
             log.info(
@@ -249,7 +266,31 @@ async def _upsert_result(
     benchmark_id: UUID,
     captured_at: datetime,
     score: float,
-) -> None:
+) -> bool:
+    """Insert-on-change. Returns True if a row was actually written.
+
+    Same dedupe pattern as ``Ingestor.run`` / ``benchmarks._last_benchmark_score``:
+    skip the INSERT if the most recent prior score for this
+    (agent, benchmark) pair already equals the new one. Without this,
+    each daily tick was writing N rows for every (agent, benchmark)
+    pair regardless of whether the score had changed — visible in
+    prod as Gemini 2.5 Pro with 5 identical lmarena rows and 3
+    identical mmlu-pro rows. Storage burn + noisy history.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT score FROM benchmark_results
+            WHERE agent_id = :aid AND benchmark_id = :bid
+            ORDER BY captured_at DESC LIMIT 1
+            """
+        ),
+        {"aid": agent_id, "bid": benchmark_id},
+    )
+    row = r.first()
+    if row is not None and float(row[0]) == score:
+        return False
+
     await session.execute(
         text(
             """
@@ -261,6 +302,7 @@ async def _upsert_result(
         ),
         {"aid": agent_id, "bid": benchmark_id, "ts": captured_at, "s": score},
     )
+    return True
 
 
 async def _fetch_rows(
@@ -405,9 +447,18 @@ def _parse_mmlu_pro_hf(body: str) -> list[tuple[str, float]]:
       {"rows": [{"row": {"Models": "gpt-5", "Overall": 78.4,
                           "biology": ..., "business": ..., ...}}]}
 
-    The score column is "Overall" — a 0–100 weighted average across
-    14 subject categories. Per-subject columns exist too but we only
-    surface the headline number here.
+    The score column is "Overall" — TIGER-Lab inconsistently reports
+    this as either a 0-1 fraction (e.g. 0.86) or a 0-100 percentage
+    (e.g. 86.0). We normalise: any value <= 1.5 is treated as a
+    fraction and scaled to 0-100. Real MMLU-Pro Overall numbers cluster
+    in the 40-95 range so the 1.5 threshold has plenty of headroom.
+
+    Was visible in prod as ``google-gemini-2-5-pro mmlu-pro=0.86`` —
+    correct underlying number, wrong scale: the benchmarks row has
+    max_score=100, so 0.86 / 100 * 100 = 0.86 ended up as a near-zero
+    Quality contribution for the model. Multiplying fractions by 100
+    in the parser keeps benchmarks.max_score consistent across every
+    entry on this leaderboard.
     """
     try:
         data = json.loads(body)
@@ -421,9 +472,12 @@ def _parse_mmlu_pro_hf(body: str) -> list[tuple[str, float]]:
         if name is None or score is None:
             continue
         try:
-            out.append((str(name), float(score)))
+            v = float(score)
         except (ValueError, TypeError):
             continue
+        if v <= 1.5:
+            v *= 100.0
+        out.append((str(name), v))
     return out
 
 

@@ -167,6 +167,16 @@ SITES: list[BenchmarkSite] = [
 
 NUMBER = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:%|points?)?\b")
 
+# Score-shaped numbers in cell text, in priority order:
+#   1. ``78.4%`` — number immediately followed by % (highest signal)
+#   2. ``78.4`` — bare decimal in [1, 100], not adjacent to word chars
+#      (skips version numbers like ``4.5`` inside ``Claude-Opus-4-5``
+#      because hyphen counts as word-adjacent in our split — see
+#      _extract_cell_score below for the row-cell walk)
+_PCT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+_DECIMAL = re.compile(r"(?<![\w.\-])(\d+\.\d+)(?![\w.\-])")
+_INTEGER = re.compile(r"(?<![\w.\-])(\d+)(?![\w.\-])")
+
 
 @dataclass(frozen=True)
 class _PerBenchmarkHit:
@@ -303,15 +313,32 @@ async def _fetch_html(http, url: str) -> str | None:
 
 
 def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
-    """Best-effort: scan one page for the agent's identifying tokens
-    and pluck the first number on the same row.
+    """Scan one page for rows mentioning this agent, return the
+    most likely score from the rightmost score-shaped cell.
 
     Word-boundary matching is critical for FMs — naive substring
     containment makes ``gpt-5`` match every ``gpt-5-mini`` /
-    ``gpt-5-pro`` row on a leaderboard, so a model picks up its
-    sibling's score. The shared ``word_boundary_regex`` helper
-    enforces "matches the whole token, surrounded by non-alphanumerics"
-    so ``gpt-5`` and ``gpt-5-mini`` no longer collide.
+    ``gpt-5-pro`` row, so a model picks up its sibling's score. The
+    shared ``word_boundary_regex`` helper enforces "matches the whole
+    token, surrounded by non-alphanumerics" so ``gpt-5`` and
+    ``gpt-5-mini`` no longer collide.
+
+    Cell-based extraction (was: first-number-in-row-text):
+        Previous behaviour grabbed the *first* number in the row's
+        squashed text, which picked the model's version digits from
+        the name cell — for "Claude Opus 4-5" it returned 4 or 5
+        instead of the real score. Now we walk individual <td>/<th>
+        cells and pick the rightmost cell whose text parses to a
+        score-shaped value (percentage, then decimal in [1, 100],
+        then integer). The name cell — where the version digits
+        live — is just one of many cells and won't be selected as
+        long as a numeric cell exists to its right.
+
+        Bare ``<li>`` rows (no cells) fall back to a slightly
+        smarter text extraction than before: prefer % matches over
+        decimals over integers, still ignore numbers welded to word
+        characters (so ``r1`` in ``deepseek-r1`` doesn't get
+        confused for a score).
     """
     tokens = _identifying_tokens(a)
     if not tokens:
@@ -319,19 +346,77 @@ def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
     pattern = word_boundary_regex(tokens)
     soup = BeautifulSoup(html, "html.parser")
     best: float | None = None
-    for tr in soup.find_all(["tr", "li"]):
-        text_ = tr.get_text(" ", strip=True)
-        if not pattern.search(text_):
+    for row in soup.find_all(["tr", "li"]):
+        full_text = row.get_text(" ", strip=True)
+        if not pattern.search(full_text):
             continue
-        m = NUMBER.search(text_)
-        if not m:
+        score = _extract_row_score(row)
+        if score is None:
             continue
+        best = score if best is None else max(best, score)
+    return best
+
+
+def _extract_row_score(row) -> float | None:
+    """Pull a score-shaped number out of a leaderboard row.
+
+    For ``<tr>`` rows: walk cells right-to-left and return the first
+    cell that parses to a score. For ``<li>`` rows (no cells): apply
+    the same priority order to the squashed row text.
+    """
+    cells = row.find_all(["td", "th"])
+    if cells:
+        # Rightmost cells first — leaderboards conventionally put
+        # the headline score in the last data column. Skip cells
+        # that don't contain any number at all.
+        for cell in reversed(cells):
+            text_ = cell.get_text(" ", strip=True)
+            v = _extract_cell_score(text_)
+            if v is not None:
+                return v
+        return None
+    # No cell structure (e.g. a flat <li> list). Use the row text.
+    return _extract_cell_score(row.get_text(" ", strip=True))
+
+
+def _extract_cell_score(text_: str) -> float | None:
+    """Pick the most likely score-shaped number from a cell's text.
+
+    Priority order:
+      1. ``78.4%`` — percentage suffix is the highest-confidence signal
+      2. ``78.4`` — bare decimal in [1, 100] not adjacent to word chars
+         (rules out version numbers like ``4.5`` inside hyphenated slugs)
+      3. ``78`` — bare integer in [1, 100] not adjacent to word chars
+         (catches SWE-bench style ``73`` cells without a trailing %)
+
+    None when nothing matches — we under-emit rather than fabricate.
+    """
+    pct = _PCT.search(text_)
+    if pct:
         try:
-            value = float(m.group(1))
+            v = float(pct.group(1))
+            if 0.0 <= v <= 100.0:
+                return v
+        except ValueError:
+            pass
+
+    for m in _DECIMAL.finditer(text_):
+        try:
+            v = float(m.group(1))
+            if 1.0 <= v <= 100.0:
+                return v
         except ValueError:
             continue
-        best = value if best is None else max(best, value)
-    return best
+
+    for m in _INTEGER.finditer(text_):
+        try:
+            v = float(m.group(1))
+            if 1.0 <= v <= 100.0:
+                return v
+        except ValueError:
+            continue
+
+    return None
 
 
 def _identifying_tokens(a: AgentRow) -> list[str]:
