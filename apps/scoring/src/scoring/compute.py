@@ -614,12 +614,45 @@ def _headline(pillars: PillarScores, settings: Settings) -> float | None:
 async def persist_score(
     session: AsyncSession, agent_id: UUID, pillars: PillarScores
 ) -> UUID | None:
-    """Insert a row in scores. Returns the new row id, or None if the
-    agent is fully Unrated (no pillars + no headline)."""
+    """Insert a row in scores, deduped against the most-recent prior.
+
+    Returns the new row id, ``None`` if the agent is fully Unrated, or
+    ``None`` if the new computation matches the most recent stored
+    score (no point writing a duplicate).
+
+    Dedupe is the whole reason storage stays bounded — without it
+    every heartbeat recompute writes a row whether or not anything
+    changed, which fills the database in days. The tolerance (0.01)
+    suppresses float-noise differences while still recording any
+    real movement the chart should show.
+    """
     if pillars.agent_score is None:
         # Don't write null-headline rows; they'd pollute the
         # 24h-delta computations and the chart.
         return None
+
+    # Look at the most-recent row in flight for this agent. Plain
+    # LIMIT 1 (no OFFSET) — we want the actual current state, not
+    # the row-before-the-current-one that _prior_headline returns.
+    prev = (
+        await session.execute(
+            text(
+                """
+                SELECT agent_score, adoption, quality, momentum, community
+                FROM scores
+                WHERE agent_id = :aid
+                ORDER BY computed_at DESC
+                LIMIT 1
+                """
+            ),
+            {"aid": agent_id},
+        )
+    ).first()
+    if prev is not None and _scores_equal(prev, pillars):
+        # Unchanged — skip the INSERT. The previous row remains the
+        # current state, so reads aren't affected.
+        return None
+
     r = await session.execute(
         text(
             """
@@ -646,6 +679,30 @@ async def persist_score(
     return r.scalar_one()
 
 
+def _scores_equal(prev, pillars: PillarScores) -> bool:
+    """Compare a stored score row to a freshly-computed PillarScores.
+
+    Float-noise tolerance: anything within 0.01 of the prior on every
+    pillar AND on the headline counts as unchanged. The chart resolution
+    is one decimal place — a sub-0.01 movement is meaningless to a
+    reader and isn't worth a row.
+    """
+    def eq(a: float | None, b: float | None) -> bool:
+        if a is None and b is None:
+            return True
+        if a is None or b is None:
+            return False
+        return abs(float(a) - float(b)) < 0.01
+
+    return (
+        eq(prev.agent_score, pillars.agent_score)
+        and eq(prev.adoption, pillars.adoption)
+        and eq(prev.quality, pillars.quality)
+        and eq(prev.momentum, pillars.momentum)
+        and eq(prev.community, pillars.community)
+    )
+
+
 # ----------------------------------------------------------- batch
 
 
@@ -659,6 +716,7 @@ async def recompute_agents(
     pop = await population_stats(session)
 
     written = 0
+    deduped = 0
     rank_changes = 0
     unrated = 0
     for aid in agent_ids:
@@ -667,7 +725,12 @@ async def recompute_agents(
         if pillars.agent_score is None:
             unrated += 1
             continue
-        await persist_score(session, aid, pillars)
+        row_id = await persist_score(session, aid, pillars)
+        if row_id is None:
+            # Dedupe — score matched the most-recent stored row.
+            # No new row, no event. Move on.
+            deduped += 1
+            continue
         written += 1
 
         if prior is None or _significant_change(prior, pillars.agent_score):
@@ -676,12 +739,13 @@ async def recompute_agents(
 
     await session.commit()
     log.info(
-        "scoring: recomputed %d (notable %d, unrated %d)",
-        written, rank_changes, unrated,
+        "scoring: recomputed %d (notable %d, deduped %d, unrated %d)",
+        written, rank_changes, deduped, unrated,
     )
     return {
         "recomputed": written,
         "notable_changes": rank_changes,
+        "deduped": deduped,
         "unrated": unrated,
     }
 

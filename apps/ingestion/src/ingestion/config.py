@@ -36,7 +36,14 @@ class Settings(BaseSettings):
     bluesky_app_password: str | None = None
 
     # Tier intervals (seconds). Pulled out of code so tests can crank them down.
-    fast_tier_seconds: int = 5 * 60
+    # Originally fast=5min/medium=1h/slow=24h; with ~700 admitted agents
+    # and a 512 MB Neon limit, the 5-min cadence on the fast tier
+    # filled the database in 11 days. Bumped the floor to 1 hour
+    # across the board — combined with insert-on-change dedupe in
+    # base.py, this keeps signals + scores growth in the low-MB-per-
+    # day range. Override via env (FAST_TIER_SECONDS=900 etc.) when
+    # the DB has headroom for tighter cadence.
+    fast_tier_seconds: int = 60 * 60
     medium_tier_seconds: int = 60 * 60
     slow_tier_seconds: int = 24 * 60 * 60
 

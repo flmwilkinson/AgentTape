@@ -104,10 +104,25 @@ class Ingestor(ABC):
         # without an extra DB round-trip per tick.
         slug_by_id = {a.id: a.slug for a in agents}
 
-        written, spiked, changed = 0, 0, 0
+        written, spiked, changed, deduped = 0, 0, 0, 0
         for r in readings:
             slug = slug_by_id.get(r.agent_id)
             prior = await _last_value(session, r.agent_id, r.source)
+
+            # Dedupe on value. The fast tier polls every hour and many
+            # signals don't change between ticks (github_stars on a
+            # quiet repo, hf_likes that hasn't moved, etc.). Without
+            # this guard we used to write a row per tick regardless,
+            # which filled the Neon free tier in 11 days. Now we only
+            # INSERT when the value actually changed. The "latest"
+            # reading is still queryable (it's just the last row
+            # actually written) and the captured_at timestamp marks
+            # when the value last *changed*, which is what spike
+            # detection and the trend chart actually want.
+            if prior is not None and prior == r.value:
+                deduped += 1
+                continue
+
             await session.execute(
                 text(
                     """
@@ -143,11 +158,12 @@ class Ingestor(ABC):
 
         await session.commit()
         log.info(
-            "ingestor %s: %d readings, %d written, %d changed, %d spiked",
+            "ingestor %s: %d readings, %d written, %d changed, %d deduped, %d spiked",
             self.name,
             len(readings),
             written,
             changed,
+            deduped,
             spiked,
         )
         return {
@@ -155,6 +171,7 @@ class Ingestor(ABC):
             "written": written,
             "spiked": spiked,
             "changed": changed,
+            "deduped": deduped,
         }
 
 
