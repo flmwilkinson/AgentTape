@@ -297,14 +297,24 @@ export default function MethodologyPage() {
         </ul>
         <H3>Promotion</H3>
         <p>
-          Each candidate gets an admission score on five axes (LLM
-          dependency, agent-vocabulary match, popularity floor,
-          maintenance, packaged distribution). Candidates clearing the
-          auto-admit threshold are admitted and flow into the scoring
-          pipeline. Below the auto-reject threshold are dropped.
-          Anything in between waits for weekly review. Discovered-but-
-          unadmitted candidates appear as audit-only rows; admitted
-          agents are what the rest of the site shows.
+          Each candidate gets an admission score on five core axes:
+          LLM dependency, agent-vocabulary match, popularity floor,
+          maintenance, and packaged distribution. Four small substance
+          bonuses sit on top (each ≤ 0.05, capped so they can't admit
+          junk on their own but tip borderline cases): three or more
+          declared topics / tags / keywords, description ≥ 80
+          characters, presence in more than one packaging ecosystem,
+          and commit activity in the last 14 days. Archived or disabled
+          GitHub repos are hard-rejected before scoring — those are a
+          known source of low-signal admissions.
+        </p>
+        <p>
+          Candidates clearing the auto-admit threshold are admitted
+          and flow into the scoring pipeline. Below the auto-reject
+          threshold are dropped. Anything in between waits for weekly
+          review. Discovered-but-unadmitted candidates appear as
+          audit-only rows; admitted agents are what the rest of the
+          site shows.
         </p>
 
         {/* ---------- 2. Refresh tiers ---------- */}
@@ -326,10 +336,17 @@ export default function MethodologyPage() {
             <tbody>
               <tr className="border-b border-border align-top">
                 <td className="px-3 py-2 font-medium">Fast</td>
-                <td className="px-3 py-2 text-muted-foreground">~5 min</td>
+                <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
                 <td className="px-3 py-2 text-muted-foreground">
                   GitHub stars · HN mentions (7d) · HF trending rank ·
                   Bluesky mentions (7d). Drives the ticker tape.
+                  Originally polled every 5 min; the floor was raised
+                  to 1 hour after a storage-cost review showed each
+                  5-min tick was inserting near-identical rows.
+                  Inserts are now also deduped per signal (skipped
+                  when the new value equals the most recent prior),
+                  so the ticker only refreshes the cells that
+                  actually changed.
                 </td>
               </tr>
               <tr className="border-b border-border align-top">
