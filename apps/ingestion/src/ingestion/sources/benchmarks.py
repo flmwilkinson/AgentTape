@@ -382,41 +382,60 @@ def _extract_row_score(row) -> float | None:
 def _extract_cell_score(text_: str) -> float | None:
     """Pick the most likely score-shaped number from a cell's text.
 
-    Priority order:
+    Priority order (each step takes the LARGEST value in range — score
+    numbers reliably beat version digits / parameter counts because
+    benchmark scores cluster in the 30-95 range while version digits
+    cluster in the 0.5-9.5 range):
+
       1. ``78.4%`` — percentage suffix is the highest-confidence signal
       2. ``78.4`` — bare decimal in [1, 100] not adjacent to word chars
-         (rules out version numbers like ``4.5`` inside hyphenated slugs)
       3. ``78`` — bare integer in [1, 100] not adjacent to word chars
-         (catches SWE-bench style ``73`` cells without a trailing %)
+
+    Returning the LARGEST (not the first) is critical. The previous
+    "first match" behaviour silently picked parameter counts on
+    llm-stats pages: rows like "OpenAI GPT-5 5.1B 92%" returned 5.1
+    (the parameter count) before reaching 92 (the score). Verified in
+    prod against ``openai-gpt-5 humaneval=5.10`` and ``anthropic-claude-
+    opus-4-5 humaneval=4.50``.
 
     None when nothing matches — we under-emit rather than fabricate.
     """
-    pct = _PCT.search(text_)
-    if pct:
-        try:
-            v = float(pct.group(1))
-            if 0.0 <= v <= 100.0:
-                return v
-        except ValueError:
-            pass
+    # 1. Percentage with explicit %
+    pct_values = [
+        float(m.group(1))
+        for m in _PCT.finditer(text_)
+        if _safe_in_range(m.group(1), 0.0, 100.0)
+    ]
+    if pct_values:
+        return max(pct_values)
 
-    for m in _DECIMAL.finditer(text_):
-        try:
-            v = float(m.group(1))
-            if 1.0 <= v <= 100.0:
-                return v
-        except ValueError:
-            continue
+    # 2. Bare decimals in [1, 100]
+    decimals = [
+        float(m.group(1))
+        for m in _DECIMAL.finditer(text_)
+        if _safe_in_range(m.group(1), 1.0, 100.0)
+    ]
+    if decimals:
+        return max(decimals)
 
-    for m in _INTEGER.finditer(text_):
-        try:
-            v = float(m.group(1))
-            if 1.0 <= v <= 100.0:
-                return v
-        except ValueError:
-            continue
+    # 3. Bare integers in [1, 100]
+    integers = [
+        float(m.group(1))
+        for m in _INTEGER.finditer(text_)
+        if _safe_in_range(m.group(1), 1.0, 100.0)
+    ]
+    if integers:
+        return max(integers)
 
     return None
+
+
+def _safe_in_range(s: str, lo: float, hi: float) -> bool:
+    try:
+        v = float(s)
+    except ValueError:
+        return False
+    return lo <= v <= hi
 
 
 def _identifying_tokens(a: AgentRow) -> list[str]:

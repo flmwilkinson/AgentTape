@@ -370,6 +370,49 @@ async def test_benchmarks_ignores_version_digits_in_model_name():
     assert by_slug == {"gpqa-diamond": 78.4}
 
 
+async def test_benchmarks_picks_largest_score_over_parameter_count():
+    """Regression for the prod follow-on bug: llm-stats rows render
+    model size before the score, like ``"OpenAI GPT-5 5.1B 92%"``.
+    A first-match extractor returned ``5.1`` (parameter count). The
+    fix prefers the LARGEST decimal in [1, 100] within each priority
+    tier — score numbers reliably beat parameter counts because
+    benchmarks cluster in 30-95 while sizes cluster in 0.5-9.5.
+    """
+    a = _agent(
+        slug="openai-gpt-5",
+        entity_kind="foundation_model",
+        github_repo=None,
+        facts={"openrouter_id": "openai/gpt-5", "display_name": "GPT-5"},
+    )
+    settings = Settings()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "/benchmarks/humaneval" in url:
+            # Real-shape llm-stats cell: model name + parameter count
+            # + score, all in one <td> (Next.js often collapses cells
+            # into a single styled div per row).
+            return httpx.Response(
+                200,
+                text=(
+                    "<table><tr>"
+                    "<td>OpenAI GPT-5 5.1B 92.3%</td>"
+                    "</tr></table>"
+                ),
+            )
+        return httpx.Response(404)
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    assert len(readings) == 1
+    # Pre-fix: returned 5.1 (parameter count). Post-fix: returns 92.3.
+    assert readings[0].value == pytest.approx(92.3)
+
+
 async def test_benchmarks_skips_agent_with_no_hits():
     """An agent that doesn't appear on any leaderboard page emits
     no signal reading and no per-benchmark hits — the ingestor must
