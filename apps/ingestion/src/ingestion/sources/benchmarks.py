@@ -384,19 +384,24 @@ def _extract_cell_score(text_: str) -> float | None:
 
     Priority order (each step takes the LARGEST value in range — score
     numbers reliably beat version digits / parameter counts because
-    benchmark scores cluster in the 30-95 range while version digits
-    cluster in the 0.5-9.5 range):
+    benchmark scores cluster high while version digits cluster low):
 
       1. ``78.4%`` — percentage suffix is the highest-confidence signal
-      2. ``78.4`` — bare decimal in [1, 100] not adjacent to word chars
+      2. ``78.4`` or ``0.934`` — bare decimal in [0, 100], not adjacent
+         to word chars. Decimals <= 1.5 are treated as 0-1 fractions
+         and multiplied by 100 (llm-stats uses ``0.934 = 93.4%``
+         throughout). Decimals > 1.5 are treated as percentages.
       3. ``78`` — bare integer in [1, 100] not adjacent to word chars
 
-    Returning the LARGEST (not the first) is critical. The previous
-    "first match" behaviour silently picked parameter counts on
-    llm-stats pages: rows like "OpenAI GPT-5 5.1B 92%" returned 5.1
-    (the parameter count) before reaching 92 (the score). Verified in
-    prod against ``openai-gpt-5 humaneval=5.10`` and ``anthropic-claude-
-    opus-4-5 humaneval=4.50``.
+    Two prior bugs both fixed here:
+
+    * Returning the LARGEST (not first) — rows like
+      "OpenAI GPT-5 5.1B 92%" returned 5.1 (parameter count) before
+      reaching 92 (score).
+    * Accepting [0, 100] not [1, 100] + fraction-aware — rows like
+      "4 GPT-5 OpenAI 0.934" returned 4 (rank) because 0.934 was
+      below the lower bound. llm-stats publishes ALL scores as
+      [0, 1] fractions, not percentages.
 
     None when nothing matches — we under-emit rather than fabricate.
     """
@@ -409,16 +414,27 @@ def _extract_cell_score(text_: str) -> float | None:
     if pct_values:
         return max(pct_values)
 
-    # 2. Bare decimals in [1, 100]
-    decimals = [
-        float(m.group(1))
-        for m in _DECIMAL.finditer(text_)
-        if _safe_in_range(m.group(1), 1.0, 100.0)
-    ]
+    # 2. Bare decimals in [0, 100], fractions auto-scaled.
+    #    Magnitude-based disambiguation (<=1.5 = fraction, >1.5 =
+    #    percentage) works because real benchmark scores cluster at
+    #    30-95% on the percentage scale; nothing legitimately lives
+    #    in (1.5, 30) on either scale, so the threshold is safe.
+    decimals: list[float] = []
+    for m in _DECIMAL.finditer(text_):
+        try:
+            v = float(m.group(1))
+        except ValueError:
+            continue
+        if not (0.0 <= v <= 100.0):
+            continue
+        decimals.append(v * 100.0 if v <= 1.5 else v)
     if decimals:
         return max(decimals)
 
-    # 3. Bare integers in [1, 100]
+    # 3. Bare integers in [1, 100]. Integers don't get the fraction
+    #    treatment — a bare "1" is almost certainly a rank or a count,
+    #    not a 100% score. Real perfect scores would render as 1.0
+    #    (decimal) on a fractional scale.
     integers = [
         float(m.group(1))
         for m in _INTEGER.finditer(text_)

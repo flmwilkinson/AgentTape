@@ -413,6 +413,52 @@ async def test_benchmarks_picks_largest_score_over_parameter_count():
     assert readings[0].value == pytest.approx(92.3)
 
 
+async def test_benchmarks_handles_llmstats_fractional_scores():
+    """Regression for the second prod follow-on bug: llm-stats publishes
+    scores as 0-1 fractions, not 0-100 percentages. The prod row for
+    GPT-5 on HumanEval looked exactly like this:
+
+        cells = ["4", "GPT-5 OpenAI", "0.934", "—", "—", "—", ""]
+
+    Pre-fix extractor rejected 0.934 (below the [1, 100] floor) and
+    fell through to the rank cell "4", returning 4.0. Fix accepts
+    decimals in [0, 100] and auto-scales fractions (anything <= 1.5)
+    by 100.
+    """
+    a = _agent(
+        slug="openai-gpt-5",
+        entity_kind="foundation_model",
+        github_repo=None,
+        facts={"openrouter_id": "openai/gpt-5", "display_name": "GPT-5"},
+    )
+    settings = Settings()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "/benchmarks/humaneval" in str(request.url):
+            return httpx.Response(
+                200,
+                text=(
+                    "<table><tr>"
+                    "<td>4</td>"
+                    "<td>GPT-5 OpenAI</td>"
+                    "<td>0.934</td>"
+                    "<td>—</td><td>—</td><td>—</td><td></td>"
+                    "</tr></table>"
+                ),
+            )
+        return httpx.Response(404)
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    assert len(readings) == 1
+    # Pre-fix: returned 4.0 (the rank). Post-fix: 0.934 * 100 = 93.4.
+    assert readings[0].value == pytest.approx(93.4)
+
+
 async def test_benchmarks_skips_agent_with_no_hits():
     """An agent that doesn't appear on any leaderboard page emits
     no signal reading and no per-benchmark hits — the ingestor must
