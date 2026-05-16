@@ -1,0 +1,462 @@
+export const meta = {
+  slug: "llm-agent-wall-jepa-arc-agi-3",
+  title:
+    "Anatomy of the LLM-agent wall — what JEPA, ARC-AGI-3 and a $1bn world-model bet say about what comes next",
+  description:
+    "Frontier models scored 0.3% on ARC-AGI-3 the day it launched. Humans scored 100%. Three of the four most influential people in AI now publicly disagree with the LLM-agent thesis. The architectural case, the capital allocation, and what it means for the stack being shipped right now.",
+  published_at: "2026-05-16",
+  kind: "report",
+  keywords: [
+    "jepa world models",
+    "ami labs yann lecun",
+    "arc-agi-3 results",
+    "llm agents fail novel tasks",
+    "v-jepa 2 lewm lejepa",
+  ],
+};
+
+<Lede>
+On March 25, 2026, François Chollet and Sam Altman did a fireside
+chat at Y Combinator HQ to launch ARC-AGI-3. The foundation
+published the launch numbers from the semi-private evaluation set
+the same morning. Humans solved 100% of the environments. Claude
+Opus 4.6 scored 0.2%, at roughly $8,900 per task. Gemini 3.1 Pro
+reached 0.37%. Grok 4.20 scored 0% — it exceeded the action cutoff
+on every level.
+</Lede>
+
+<StatGrid
+  items={[
+    {
+      label: "The score gap",
+      name: "100% / 0.2%",
+      detail: "Human vs Claude Opus 4.6 on ARC-AGI-3 (March 2026)",
+    },
+    {
+      label: "AMI Labs seed",
+      name: "$1.03bn",
+      detail: "At $3.5bn pre-money. Europe's largest seed round, ever.",
+    },
+    {
+      label: "Anthropic's Mythos",
+      name: "10T params",
+      detail: "Costs 5× Opus to serve. Not publicly available.",
+    },
+    {
+      label: "Harness vs model",
+      name: "$1,005 vs $8,900",
+      detail: "Symbolica 36% vs Opus 4.6 0.2% on the same benchmark",
+    },
+  ]}
+/>
+
+<Prose>
+The conversation about agentic AI has split. Anthropic, OpenAI,
+and most of the agent platforms built on top of them say the path
+runs through better reasoning, longer context, and smarter
+scaffolding around a frontier LLM. Yann LeCun, Demis Hassabis,
+Fei-Fei Li, and most of the world's top early-stage AI capital
+say the architecture is wrong from the bottom up.
+
+Six months ago this looked like a researcher disagreement. Three
+things have arrived since then: a benchmark frontier models can't
+beat, an architectural alternative with theoretical foundations
+that finally hold up, and a $2bn-plus capital allocation against
+the current paradigm. Reading them together is the cleanest way
+to see what 2027's agent stack probably looks like.
+</Prose>
+
+<SectionDivider number="01" label="The empirical wall" />
+
+<Prose>
+ARC-AGI-3 is the cleanest version of a pattern that has shown up
+in three or four unrelated benchmarks in 2026. Frontier models do
+not generalise to environments the harness writer hasn't seen, and
+test-time compute does not fix it.
+</Prose>
+
+<Prose>
+Symbolica's Arcgentica harness, built on the open-source Agentica
+SDK, scored 36.08% on the public ARC-AGI-3 set — 113 of 182 levels
+solved, total bill $1,005. The underlying model is Claude Opus
+4.6, the same model that scores 0.2% if you point it at the
+benchmark directly. The difference is an orchestrator-subagent
+architecture in which the top-level orchestrator never touches the
+environment. Subagents do, and they return compressed textual
+summaries. The orchestrator plans against those summaries, and the
+context never grows.
+</Prose>
+
+<Prose>
+Chollet's note in the technical paper: the compression the
+Symbolica harness performs — keeping a small, useful representation
+of the world while interacting with it — is "exactly what ARC-AGI-3
+is designed to test as a native capability, not an engineered
+workaround." The current best ARC-AGI-3 result is being produced
+by a harness doing what the model can't.
+</Prose>
+
+<PullQuote>
+$1,005 buys 36% with sub-agents and aggressive context compression.
+$8,900 buys 0.2% if you point Opus 4.6 at the same task directly.
+</PullQuote>
+
+<Prose>
+General AgentBench, published on arXiv in February 2026, evaluated
+ten leading LLM agents across a unified search-coding-reasoning-tool-use
+environment. The authors reported "substantial performance
+degradation when moving from domain-specific evaluations to this
+general-agent setting," and went further: "neither scaling
+methodology yields effective performance improvements in practice,
+due to two fundamental limitations: context ceiling in sequential
+scaling and verification gap in parallel scaling." Test-time
+compute does not climb the wall.
+</Prose>
+
+<Prose>
+WebArena multi-site, from November 2025, is bleaker. The default
+success rate of a frontier LLM agent on the standard web-navigation
+benchmark is 2%. Environment-interaction adaptation lifts it to
+23%. The baseline on a benchmark the field has been working on for
+two years is 2%. The Aegis paper from August 2025 reported the
+most dispiriting number: OpenAI's o3, optimised specifically for
+agentic use, improves on customer-service workloads by 2-3% over
+o1. The marginal return on frontier-model reasoning on the tasks
+the agent industry sells is approaching zero.
+</Prose>
+
+<SectionDivider number="02" label="The architectural argument" />
+
+<Prose>
+The reason the harness ends up doing the model's job is structural.
+An LLM agent operates entirely in token space. Every prediction is
+over a probability distribution of words that describe the world.
+Every plan is a sampled sequence of words describing actions. Every
+state is whatever the agent has kept in its context window.
+Planning is generative text. The world is whatever the most recent
+few thousand tokens claim it is.
+</Prose>
+
+<Prose>
+LeCun's argument, in the 2022 position paper *A Path Towards
+Autonomous Machine Intelligence* and in half a dozen JEPA papers
+since: this architecture fights the task. A model that predicts
+tokens spends most of its capacity on details that are not
+predictable — lighting, phrasing, the specific path a user takes —
+and has limited room left for the parts that matter for planning.
+Predict in a learned latent space rather than observation space.
+Encode the world into representations. Predict the next
+representation, conditioned on an action. Choose actions that
+minimise a learned distance between the predicted representation
+and a goal representation. No tokens. No language. The planning
+loop is inside the latent space the model already learned.
+</Prose>
+
+<AxesGrid
+  items={[
+    {
+      label: "The LLM-agent loop",
+      body: "Observe → encode as tokens → predict next token → emit a token sequence describing an action → execute → re-encode the result as tokens. Plans are generated text. State tracking is whatever fits in context. Harness work — compression, sub-agents, scaffolding — exists to fix the parts the architecture leaves undone.",
+    },
+    {
+      label: "The JEPA-agent loop",
+      body: "Observe → encode into a learned latent space → action-conditioned predictor forecasts the next latent state → cost function measures distance to a goal latent → pick the action that minimises distance. Planning is search over latent rollouts. The compression the LLM harness performs in software is native to the architecture.",
+    },
+  ]}
+/>
+
+<Prose>
+For three years it was easy to argue that JEPA was a position
+paper with no working systems behind it, and that the latent-space
+architecture was prone to representational collapse — the failure
+mode where the encoder maps every input to the same constant vector
+because that trivially minimises any prediction loss. The community
+kept the framework alive with a pile of training heuristics:
+stop-gradients, teacher-student networks with EMA targets,
+predictor heads, whitening layers. Each fix made JEPA harder to
+scale and easier to dismiss as research-grade rather than
+production-ready.
+</Prose>
+
+<Prose>
+The last twelve months closed that gap. Three papers in particular
+are the ones to cite if anyone says JEPA is still vapour.
+</Prose>
+
+<SectionDivider number="03" label="The receipts" />
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      V-JEPA 2 / V-JEPA 2-AC
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Meta FAIR + Mila · June 2025 · arXiv 2506.09985
+    </div>
+    <p>
+      V-JEPA 2 was pretrained on more than one million hours of
+      internet video — mask-denoising in representation space, no
+      labels — at ViT-g scale. 77.3% top-1 on Something-Something v2
+      for motion understanding. State-of-the-art 39.7 recall@5 on
+      Epic-Kitchens-100 for human action anticipation.
+    </p>
+    <p>
+      The action-conditioned variant, V-JEPA 2-AC, is the part
+      relevant to the agent argument. A 300M-parameter transformer
+      fine-tuned on 62 hours of unlabelled robot video from the
+      Droid dataset. No rewards. No task-specific data. Deployed
+      zero-shot on Franka Emika Panda arms in two different labs —
+      neither of which appeared in the training set — with an
+      uncalibrated low-resolution camera. Closed-loop
+      model-predictive control against image goals. 100% success on
+      reach. 65% average on grasp. 75% on reach-with-object. 65-80%
+      on pick-and-place. The behaviour-cloning baseline (Octo)
+      averaged 15% on the same object-interaction tasks.
+    </p>
+    <p>
+      The comparison to NVIDIA's Cosmos is the one to keep in mind.
+      Cosmos is a 7-14B-parameter video-generation world model doing
+      similar things by predicting pixels. It needs 80 samples, 10
+      refinement steps, and 4 minutes per planned action — 80% reach,
+      0-20% manipulation. V-JEPA 2-AC needs 800 samples and 16
+      seconds per action — 100% reach, 60-80% manipulation. Faster
+      and more reliable.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="V-JEPA 2-AC"
+    badge="Robotics"
+    rows={[
+      { key: "Pretraining data", value: "1M+ hours video", big: true },
+      { key: "Robot fine-tune", value: "62 hours · no rewards" },
+      { key: "Pick-and-place", value: "65-80% (zero-shot)" },
+      { key: "vs Octo (BC)", value: "+50pp on manipulation" },
+      { key: "vs Cosmos", value: "15× faster planning" },
+    ]}
+  />
+</Section>
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      LeJEPA
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Balestriero + LeCun · November 2025 · arXiv 2511.08544
+    </div>
+    <p>
+      Balestriero and LeCun prove that the isotropic Gaussian is the
+      unique optimal target distribution for latent embeddings if
+      you want to minimise worst-case prediction risk on downstream
+      tasks. They introduce Sketched Isotropic Gaussian
+      Regularization (SIGReg), which enforces that target with
+      random 1D projections and characteristic-function matching, in
+      linear time and memory.
+    </p>
+    <p>
+      The combined objective — JEPA prediction loss plus SIGReg —
+      removes the entire heuristics stack. No stop-gradients. No
+      teacher-student networks. No EMA targets. No predictor head.
+      No schedulers. One trade-off hyperparameter. The training
+      pipeline fits in about 50 lines of code. Validated across more
+      than 60 architectures (ResNets, ViTs, ConvNets) and 10+
+      datasets. With a frozen ViT-H/14 backbone on ImageNet-1k, a
+      linear probe hits 79% top-1. Spearman correlation between
+      SIGReg loss and downstream accuracy is 0.99, which means model
+      selection without labels is now possible.
+    </p>
+    <p>
+      The "JEPA is held together by tricks" critique was reasonable
+      in 2023. As of November 2025 it has a clean theoretical
+      foundation, one hyperparameter, and empirical results across
+      more architectures than most production model families have
+      ever been tested on.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="LeJEPA"
+    badge="Theory"
+    rows={[
+      { key: "Hyperparameters", value: "1", big: true },
+      { key: "Code size", value: "~50 lines" },
+      { key: "Architectures tested", value: "60+" },
+      { key: "ImageNet-1k linear", value: "79% (ViT-H/14)" },
+      { key: "Loss-accuracy ρ", value: "0.99 Spearman" },
+    ]}
+  />
+</Section>
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      LeWorldModel (LeWM)
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Mila / NYU / Samsung / Brown · March 2026
+    </div>
+    <p>
+      The first JEPA that trains stably end-to-end from raw pixels.
+      No separate frozen encoder. No auxiliary objectives. No
+      pre-training pipeline. Two loss terms: prediction plus SIGReg.
+      ViT-Tiny encoder, ~5M parameters. 10M-parameter transformer
+      predictor. Token usage falls 200× compared to DINO-WM, the
+      previous best at this task.
+    </p>
+    <p>
+      Planning cycle: 0.98 seconds, against 47 seconds for
+      foundation-model-based alternatives. Latent trajectories
+      become smoother and more linear over training without explicit
+      regularisation pushing them to — the authors call it "emergent
+      temporal latent path straightening." Read alongside V-JEPA 2-AC
+      and LeJEPA, LeWM is the architecture AMI Labs is going to ship
+      a version of. The working latent-space agent that controls
+      real robots and the principled training recipe that scales
+      were the missing pieces. Both arrived in the last twelve
+      months.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="LeWM"
+    badge="World model"
+    rows={[
+      { key: "Encoder size", value: "~5M params", big: true },
+      { key: "Planning cycle", value: "0.98s" },
+      { key: "vs foundation-model planners", value: "47s → 0.98s" },
+      { key: "Token use vs DINO-WM", value: "200× less" },
+      { key: "Training", value: "End-to-end · 2 losses" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="04" label="The capital and the politics" />
+
+<Prose>
+The money has moved faster than the consensus. On March 9, 2026,
+AMI Labs — the startup LeCun co-founded after leaving Meta in
+November 2025 — closed a $1.03bn seed round at a $3.5bn pre-money
+valuation. The largest seed round ever raised by a European
+company. Co-leads: Cathay Innovation, Greycroft, Hiro Capital, HV
+Capital, Bezos Expeditions. Strategic investors: NVIDIA, Samsung,
+Toyota Ventures, Bpifrance, Temasek. Individuals: Jeff Bezos, Mark
+Cuban, Eric Schmidt, Tim Berners-Lee, Xavier Niel.
+</Prose>
+
+<Prose>
+The team. CEO Alexandre LeBrun, formerly co-founder and CEO of
+medical-AI company Nabla, where he reached LeCun's conclusion
+about LLMs from the patient-safety angle. CSO Saining Xie,
+ex-DeepMind. CRIO Pascale Fung, ex-Meta senior director of AI
+research. VP World Models Mike Rabbat, ex-Meta FAIR research
+director. COO Laurent Solly, Meta's former VP for Europe. Hubs in
+Paris, New York, Montreal, Singapore.
+</Prose>
+
+<Prose>
+Fei-Fei Li's World Labs raised $1bn in February 2026 and shipped
+Marble. DeepMind released Genie 3 in August 2025 — the first
+real-time interactive world model, ~11B parameters, 24fps. NVIDIA's
+Cosmos foundation models passed 2M downloads. xAI hired ex-NVIDIA
+specialists for world-model work in late 2025. The aggregate
+early-stage capital allocated to the "LLMs are not the path"
+thesis since October 2025 sits over $2.5bn, before counting
+infrastructure spend.
+</Prose>
+
+<PullQuote>
+My prediction is that "world models" will be the next buzzword. In
+six months, every company will call itself a world model to raise
+funding. — Alexandre LeBrun, CEO of AMI Labs, March 10, 2026
+</PullQuote>
+
+<Prose>
+François Chollet, who runs the ARC Prize Foundation and co-founded
+Ndea on the parallel program-synthesis bet, endorsed the AMI raise
+publicly: "AMI Labs proves that you can raise massive capital for
+fundamental research outside of Silicon Valley." Chollet's
+program-synthesis thesis and LeCun's JEPA thesis are different
+architectural bets, but they run the same critique of the
+LLM-agent stack from opposite ends.
+</Prose>
+
+<Prose>
+Anthropic's Dario Amodei has been on record since 2024 saying "a
+country of geniuses in a datacenter as early as 2026" is reachable
+through LLM-derived systems. The current state of that bet is
+Claude Mythos — a reported 10-trillion-parameter model that costs
+roughly 5× Opus 4.6 to run, isn't publicly served, and that
+Anthropic has framed as a cybersecurity tool. If scaling were
+producing the returns the 2024 case required, Mythos would be the
+consumer flagship. Instead it's a partner-API product with no
+public benchmarks.
+</Prose>
+
+<SectionDivider number="05" label="What this means for picking agents in 2026" />
+
+<Prose>
+If the architectural argument is right, the question of which
+agent platform to standardise on this year is less about which
+model leads the benchmarks and more about which platforms survive
+a paradigm change. None of these tools become useless overnight —
+LeCun himself has said any new architecture is multi-year — but
+long-term commitments to specific agent stacks look different if
+the underlying architecture is provisional.
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "If you believe Amodei",
+      pick: "Bet long on frontier-LLM agents",
+      why: "Scaling continues to produce returns. The harness is a transient cost. Once the model is capable enough, the harness shrinks. Invest in Anthropic, OpenAI, and the platforms built on top. Mythos is the bet.",
+    },
+    {
+      job: "If you believe LeCun and Chollet",
+      pick: "Bet long on world models and harness expertise",
+      why: "The current stack is transitional. The next-architecture players (AMI Labs, World Labs, DeepMind's Genie line) inherit the agent market eventually. Harness expertise transfers across paradigms. API-specific commitments don't.",
+    },
+    {
+      job: "If you don't know which is right",
+      pick: "Hedge through harness investment",
+      why: "Cline-style oversight, Symbolica-style orchestration, Aegis-style environment optimisation work under either thesis. The skills compound either way. The model under the hood is replaceable.",
+    },
+  ]}
+/>
+
+<Prose>
+The world-model camp has unsolved problems of its own. Bessemer's
+analysis from March 2026 identified the structural one: world
+models don't batch the way LLMs do. A 70B LLM costs a few cents
+per hour per user because dozens of users share each chip's
+throughput. A real-time video-generation world model can't share
+inference cost across users. NVIDIA's Cosmos training run used
+10,000 H100 GPUs over three months. Serving economics may turn out
+to be the bottleneck even if the architecture is right. The PAN
+paper (arXiv 2507.05169) made the related point that an LLM
+backbone may need to stay in the loop alongside a generative
+latent predictor — the camps may converge on a hybrid stack
+neither of them currently sells.
+</Prose>
+
+<Prose>
+LLM agents are not going to disappear. The architecture being
+marketed today — one big model, a long context window, a
+tool-calling harness, and the assumption that scaling continues —
+is the part that probably does. The pieces that survive are the
+harness expertise, the latent-space planning idea, and the small
+specialist models that already do narrow work well.
+</Prose>
+
+<Closer>
+The cleanest LLM-agent result on a brand-new benchmark in 2026
+wasn't produced by an LLM. It was produced by an LLM kept honest
+by a harness doing the world-modelling. Whoever ships a system
+that does that natively in 2027 inherits the next agent cycle.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The architecture shift, <em>tracked weekly</em></>}
+  body="The harness builders, the world-model labs, and the agent platforms in between move on different cadences. AgentTape tracks capital flow, benchmark releases, harness adoption, and which agent stacks are quietly being switched out — across the indexes."
+  href="/indexes"
+  cta_label="View the live indexes"
+/>
