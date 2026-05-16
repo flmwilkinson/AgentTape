@@ -11,6 +11,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
+# Ops scripts (repair_mojibake, seed_model_deps, backfill_*, purge_*)
+# baked in so they can be invoked as ``python -m scripts.X`` from a
+# running container.
+COPY scripts /app/scripts
 
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 

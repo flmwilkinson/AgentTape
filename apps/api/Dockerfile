@@ -17,6 +17,10 @@ COPY src /app/src
 # migrate container in cloud deployments.
 COPY alembic.ini /app/alembic.ini
 COPY migrations /app/migrations
+# Ops scripts (storage_audit, retention_cleanup, export_openapi)
+# baked in so they can be invoked as ``python -m scripts.X`` from a
+# running container without rebuilding or rsyncing.
+COPY scripts /app/scripts
 
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 
