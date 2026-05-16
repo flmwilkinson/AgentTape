@@ -117,16 +117,19 @@ SITES: list[BenchmarkSite] = [
     # up model name + score on the same row. If llm-stats reorganises
     # we lose these silently (per-site try/except in fetch) and the
     # aggregator rows above stay as a fallback floor.
+    #
+    # Deliberate omissions: ``swe-bench-verified`` and ``mmlu-pro``
+    # are already covered by FMLeaderboardsIngestor via canonical JSON
+    # APIs (swe-bench.github.io master + TIGER-Lab HF dataset). The
+    # canonical sources are higher fidelity than the llm-stats
+    # aggregator, so we don't duplicate them here — fm_leaderboards
+    # owns those two benchmark slugs. Add to ``LEADERBOARDS`` in
+    # fm_leaderboards.py if you find a canonical JSON URL for any of
+    # the benchmarks below — preferred over HTML scraping.
     BenchmarkSite(
         "gpqa-diamond",
         "GPQA Diamond",
         "https://llm-stats.com/benchmarks/gpqa",
-        category="reasoning",
-    ),
-    BenchmarkSite(
-        "mmlu-pro",
-        "MMLU-Pro",
-        "https://llm-stats.com/benchmarks/mmlu-pro",
         category="reasoning",
     ),
     BenchmarkSite(
@@ -151,12 +154,6 @@ SITES: list[BenchmarkSite] = [
         "livecodebench",
         "LiveCodeBench",
         "https://llm-stats.com/benchmarks/livecodebench",
-        category="coding",
-    ),
-    BenchmarkSite(
-        "swe-bench-verified",
-        "SWE-Bench Verified",
-        "https://llm-stats.com/benchmarks/swe-bench-verified",
         category="coding",
     ),
     BenchmarkSite(
