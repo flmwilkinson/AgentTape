@@ -140,6 +140,151 @@ def _normalize(name: str) -> str:
     return _NORM_RE.sub("", name.lower())
 
 
+# Suffixes appended to leaderboard names that don't have their own
+# agent slug. lmarena publishes "claude-opus-4-7-thinking" and
+# "gpt-5.4-high" without us having a matching agent — they're
+# reasoning-mode variants of the base model. Strip them so the base
+# slug matches. Order matters: longer first, otherwise "-high" beats
+# "-high-reasoning".
+_NAME_DECORATORS = (
+    "-high-reasoning",
+    "-medium-reasoning",
+    "-low-reasoning",
+    "-thinking",
+    "-reasoning",
+    "-high",
+    "-medium",
+    "-low",
+    " high",
+    " medium",
+    " low",
+    " thinking",
+)
+
+# Harness prefix tokens used by SWE-bench leaderboard. Every top
+# SWE-bench Verified entry is in "harness + model [decorators]"
+# format. Strip the harness so we can match on the model substring.
+_HARNESS_PREFIXES = (
+    "live-swe-agent",
+    "mini-swe-agent",
+    "swe-agent",
+    "epam ai/run developer agent",
+    "atlassian rovo dev",
+    "sonar foundation agent",
+    "trae",
+    "openhands",
+    "agentless",
+    "warp",
+    "acoder",
+    "harness ai",
+)
+
+# Parenthetical decorators like "(2025-11-01)", "(high reasoning)",
+# "(thinking)" — strip them with this regex.
+_PAREN_DECORATOR = re.compile(r"\s*\([^)]*\)\s*")
+
+
+def _name_variants(name: str) -> list[str]:
+    """Generate progressively-cleaner variants of a leaderboard name.
+
+    The matcher iterates these in order until one normalises to a
+    string that hits an agent slug. Examples:
+
+      ``"claude-opus-4-7-thinking"`` →
+          ["claude-opus-4-7-thinking", "claude-opus-4-7"]
+
+      ``"live-SWE-agent + Claude 4.5 Opus medium (20251101)"`` →
+          [full, "Claude 4.5 Opus medium", "Claude 4.5 Opus"]
+
+    The harness-aware split is what makes SWE-bench entries
+    actually match — every top entry is prefixed with the harness
+    name and ``+`` separator. Without splitting, the model substring
+    is buried inside a long composite string that nothing in our
+    agent table matches against.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def _add(v: str) -> None:
+        s = v.strip().strip("+,-—").strip()
+        if not s:
+            return
+        key = s.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(s)
+
+    _add(name)
+
+    # Strip parenthetical decorators globally.
+    no_paren = _PAREN_DECORATOR.sub(" ", name).strip()
+    if no_paren != name:
+        _add(no_paren)
+
+    # Strip trailing reasoning/quality decorators from the no-paren
+    # form. Longest first so partial matches don't shadow longer ones.
+    for dec in _NAME_DECORATORS:
+        if no_paren.lower().endswith(dec.lower()):
+            stripped = no_paren[: -len(dec)].rstrip()
+            _add(stripped)
+            # Also strip parens from this stripped form (cheap, in
+            # case the decorator was embedded mid-name with parens).
+            stripped_no_paren = _PAREN_DECORATOR.sub(" ", stripped).strip()
+            _add(stripped_no_paren)
+            break
+
+    # Split on "+" for harness+model format. Try each segment, and
+    # then a decorator-stripped version of each. Skip segments that
+    # match a known harness — they'll never be a model match.
+    if "+" in name:
+        for part in name.split("+"):
+            p = part.strip()
+            if not p:
+                continue
+            if p.lower().lstrip("(").strip() in _HARNESS_PREFIXES:
+                continue
+            p_no_paren = _PAREN_DECORATOR.sub(" ", p).strip()
+            _add(p_no_paren)
+            for dec in _NAME_DECORATORS:
+                if p_no_paren.lower().endswith(dec.lower()):
+                    _add(p_no_paren[: -len(dec)].rstrip())
+                    break
+
+    return out
+
+
+def _find_agent_for_name(
+    name: str,
+    sorted_agent_norms: list[tuple[str, "UUID"]],
+) -> "UUID | None":
+    """Best-effort match from a leaderboard's published model name to
+    one of our admitted agents.
+
+    ``sorted_agent_norms`` MUST be sorted by normalised-slug length
+    ascending. That makes the substring fallback prefer canonical
+    slugs ("anthropic-claude-opus-4-7") over decorated variants
+    ("anthropic-claude-opus-4-7-fast") when both substring-overlap.
+    The first match wins; sort order makes "first" mean "shortest"
+    which usually means "canonical".
+
+    Strategy: try each ``_name_variants`` candidate in order. For
+    each, attempt an exact normalised hit first, then a substring
+    hit. Return as soon as anything matches.
+    """
+    for cand in _name_variants(name):
+        norm = _normalize(cand)
+        if len(norm) < 6:
+            continue
+        for agent_norm, aid in sorted_agent_norms:
+            if norm == agent_norm:
+                return aid
+        for agent_norm, aid in sorted_agent_norms:
+            if norm in agent_norm or agent_norm in norm:
+                return aid
+    return None
+
+
 class FMLeaderboardsIngestor(Ingestor):
     """Custom ingestor — writes benchmark_results, not signals.
 
@@ -180,11 +325,28 @@ class FMLeaderboardsIngestor(Ingestor):
         # Build a lookup over admitted agents for fast row-match.
         # Foundation models are the target population; application
         # agents won't appear on these leaderboards.
-        norm_to_agent: dict[str, UUID] = {}
-        for a in agents:
-            norm_to_agent[_normalize(a.slug)] = a.id
+        #
+        # Sorted by normalised-slug length ascending so the substring
+        # fallback in ``_find_agent_for_name`` prefers canonical
+        # slugs (anthropic-claude-opus-4-7) over decorated variants
+        # (anthropic-claude-opus-4-7-fast). Verified in prod
+        # diagnostic: without sort, leaderboard "claude-opus-4-7"
+        # could match either slug depending on dict iteration order.
+        agent_norms: list[tuple[str, UUID]] = []
+        seen_norms: set[str] = set()
+        for a in sorted(agents, key=lambda a: len(a.slug)):
+            n = _normalize(a.slug)
+            if n and n not in seen_norms:
+                seen_norms.add(n)
+                agent_norms.append((n, a.id))
             for hf_id in a.hf_model_ids or []:
-                norm_to_agent.setdefault(_normalize(hf_id), a.id)
+                hn = _normalize(hf_id)
+                if hn and hn not in seen_norms:
+                    seen_norms.add(hn)
+                    agent_norms.append((hn, a.id))
+        # Re-sort by length now that we've also added hf_model_ids
+        # (which can be shorter or longer than the slug).
+        agent_norms.sort(key=lambda x: len(x[0]))
 
         captured = datetime.now(UTC)
         written = 0
@@ -198,15 +360,7 @@ class FMLeaderboardsIngestor(Ingestor):
 
             matched = 0
             for model_name, score in rows:
-                norm = _normalize(model_name)
-                # Try direct match, then suffix match (LMSys often
-                # writes "openai/gpt-5.3" while we have "openai-gpt-5-3").
-                aid = norm_to_agent.get(norm)
-                if aid is None:
-                    for k, v in norm_to_agent.items():
-                        if len(norm) >= 6 and (norm in k or k in norm):
-                            aid = v
-                            break
+                aid = _find_agent_for_name(model_name, agent_norms)
                 if aid is None:
                     continue
                 # _upsert_result now insert-on-change: returns False
