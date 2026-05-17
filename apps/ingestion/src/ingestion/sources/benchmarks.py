@@ -346,7 +346,17 @@ def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
     pattern = word_boundary_regex(tokens)
     soup = BeautifulSoup(html, "html.parser")
     best: float | None = None
-    for row in soup.find_all(["tr", "li"]):
+    # Only scan ``<tr>`` rows. ``<li>`` was previously included as a
+    # safety net for sites that render leaderboards as flat lists, but
+    # in practice every benchmark page we ingest uses a real table —
+    # and ``<li>`` matches were polluting the data with model-card
+    # sidebar elements like ``<li>Claude Opus 4.5</li>`` (the
+    # navigation/related-models widget on llm-stats subpages). With
+    # no cells inside that li, the extractor fell through to lenient
+    # mode and grabbed "4.5" from the version digit in the model
+    # name. Verified in prod: Opus 4.5 had 6 llm-stats rows all at
+    # score=4.50 traced to this single ``<li>`` per page.
+    for row in soup.find_all("tr"):
         full_text = row.get_text(" ", strip=True)
         if not pattern.search(full_text):
             continue
@@ -358,36 +368,32 @@ def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
 
 
 def _extract_row_score(row) -> float | None:
-    """Pull a score-shaped number out of a leaderboard row.
+    """Pull a score-shaped number out of a leaderboard ``<tr>`` row.
 
-    For ``<tr>`` rows: walk cells right-to-left and return the first
-    cell that parses to a score, ``strict=True`` to reject name cells
-    (e.g. ``"Claude Opus 4.5 Anthropic"`` whose ``4.5`` would
-    otherwise leak through as a bogus score — verified in prod).
+    Walks cells right-to-left and returns the first cell that parses
+    to a score under ``strict=True`` — rejects name cells like
+    ``"Claude Opus 4.5 Anthropic"`` whose ``4.5`` would otherwise
+    leak through as a bogus score.
 
-    For ``<li>`` rows (no cells): use ``strict=False`` on the squashed
-    text. We have no cell structure to walk so we accept the lenient
-    path and rely on the priority order (% > decimal > integer) +
-    largest-in-range to pick reasonably.
+    Rows without ``<td>``/``<th>`` cells return None. The lenient
+    fallback path used to exist for ``<li>`` rows but was removed
+    after prod data showed it leaked version digits from model-card
+    navigation elements (``<li>Claude Opus 4.5</li>``).
     """
     cells = row.find_all(["td", "th"])
-    if cells:
-        # Rightmost cells first — leaderboards conventionally put
-        # the headline score in the last data column. ``strict``
-        # rejects cells with more than a couple of letters so the
-        # walk skips name cells like "Claude Opus 4.5 Anthropic"
-        # and continues looking for a numeric-dominant cell.
-        for cell in reversed(cells):
-            text_ = cell.get_text(" ", strip=True)
-            v = _extract_cell_score(text_, strict=True)
-            if v is not None:
-                return v
+    if not cells:
         return None
-    # No cell structure (e.g. a flat <li> list). Use the row text
-    # with strict=False — strict would reject the whole row because
-    # it always contains the model name. Lenient mode picks % first,
-    # which is the only reliable score-shape in mixed text.
-    return _extract_cell_score(row.get_text(" ", strip=True), strict=False)
+    # Rightmost cells first — leaderboards conventionally put the
+    # headline score in the last data column. ``strict`` rejects
+    # cells with more than a couple of letters so the walk skips
+    # name cells like "Claude Opus 4.5 Anthropic" and continues
+    # looking for a numeric-dominant cell.
+    for cell in reversed(cells):
+        text_ = cell.get_text(" ", strip=True)
+        v = _extract_cell_score(text_, strict=True)
+        if v is not None:
+            return v
+    return None
 
 
 def _extract_cell_score(text_: str, strict: bool = False) -> float | None:
