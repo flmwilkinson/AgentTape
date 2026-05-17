@@ -361,25 +361,36 @@ def _extract_row_score(row) -> float | None:
     """Pull a score-shaped number out of a leaderboard row.
 
     For ``<tr>`` rows: walk cells right-to-left and return the first
-    cell that parses to a score. For ``<li>`` rows (no cells): apply
-    the same priority order to the squashed row text.
+    cell that parses to a score, ``strict=True`` to reject name cells
+    (e.g. ``"Claude Opus 4.5 Anthropic"`` whose ``4.5`` would
+    otherwise leak through as a bogus score — verified in prod).
+
+    For ``<li>`` rows (no cells): use ``strict=False`` on the squashed
+    text. We have no cell structure to walk so we accept the lenient
+    path and rely on the priority order (% > decimal > integer) +
+    largest-in-range to pick reasonably.
     """
     cells = row.find_all(["td", "th"])
     if cells:
         # Rightmost cells first — leaderboards conventionally put
-        # the headline score in the last data column. Skip cells
-        # that don't contain any number at all.
+        # the headline score in the last data column. ``strict``
+        # rejects cells with more than a couple of letters so the
+        # walk skips name cells like "Claude Opus 4.5 Anthropic"
+        # and continues looking for a numeric-dominant cell.
         for cell in reversed(cells):
             text_ = cell.get_text(" ", strip=True)
-            v = _extract_cell_score(text_)
+            v = _extract_cell_score(text_, strict=True)
             if v is not None:
                 return v
         return None
-    # No cell structure (e.g. a flat <li> list). Use the row text.
-    return _extract_cell_score(row.get_text(" ", strip=True))
+    # No cell structure (e.g. a flat <li> list). Use the row text
+    # with strict=False — strict would reject the whole row because
+    # it always contains the model name. Lenient mode picks % first,
+    # which is the only reliable score-shape in mixed text.
+    return _extract_cell_score(row.get_text(" ", strip=True), strict=False)
 
 
-def _extract_cell_score(text_: str) -> float | None:
+def _extract_cell_score(text_: str, strict: bool = False) -> float | None:
     """Pick the most likely score-shaped number from a cell's text.
 
     Priority order (each step takes the LARGEST value in range — score
@@ -393,7 +404,16 @@ def _extract_cell_score(text_: str) -> float | None:
          throughout). Decimals > 1.5 are treated as percentages.
       3. ``78`` — bare integer in [1, 100] not adjacent to word chars
 
-    Two prior bugs both fixed here:
+    ``strict`` mode (default False): when True, reject cells whose
+    text contains more than 2 alphabetic characters. This blocks the
+    name-cell leak where the right-to-left walk falls through empty
+    score cells into the model-name cell and extracts version digits
+    as a score. Verified in prod: pre-fix slow-tier wrote ``score=4.50``
+    for Claude Opus 4.5 on every llm-stats benchmark because cell [2]
+    (the score column) was empty/— and the walk fell through to
+    cell [1] = "Claude Opus 4.5 Anthropic" → matched "4.5".
+
+    Three prior bugs all fixed in this extractor:
 
     * Returning the LARGEST (not first) — rows like
       "OpenAI GPT-5 5.1B 92%" returned 5.1 (parameter count) before
@@ -401,10 +421,23 @@ def _extract_cell_score(text_: str) -> float | None:
     * Accepting [0, 100] not [1, 100] + fraction-aware — rows like
       "4 GPT-5 OpenAI 0.934" returned 4 (rank) because 0.934 was
       below the lower bound. llm-stats publishes ALL scores as
-      [0, 1] fractions, not percentages.
+      [0, 1] fractions.
+    * ``strict`` name-cell rejection — empty score cells caused
+      right-to-left walk to fall through to name cells and extract
+      version digits ("4.5" from "Claude Opus 4.5").
 
     None when nothing matches — we under-emit rather than fabricate.
     """
+    if strict:
+        # Score cells are numeric-dominant. Model-name cells like
+        # "Claude Opus 4.5 Anthropic" or "GPT-5 OpenAI" have many
+        # letters and their digits are version numbers, not scores.
+        # >2 letters is the threshold — allows short tags like "Acc"
+        # or unit hints in numeric cells, blocks any real name.
+        letters = sum(1 for c in text_ if c.isalpha())
+        if letters > 2:
+            return None
+
     # 1. Percentage with explicit %
     pct_values = [
         float(m.group(1))

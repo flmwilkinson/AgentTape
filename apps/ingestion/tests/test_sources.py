@@ -371,12 +371,13 @@ async def test_benchmarks_ignores_version_digits_in_model_name():
 
 
 async def test_benchmarks_picks_largest_score_over_parameter_count():
-    """Regression for the prod follow-on bug: llm-stats rows render
-    model size before the score, like ``"OpenAI GPT-5 5.1B 92%"``.
-    A first-match extractor returned ``5.1`` (parameter count). The
-    fix prefers the LARGEST decimal in [1, 100] within each priority
-    tier — score numbers reliably beat parameter counts because
-    benchmarks cluster in 30-95 while sizes cluster in 0.5-9.5.
+    """Regression for the largest-in-range fix. Within a score-only
+    cell with multiple numbers (e.g. ``"1024 · 92.3"``), the extractor
+    must pick the largest score-shaped value in [1, 100].
+
+    The cell content is intentionally numeric-dominant (no model name)
+    so the strict cell extractor accepts it — the name lives in its
+    own cell, which is the correct real-world shape.
     """
     a = _agent(
         slug="openai-gpt-5",
@@ -389,14 +390,16 @@ async def test_benchmarks_picks_largest_score_over_parameter_count():
     def handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         if "/benchmarks/humaneval" in url:
-            # Real-shape llm-stats cell: model name + parameter count
-            # + score, all in one <td> (Next.js often collapses cells
-            # into a single styled div per row).
+            # Multi-cell row matching real llm-stats structure. The
+            # score cell has two numbers (sample size + score) — the
+            # extractor picks the largest in-range.
             return httpx.Response(
                 200,
                 text=(
                     "<table><tr>"
-                    "<td>OpenAI GPT-5 5.1B 92.3%</td>"
+                    "<td>1</td>"
+                    "<td>OpenAI GPT-5</td>"
+                    "<td>1024 92.3</td>"
                     "</tr></table>"
                 ),
             )
@@ -409,8 +412,61 @@ async def test_benchmarks_picks_largest_score_over_parameter_count():
         await ing.aclose()
 
     assert len(readings) == 1
-    # Pre-fix: returned 5.1 (parameter count). Post-fix: returns 92.3.
+    # Score cell "1024 92.3" — strict extractor: 1024 filtered out,
+    # 92.3 in [1, 100] → returns 92.3.
     assert readings[0].value == pytest.approx(92.3)
+
+
+async def test_benchmarks_rejects_version_digits_in_name_cell():
+    """Regression for the prod name-cell leak. The right-to-left cell
+    walk used to fall through empty score cells into the name cell and
+    extract the model's version digit as a score. Every Claude Opus 4.5
+    row on llm-stats wrote ``score=4.50`` because cells were:
+
+        [1] [name="Claude Opus 4.5 Anthropic"] [score=""] [—] [—]
+
+    Walking right-to-left, the empty/— cells matched nothing, the
+    walk fell through to the name cell, and "4.5" inside the model
+    name was extracted as the score. Fix: ``strict=True`` rejects
+    cells with >2 alphabetic characters.
+    """
+    a = _agent(
+        slug="anthropic-claude-opus-4-5",
+        entity_kind="foundation_model",
+        github_repo=None,
+        facts={
+            "openrouter_id": "anthropic/claude-opus-4-5",
+            "display_name": "Claude Opus 4.5",
+        },
+    )
+    settings = Settings()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "/benchmarks/humaneval" in url:
+            # Empty score cell — model has no real benchmark result.
+            # Should yield NO reading, not the version digit "4.5".
+            return httpx.Response(
+                200,
+                text=(
+                    "<table><tr>"
+                    "<td>1</td>"
+                    "<td>Claude Opus 4.5 Anthropic</td>"
+                    "<td></td><td>—</td><td>—</td>"
+                    "</tr></table>"
+                ),
+            )
+        return httpx.Response(404)
+
+    ing = BenchmarksIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+
+    # Pre-fix: returned SignalReading(value=4.5) from the name cell.
+    # Post-fix: empty score cell + rejected name cell = no reading.
+    assert readings == []
 
 
 async def test_benchmarks_handles_llmstats_fractional_scores():

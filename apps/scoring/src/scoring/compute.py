@@ -260,12 +260,18 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.NEWS_MENTIONS_30D,
     ],
     "quality": [
+        # Quality is now BENCHMARK_SCORE only for foundation models.
+        # ARXIV_CITATIONS was here previously on the theory that
+        # peer-reviewed citations stand in for benchmark coverage on
+        # newly-released flagships before leaderboards catch up. In
+        # practice it harmed the signal it was meant to help: closed
+        # flagships (Claude, GPT) don't have linked arxiv papers,
+        # ARXIV_CITATIONS scaled to 0, and the mean dragged
+        # benchmark-based Quality down to half. Visible in prod as
+        # Claude Opus 4.7 at quality=43.7 despite SWE-bench=87.6 etc.
+        # Citations moved to Momentum below — they're an academic-
+        # adoption rate signal, not a capability signal.
         SignalSource.BENCHMARK_SCORE,
-        # Peer-reviewed citations are a quality signal that doesn't
-        # depend on a benchmark catalogue catching up to a new model.
-        # Useful for new flagships (e.g. GPT/Claude releases) before
-        # leaderboards refresh.
-        SignalSource.ARXIV_CITATIONS,
     ],
     "momentum": [
         SignalSource.HF_DOWNLOADS_30D,
@@ -276,6 +282,12 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.GOOGLE_TRENDS_SCORE,
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
+        # Academic mentions over time — newer papers citing this
+        # model are a credible "still relevant" signal. The momentum
+        # pillar treats it as a 7-day rate via scaled_roc, so a
+        # model with a flat citation count doesn't get penalised
+        # — only models gaining (or losing) academic mindshare move.
+        SignalSource.ARXIV_CITATIONS,
     ],
     "community": [
         # Note: BLUESKY_MENTIONS_7D, MASTODON_MENTIONS_7D and
@@ -340,12 +352,34 @@ async def _value_at(
     return float(row[0]) if row else None
 
 
+MIN_BENCHMARK_COVERAGE = 3
+"""How many distinct benchmarks must an agent appear on before we
+assign a Quality score from them.
+
+Below this floor the agent stays Unrated on Quality (rather than
+getting a misleading score from a single source). Verified in prod:
+``google-gemini-3-flash-preview`` had Quality=98.1 from one lmarena
+Elo row, which falsely placed it above Claude Opus 4.7 and GPT-5.5
+on the headline ranking. The floor of 3 forces a minimum of three
+canonical benchmarks (lmarena, swe-bench-verified, mmlu-pro is a
+typical cohort that most frontier models clear) before Quality is
+trusted as a comparable signal."""
+
+
 async def _agent_benchmark_score(
     session: AsyncSession, agent_id: UUID
 ) -> float | None:
     """Mean of latest benchmark scores across every benchmark this
     agent has results on. Each score is normalised against its
-    benchmark's max_score so multiple benchmarks combine cleanly."""
+    benchmark's max_score so multiple benchmarks combine cleanly.
+
+    Coverage gate: returns None when the agent has fewer than
+    ``MIN_BENCHMARK_COVERAGE`` distinct benchmarks. The Quality pillar
+    then reads as Unrated, which is the correct state for a model
+    we've only seen on one or two leaderboards — averaging 1-2
+    points produces a number that looks comparable to a model with
+    7 points but isn't.
+    """
     r = await session.execute(
         text(
             """
@@ -360,19 +394,25 @@ async def _agent_benchmark_score(
                 WHERE br.agent_id = :aid
             )
             SELECT
+                count(*)::int AS n,
                 AVG(
                     CASE
                         WHEN max_score IS NULL OR max_score <= 0 THEN score
                         ELSE score / max_score * 100
                     END
-                )::float
+                )::float AS avg_norm
             FROM latest WHERE rn = 1
             """
         ),
         {"aid": agent_id},
     )
     row = r.first()
-    return float(row[0]) if row and row[0] is not None else None
+    if row is None:
+        return None
+    n, avg_norm = row[0], row[1]
+    if n is None or avg_norm is None or n < MIN_BENCHMARK_COVERAGE:
+        return None
+    return float(avg_norm)
 
 
 async def _agent_kind(session: AsyncSession, agent_id: UUID) -> str:
