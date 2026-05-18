@@ -13,16 +13,20 @@ exist`` even though ``scores.efficiency`` was populated correctly.
 This migration just CREATE-OR-REPLACE's the view with the same
 column list plus ``efficiency`` appended. No data movement.
 
-Revision ID: 0013_efficiency_in_current_scores_view
+Revision ID: 0013_efficiency_view
 Revises: 0012_efficiency_signals
 Create Date: 2026-05-18
+
+(Previous revision id was ``0013_efficiency_in_current_scores_view``
+which is 41 characters and overflowed ``alembic_version.version_num``
+which is ``VARCHAR(32)``. Shortened to ``0013_efficiency_view``.)
 """
 from __future__ import annotations
 
 from alembic import op
 
 
-revision = "0013_efficiency_in_current_scores_view"
+revision = "0013_efficiency_view"
 down_revision = "0012_efficiency_signals"
 branch_labels = None
 depends_on = None
