@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ingestion.sources.artificial_analysis import ArtificialAnalysisIngestor
 from ingestion.sources.arxiv import ArxivIngestor
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 from ingestion.sources.benchmarks import BenchmarksIngestor
@@ -50,6 +51,7 @@ from ingestion.sources.wikipedia import WikipediaViews30dIngestor
 
 __all__ = [
     "AgentRow",
+    "ArtificialAnalysisIngestor",
     "ArxivCitationsIngestor",
     "ArxivIngestor",
     "BenchmarksIngestor",

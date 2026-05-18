@@ -34,6 +34,10 @@ class ScoreEnvelope(BaseModel):
     quality: float | None = Field(None, description="Null = Unrated; never 0 for unrated")
     momentum: float = Field(..., ge=0.0, le=100.0)
     community: float = Field(..., ge=0.0, le=100.0)
+    # FM-only 5th pillar (cost + speed via Artificial Analysis).
+    # Always null for applications; nullable for FMs without AA
+    # coverage. Same Unrated convention as quality.
+    efficiency: float | None = Field(None, description="FM-only; null = Unrated")
     manipulation_resistance: float = Field(..., ge=0.0, le=1.0)
     computed_at: datetime
     # 24-hour delta. Null = no history old enough to compare. Zero = compared
@@ -58,6 +62,7 @@ class ScoreEnvelopeOptional(BaseModel):
     quality: float | None = None
     momentum: float | None = None
     community: float | None = None
+    efficiency: float | None = None
     manipulation_resistance: float | None = None
     computed_at: datetime | None = None
     score_24h_ago: float | None = None

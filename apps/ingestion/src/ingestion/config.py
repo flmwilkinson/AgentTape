@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # main login password). Soft-skips if either is missing.
     bluesky_handle: str | None = None
     bluesky_app_password: str | None = None
+    # Artificial Analysis: free API at artificialanalysis.ai. Drives
+    # the FM Efficiency pillar (price + speed) and supplements
+    # benchmark coverage on the newest flagships that scraping
+    # misses (Opus 4.7, GPT-5.5, Gemini 3.1 Pro, etc.). Soft-skips
+    # the ingestor if absent. 1000 requests/day free tier is
+    # comfortable for our slow tier.
+    artificial_analysis_api_key: str | None = None
 
     # Tier intervals (seconds). Pulled out of code so tests can crank them down.
     # Originally fast=5min/medium=1h/slow=24h; with ~700 admitted agents

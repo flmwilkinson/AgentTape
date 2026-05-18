@@ -45,6 +45,13 @@ class SignalSource(str, enum.Enum):
     NEWS_MENTIONS_30D = "news_mentions_30d"
     # Migration 0011. Mastodon public-search hit count.
     MASTODON_MENTIONS_7D = "mastodon_mentions_7d"
+    # Migration 0012. FM Efficiency pillar — Cost + Speed from
+    # Artificial Analysis (the canonical source for LLM economics).
+    # Blended is mean of input+output $/M tokens, inverse-scaled
+    # (cheaper = higher score). Tokens/sec is median throughput,
+    # higher = higher score.
+    OPENROUTER_PRICE_BLENDED = "openrouter_price_blended"
+    OUTPUT_TOKENS_PER_SECOND = "output_tokens_per_second"
 
 
 class EventKind(str, enum.Enum):

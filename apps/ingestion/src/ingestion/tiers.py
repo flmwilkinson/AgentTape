@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from ingestion.sources import (
+    ArtificialAnalysisIngestor,
     ArxivCitationsIngestor,
     ArxivIngestor,
     BenchmarksIngestor,
@@ -95,6 +96,12 @@ SLOW: list[type[Ingestor]] = [
     ArxivIngestor,
     ProductHuntUpvotesIngestor,
     FMLeaderboardsIngestor,
+    # Artificial Analysis API — canonical FM source. Writes
+    # benchmark_results for ~15 canonical benchmarks (Intelligence
+    # Index components + key individual evals) AND the two new
+    # Efficiency signals (price + speed). Slow tier because the
+    # underlying scores update at most daily on AA's side.
+    ArtificialAnalysisIngestor,
     # Wikipedia + Google Trends at slow tier — they don't move fast
     # enough to justify hourly polling, and Trends has its own
     # internal once-a-week gate.

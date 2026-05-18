@@ -20,7 +20,7 @@ AGENT_COLS = (
 )
 SCORE_COLS = (
     "cs.agent_score, cs.adoption, cs.quality, cs.momentum, cs.community, "
-    "cs.manipulation_resistance, cs.computed_at"
+    "cs.efficiency, cs.manipulation_resistance, cs.computed_at"
 )
 # 24h-old score lookup. Computed in a LATERAL subquery — for each agent
 # we grab the most recent score row strictly older than now()-24h. NULL
@@ -118,6 +118,11 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
             "quality": float(row.quality) if row.quality is not None else None,
             "momentum": float(row.momentum) if row.momentum is not None else None,
             "community": float(row.community) if row.community is not None else None,
+            "efficiency": (
+                float(row.efficiency)
+                if getattr(row, "efficiency", None) is not None
+                else None
+            ),
             "manipulation_resistance": (
                 float(row.manipulation_resistance)
                 if row.manipulation_resistance is not None
@@ -480,7 +485,7 @@ async def agent_score_history(
     rows = await session.execute(
         text(
             """
-            SELECT computed_at, agent_score, adoption, quality, momentum, community
+            SELECT computed_at, agent_score, adoption, quality, momentum, community, efficiency
             FROM scores
             WHERE agent_id = :id AND computed_at >= :since
             ORDER BY computed_at ASC
@@ -497,6 +502,7 @@ async def agent_score_history(
             "quality": float(r.quality) if r.quality is not None else None,
             "momentum": float(r.momentum) if r.momentum is not None else None,
             "community": float(r.community) if r.community is not None else None,
+            "efficiency": float(r.efficiency) if r.efficiency is not None else None,
         }
         for r in rows
     ]

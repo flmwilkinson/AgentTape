@@ -55,6 +55,11 @@ class PillarScores:
     quality: float | None
     momentum: float | None
     community: float | None
+    # Migration 0012. FM-only 5th pillar — cost + speed. Always None
+    # for applications (the pillar map's efficiency list is empty so
+    # ``_pillar_value`` returns no contributions). Stored in scores
+    # alongside the other pillars.
+    efficiency: float | None
     manipulation_resistance: float
     agent_score: float | None
     inputs: dict[str, Any] = field(default_factory=dict)
@@ -133,6 +138,16 @@ ANCHORS: dict[SignalSource, float] = {
     # Mastodon's federated public-search returns less than Bluesky's
     # global firehose for the same agent.
     SignalSource.MASTODON_MENTIONS_7D: 5,
+    # Migration 0012 — FM Efficiency signals.
+    # Blended price per million tokens. Inverse-anchored via the
+    # special case in scaled(): cheaper = higher. $5/M = score 50
+    # (mid-tier flagships like Claude Sonnet/GPT-4o land here);
+    # $0.50/M = score ~80 (commodity models); $25+/M = score ~25.
+    SignalSource.OPENROUTER_PRICE_BLENDED: 5,
+    # Output tokens per second — higher = better. Anchor at 50
+    # tok/s = score 50. A frontier model serving at ~150 tok/s
+    # lands ~75; a slow cloud model at 20 tok/s lands ~30.
+    SignalSource.OUTPUT_TOKENS_PER_SECOND: 50,
 }
 
 
@@ -155,6 +170,16 @@ def scaled(value: float, source: SignalSource) -> float:
         # Inverted: 0h ≈ 100 (instant), anchor 24h = 50, > 7d ≈ 0.
         # Same log curve, mirrored — same maths as HF trending rank.
         anchor = ANCHORS.get(source, 24.0)
+        if value <= 0:
+            return 100.0
+        return max(
+            0.0,
+            min(100.0, 100.0 - 50.0 * math.log10(value + 1) / math.log10(anchor + 1)),
+        )
+    if source == SignalSource.OPENROUTER_PRICE_BLENDED:
+        # Inverted: cheaper = higher. $0/M ≈ 100, $5/M = 50, $50/M ≈ 0.
+        # Same mirrored log curve as github_first_response_hours.
+        anchor = ANCHORS.get(source, 5.0)
         if value <= 0:
             return 100.0
         return max(
@@ -232,6 +257,12 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.HF_LIKES,
         SignalSource.DISCORD_MEMBERS,
     ],
+    # Applications don't have a meaningful Efficiency signal — they
+    # run on the user's hardware and don't carry per-token pricing
+    # like hosted FMs do. Empty list keeps the structure parallel
+    # so compute_for_agent doesn't need entity-kind branching, and
+    # apps stay Unrated on Efficiency rather than fake-zero.
+    "efficiency": [],
 }
 
 PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
@@ -298,6 +329,19 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.REDDIT_POINTS_7D,
+    ],
+    "efficiency": [
+        # FM-only fifth pillar. Captures production-fit:
+        # how cheap and how fast does this model serve at scale?
+        # Both signals sourced from the Artificial Analysis API
+        # (canonical reference for LLM economics).
+        # Price uses an inverse log anchor in scaled() — cheaper
+        # scores higher. Tokens/sec uses the standard log curve —
+        # faster scores higher. Both are independent of capability,
+        # which is why this is a separate pillar rather than
+        # rolled into Quality.
+        SignalSource.OPENROUTER_PRICE_BLENDED,
+        SignalSource.OUTPUT_TOKENS_PER_SECOND,
     ],
 }
 
@@ -578,12 +622,23 @@ async def compute_for_agent(
     community, community_in = await _pillar_value(
         session, agent_id, "community", pillar_map["community"], excluded, False
     )
+    # FM-only 5th pillar — empty list for applications returns None
+    # which is the correct Unrated state, not a fake zero.
+    efficiency, efficiency_in = await _pillar_value(
+        session,
+        agent_id,
+        "efficiency",
+        pillar_map.get("efficiency", []),
+        excluded,
+        False,
+    )
 
     pillars = PillarScores(
         adoption=adoption,
         quality=quality,
         momentum=momentum,
         community=community,
+        efficiency=efficiency,
         manipulation_resistance=resistance,
         agent_score=None,
         inputs={
@@ -592,6 +647,7 @@ async def compute_for_agent(
             "quality": quality_in,
             "momentum": momentum_in,
             "community": community_in,
+            "efficiency": efficiency_in,
             "excluded": [s.value for s in excluded],
             "manipulation_flags": list(flags or {}),
         },
@@ -614,10 +670,12 @@ def _headline(pillars: PillarScores, settings: Settings) -> float | None:
 
         Application    : 0.40 adoption + 0.20 quality
                        + 0.10 momentum + 0.30 community
-        Foundation mdl : 0.30 adoption + 0.40 quality
-                       + 0.10 momentum + 0.20 community
+        Foundation mdl : 0.25 adoption + 0.35 quality + 0.20 efficiency
+                       + 0.10 momentum + 0.10 community
 
     Both sets sum to 1.0 so headlines stay on the 0-100 scale.
+    Applications don't have an efficiency pillar (FM-only) — its
+    weight is 0 so the missing pillar contributes nothing.
 
     Returns None only when *every* pillar is null — those agents stay
     unranked and don't pollute the leaderboard with synthetic zeros.
@@ -629,6 +687,7 @@ def _headline(pillars: PillarScores, settings: Settings) -> float | None:
             "quality": settings.weight_fm_quality,
             "momentum": settings.weight_fm_momentum,
             "community": settings.weight_fm_community,
+            "efficiency": settings.weight_fm_efficiency,
         }
     else:
         weights = {
@@ -636,6 +695,9 @@ def _headline(pillars: PillarScores, settings: Settings) -> float | None:
             "quality": settings.weight_app_quality,
             "momentum": settings.weight_app_momentum,
             "community": settings.weight_app_community,
+            # Applications: efficiency weight=0 so any future signals
+            # in the bucket wouldn't accidentally shift the app score.
+            "efficiency": 0.0,
         }
     if all(getattr(pillars, k) is None for k in weights):
         return None
@@ -678,7 +740,7 @@ async def persist_score(
         await session.execute(
             text(
                 """
-                SELECT agent_score, adoption, quality, momentum, community
+                SELECT agent_score, adoption, quality, momentum, community, efficiency
                 FROM scores
                 WHERE agent_id = :aid
                 ORDER BY computed_at DESC
@@ -698,11 +760,11 @@ async def persist_score(
             """
             INSERT INTO scores (
                 id, agent_id, computed_at,
-                agent_score, adoption, quality, momentum, community,
+                agent_score, adoption, quality, momentum, community, efficiency,
                 manipulation_resistance
             ) VALUES (
                 gen_random_uuid(), :aid, now(),
-                :a, :ad, :q, :m, :c, :mr
+                :a, :ad, :q, :m, :c, :eff, :mr
             ) RETURNING id
             """
         ),
@@ -713,6 +775,7 @@ async def persist_score(
             "q": pillars.quality,
             "m": pillars.momentum,
             "c": pillars.community,
+            "eff": pillars.efficiency,
             "mr": pillars.manipulation_resistance,
         },
     )
@@ -740,6 +803,7 @@ def _scores_equal(prev, pillars: PillarScores) -> bool:
         and eq(prev.quality, pillars.quality)
         and eq(prev.momentum, pillars.momentum)
         and eq(prev.community, pillars.community)
+        and eq(prev.efficiency, pillars.efficiency)
     )
 
 

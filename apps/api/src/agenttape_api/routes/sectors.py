@@ -297,6 +297,9 @@ async def get_sectors_top(
                     "community": (
                         float(r.community) if r.community is not None else None
                     ),
+                    "efficiency": (
+                        float(r.efficiency) if r.efficiency is not None else None
+                    ),
                     "score_24h_ago": score_24h,
                     "delta_24h": delta_24h,
                 },

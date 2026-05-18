@@ -624,6 +624,43 @@ def test_fm_leaderboards_find_agent_swe_bench_harness_format():
     assert variants_check == opus_id
 
 
+# --------------------------------------------------------- artificial_analysis
+
+
+def test_aa_dig_walks_nested_dict():
+    """Verify the nested-dict accessor used to pull benchmark scores
+    out of AA's response shape."""
+    from ingestion.sources.artificial_analysis import _dig
+    data = {
+        "evaluations": {"gpqa": 94.2, "mmlu_pro": 89.8},
+        "pricing": {"price_1m_input_tokens": 5.0},
+        "median_output_tokens_per_second": 120.5,
+    }
+    assert _dig(data, "evaluations.gpqa") == 94.2
+    assert _dig(data, "evaluations.mmlu_pro") == 89.8
+    assert _dig(data, "pricing.price_1m_input_tokens") == 5.0
+    assert _dig(data, "median_output_tokens_per_second") == 120.5
+    assert _dig(data, "evaluations.missing") is None
+    assert _dig(data, "no.such.path") is None
+
+
+def test_aa_benchmark_field_map_covers_intelligence_index():
+    """The Intelligence Index components from AA v4.0 should all be in
+    the field map so they actually land in benchmark_results."""
+    from ingestion.sources.artificial_analysis import BENCHMARK_FIELD_MAP
+    # Spot-check a few that the methodology mentions explicitly.
+    assert "evaluations.gpqa" in BENCHMARK_FIELD_MAP
+    assert "evaluations.mmlu_pro" in BENCHMARK_FIELD_MAP
+    assert "evaluations.terminal_bench_hard" in BENCHMARK_FIELD_MAP
+    assert "evaluations.humanitys_last_exam" in BENCHMARK_FIELD_MAP
+    assert "evaluations.aime" in BENCHMARK_FIELD_MAP
+    # The composite itself is also a benchmark.
+    assert "evaluations.artificial_analysis_intelligence_index" in BENCHMARK_FIELD_MAP
+    # All entries map to (slug, category) tuples.
+    for aa_field, mapped in BENCHMARK_FIELD_MAP.items():
+        assert isinstance(mapped, tuple) and len(mapped) == 2
+
+
 async def test_semantic_scholar_sums_citations():
     settings = Settings()
     a = _agent(arxiv_ids=["2604.01234", "2605.99999"])

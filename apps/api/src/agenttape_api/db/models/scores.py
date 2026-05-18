@@ -38,6 +38,11 @@ class Score(Base):
     quality: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     momentum: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
     community: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
+    # Migration 0012. FM-only 5th pillar (cost + speed). Nullable
+    # because applications never have it and FMs without AA coverage
+    # legitimately don't either — same Unrated-vs-zero distinction
+    # as quality.
+    efficiency: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     manipulation_resistance: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False)
 
     __table_args__ = (

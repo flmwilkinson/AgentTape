@@ -47,10 +47,15 @@ class Settings(BaseSettings):
     weight_app_momentum: float = 0.10
     weight_app_community: float = 0.30
 
-    weight_fm_adoption: float = 0.30
-    weight_fm_quality: float = 0.40
+    # Foundation models: 5 pillars. Efficiency (cost+speed via
+    # Artificial Analysis) gets real weight because production
+    # buyers genuinely care — a slow+expensive flagship loses real
+    # ground to a fast+cheap mid-tier model. Sums to 1.0.
+    weight_fm_adoption: float = 0.25
+    weight_fm_quality: float = 0.35
     weight_fm_momentum: float = 0.10
-    weight_fm_community: float = 0.20
+    weight_fm_community: float = 0.10
+    weight_fm_efficiency: float = 0.20
 
     # Legacy single-set weights — kept as a fallback for any callers
     # that still want a single number (eg. unit tests). Prefer the
