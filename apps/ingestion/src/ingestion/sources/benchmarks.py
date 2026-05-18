@@ -91,32 +91,24 @@ class BenchmarkSite:
 
 
 SITES: list[BenchmarkSite] = [
-    # Aggregators — multi-benchmark pages. Score here is "best number
-    # visible on this aggregator", treated as a floor signal rather
-    # than a canonical per-benchmark result.
-    BenchmarkSite(
-        "galileo-agent-leaderboard",
-        "Galileo Agent Leaderboard",
-        "https://huggingface.co/spaces/galileo-ai/agent-leaderboard",
-        category="aggregator",
-    ),
-    BenchmarkSite(
-        "hal-princeton",
-        "HAL (Princeton)",
-        "https://hal.cs.princeton.edu/",
-        category="aggregator",
-    ),
-    BenchmarkSite(
-        "llm-stats-overview",
-        "LLM-Stats overview",
-        "https://llm-stats.com/",
-        category="aggregator",
-    ),
+    # Aggregator homepage entries (galileo-agent-leaderboard,
+    # hal-princeton, llm-stats-overview) were removed after Phase 2.
+    # They were extracting noise numbers — rank cells, table-of-
+    # contents counts, navigation chips — that don't represent any
+    # particular benchmark and dragged Quality averages down for
+    # well-covered models. Verified in prod: Claude Opus 4.7 had
+    # llm-stats-overview=7.22 averaged into its Quality alongside
+    # gpqa=91, ifbench=59, etc., pulling its Quality from ~85 down
+    # to 60. The AA API covers the same benchmarks per-model now,
+    # so the aggregator floor is no longer worth the noise.
+    #
     # Per-benchmark llm-stats subpages — Phase 1 of the benchmarks
     # plan. Each is server-rendered enough that BeautifulSoup picks
     # up model name + score on the same row. If llm-stats reorganises
-    # we lose these silently (per-site try/except in fetch) and the
-    # aggregator rows above stay as a fallback floor.
+    # we lose these silently (per-site try/except in fetch). The
+    # AA API ingestor provides redundant coverage for the same
+    # benchmarks now, so a layout change on llm-stats degrades but
+    # doesn't kill flagship Quality.
     #
     # Deliberate omissions: ``swe-bench-verified`` and ``mmlu-pro``
     # are already covered by FMLeaderboardsIngestor via canonical JSON
