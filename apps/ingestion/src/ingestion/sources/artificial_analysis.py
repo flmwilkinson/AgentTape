@@ -182,10 +182,21 @@ class ArtificialAnalysisIngestor(Ingestor):
                     score = float(value)
                 except (ValueError, TypeError):
                     continue
-                # AA reports indices and benchmarks on a 0-100 scale.
-                # Clamp to be safe — bad upstream values shouldn't
-                # propagate.
-                if not (0.0 <= score <= 100.0):
+                # AA inconsistently reports per-benchmark scores —
+                # composite indices (intelligence_index, coding_index)
+                # come on a 0-100 percentage scale, but individual
+                # evaluations (gpqa, mmlu_pro, math_500, terminal_bench_hard)
+                # often come as 0-1 fractions. Detect by magnitude:
+                # anything <= 1.5 is a fraction, multiply by 100. Real
+                # benchmark scores cluster 30-95 on the percentage scale,
+                # so nothing legitimate lives in (1.5, 30) on either
+                # scale — the threshold is safe.
+                # Verified in prod: pre-fix, Claude Opus 4.7 had Quality
+                # 31.5 instead of ~87 because GPQA / MMLU-Pro / SWE-bench
+                # all wrote as 0.94 / 0.89 / 0.87 unchanged.
+                if 0.0 <= score <= 1.5:
+                    score *= 100.0
+                elif not (0.0 <= score <= 100.0):
                     continue
                 if bench_slug not in bench_ids:
                     bench_ids[bench_slug] = await _ensure_benchmark(
