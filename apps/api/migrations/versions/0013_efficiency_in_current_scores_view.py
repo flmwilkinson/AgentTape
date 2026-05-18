@@ -29,6 +29,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Postgres ``CREATE OR REPLACE VIEW`` can only ADD columns to the
+    # end of the view's column list — never reorder or change types.
+    # The original 0001 view ended with ``manipulation_resistance``,
+    # so ``efficiency`` MUST come after it. First attempt of this
+    # migration put efficiency before manipulation_resistance and
+    # failed with "cannot change name of view column" — Postgres
+    # treats a reorder as a column rename.
     op.execute(
         """
         CREATE OR REPLACE VIEW current_scores AS
@@ -41,8 +48,8 @@ def upgrade() -> None:
             quality,
             momentum,
             community,
-            efficiency,
-            manipulation_resistance
+            manipulation_resistance,
+            efficiency
         FROM scores
         ORDER BY agent_id, computed_at DESC
         """
@@ -51,9 +58,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Revert to the 0001 view definition (no efficiency column).
+    # Use DROP + CREATE because shrinking the column list isn't
+    # allowed by CREATE OR REPLACE VIEW either.
+    op.execute("DROP VIEW IF EXISTS current_scores")
     op.execute(
         """
-        CREATE OR REPLACE VIEW current_scores AS
+        CREATE VIEW current_scores AS
         SELECT DISTINCT ON (agent_id)
             agent_id,
             id                         AS score_id,
