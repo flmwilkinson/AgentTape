@@ -136,7 +136,13 @@ export function CapabilityRail({ groups }: Props) {
             {g.agents.map((a, i) => (
               <li
                 key={a.id}
-                className="border-t border-border px-3 py-2.5 first:border-t-0 sm:px-4"
+                // ``overflow-hidden`` is a defensive backstop on
+                // narrow phones — every child below already truncates
+                // or shrinks, but a single malformed long token
+                // (e.g. a model name with no spaces) could still
+                // visually escape the rounded-border parent without
+                // this. Costs nothing when content fits.
+                className="overflow-hidden border-t border-border px-3 py-2.5 first:border-t-0 sm:px-4"
               >
                 {/* Two-line layout on phones (rank+name+score on top,
                     delta + external links below) so a long agent name

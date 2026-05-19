@@ -29,6 +29,13 @@ export interface MobileRankItem {
   rankDelta24h?: number | null;
   // Optional context-specific extras: e.g. weight % on the index page.
   meta?: string | null;
+  // Optional pillar chip rendered next to the headline score. Used by
+  // the Models board when the user has chosen a single-pillar sort —
+  // showing "Q 87" next to AgentScore lets the user see *why* the
+  // model is in that position even though the headline column shows
+  // composite. Format: short uppercase label + value or "Unrated".
+  pillarLabel?: string;
+  pillarValue?: number | null;
   // Right-side action toggles. Default: compare + watch.
   showCompare?: boolean;
   showWatch?: boolean;
@@ -50,19 +57,28 @@ export function MobileRankList({ items, className }: Props) {
         return (
           <li
             key={it.slug}
-            className="rounded-md border border-border bg-card p-3"
+            // ``overflow-hidden`` on the card keeps any malformed
+            // long-string content from spilling out of the rounded
+            // border at narrow widths (a defensive backstop — every
+            // child below already truncates).
+            className="overflow-hidden rounded-md border border-border bg-card p-3"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              {/* ``min-w-0`` on this flex child is what lets the
+                  truncate inside actually clip — without it the child
+                  defaults to ``min-width: auto`` (= the intrinsic
+                  width of its longest text), which pushes the trailing
+                  icon cluster off-screen on long names. */}
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {it.rank != null && (
-                    <span className="font-mono text-[11px] text-muted-foreground">
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                       #{it.rank}
                     </span>
                   )}
                   <Link
                     href={`/agents/${it.slug}`}
-                    className="truncate text-sm font-medium hover:text-primary"
+                    className="min-w-0 truncate text-sm font-medium hover:text-primary"
                   >
                     {it.name}
                   </Link>
@@ -73,12 +89,15 @@ export function MobileRankList({ items, className }: Props) {
                   </div>
                 )}
                 {it.meta && (
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {it.meta}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1.5">
+              {/* ``shrink-0`` so the trailing icon cluster never
+                  competes with the name for width. The Compare and
+                  Watch toggles render as fixed-width buttons. */}
+              <div className="flex shrink-0 items-center gap-1.5">
                 {showCompare && <CompareTrayToggle slug={it.slug} />}
                 {showWatch && <WatchToggle slug={it.slug} size="sm" />}
               </div>
@@ -87,6 +106,20 @@ export function MobileRankList({ items, className }: Props) {
               <span className="num text-base font-semibold">
                 {formatScore(it.score)}
               </span>
+              {/* Pillar chip — only rendered when the caller has
+                  chosen a single-pillar sort. Tells the user "this
+                  is the pillar value driving the current sort"
+                  alongside the composite AgentScore. */}
+              {it.pillarLabel && (
+                <span className="rounded border border-border bg-subtle/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-foreground/85">
+                  {it.pillarLabel}{" "}
+                  <span className="num text-foreground">
+                    {it.pillarValue == null
+                      ? "Unrated"
+                      : it.pillarValue.toFixed(1)}
+                  </span>
+                </span>
+              )}
               {it.delta24h != null && (
                 <MoverChip delta={it.delta24h} unit="score" variant="outline" />
               )}

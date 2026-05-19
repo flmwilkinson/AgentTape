@@ -136,6 +136,18 @@ type SortKey =
   | "momentum"
   | "efficiency";
 
+// Mobile sort pill labels. Kept short so all 5 fit on a 360px-wide
+// phone without scroll. ``rank`` and ``agent_score`` collapse to one
+// "Score" pill (clicking the active pill reverts to rank, which is
+// what most users want — "stop sorting by this pillar").
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "rank", label: "Score" },
+  { key: "adoption", label: "Adopt" },
+  { key: "quality", label: "Quality" },
+  { key: "efficiency", label: "Eff" },
+  { key: "momentum", label: "Mom" },
+];
+
 export default function ModelsPage() {
   const [family, setFamily] = useState<string>("");
   const [tier, setTier] = useState<string>("");
@@ -261,6 +273,40 @@ export default function ModelsPage() {
         </span>
       </div>
 
+      {/* Mobile-only sort pill row. Desktop has clickable column
+          headers in the table below; mobile uses MobileRankList which
+          has no headers to click, so this is the only way to sort on
+          phones. ``flex-wrap`` so the pills break onto a second row
+          rather than scroll off the side at narrow widths. */}
+      <div className="-mt-3 flex flex-wrap items-center gap-1.5 md:hidden">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Sort
+        </span>
+        {SORT_OPTIONS.map((opt) => {
+          const active =
+            opt.key === "rank"
+              ? sortBy === "rank" || sortBy === "agent_score"
+              : sortBy === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() =>
+                setSortBy(active ? "rank" : (opt.key as SortKey))
+              }
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-xs font-mono uppercase tracking-wider transition-colors",
+                active
+                  ? "border-foreground bg-subtle text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
       {isLoading ? (
         <section className="hidden overflow-x-auto rounded-md border border-border bg-card md:block">
           <table className="num w-full min-w-[640px] text-sm">
@@ -286,6 +332,20 @@ export default function ModelsPage() {
             if (isFree(m.name, m.slug)) labelBits.push("free");
             if (isReasoning(m.name, m.slug)) labelBits.push("reasoning");
             if (isMultimodal(mod)) labelBits.push("multimodal");
+            // When the user has chosen a single-pillar sort on mobile,
+            // surface that pillar's value next to the AgentScore so
+            // the ordering makes visual sense — otherwise a row whose
+            // composite is mid-pack could appear near the top with
+            // no explanation. ``rank`` and ``agent_score`` are the
+            // default composite sort and don't need a chip.
+            const pillarKey: SortKey | null =
+              sortBy === "rank" || sortBy === "agent_score" ? null : sortBy;
+            const pillarLabelByKey: Record<string, string> = {
+              adoption: "Adopt",
+              quality: "Q",
+              efficiency: "Eff",
+              momentum: "Mom",
+            };
             return {
               slug: m.slug,
               name: m.name,
@@ -294,6 +354,8 @@ export default function ModelsPage() {
               score: m.score?.agent_score ?? null,
               delta24h: m.score?.delta_24h ?? null,
               rankDelta24h: m.score?.rank_delta_24h ?? null,
+              pillarLabel: pillarKey ? pillarLabelByKey[pillarKey] : undefined,
+              pillarValue: pillarKey ? m.score?.[pillarKey] ?? null : undefined,
             };
           })}
         />

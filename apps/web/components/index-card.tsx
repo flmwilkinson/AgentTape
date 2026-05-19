@@ -73,10 +73,17 @@ export function IndexCard({ index, history, topThree, className }: IndexCardProp
           {topThree.slice(0, 3).map((c) => (
             <li
               key={c.slug}
-              className="flex items-center justify-between py-1 text-muted-foreground"
+              className="flex items-center justify-between gap-2 py-1 text-muted-foreground"
             >
-              <span className="truncate text-foreground/90">{c.name}</span>
-              <span className="num">{formatScore(c.score)}</span>
+              {/* ``min-w-0`` is required for ``truncate`` to engage
+                  inside flex — without it the span defaults to
+                  intrinsic content width and pushes the score off
+                  the card on long constituent names. ``shrink-0`` on
+                  the score so it's the truncate-resistant element. */}
+              <span className="min-w-0 truncate text-foreground/90">
+                {c.name}
+              </span>
+              <span className="num shrink-0">{formatScore(c.score)}</span>
             </li>
           ))}
         </ul>

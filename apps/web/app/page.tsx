@@ -601,7 +601,9 @@ function MoverList({
         {items.map((m) => (
           <li
             key={m.agent.slug}
-            className="flex items-center gap-3 border-t border-border px-4 py-2.5 first:border-t-0"
+            // ``overflow-hidden`` backstops the rounded-border parent
+            // so any malformed long content can't visually escape.
+            className="flex items-center gap-3 overflow-hidden border-t border-border px-4 py-2.5 first:border-t-0"
           >
             <Link
               href={`/agents/${m.agent.slug}`}
@@ -609,8 +611,15 @@ function MoverList({
             >
               {m.agent.name}
             </Link>
-            <span className="num text-sm font-semibold">{formatScore(m.score_now)}</span>
-            <MoverChip delta={m.delta} unit="score" />
+            {/* ``shrink-0`` on both trailing elements so a long name
+                clips via truncate rather than pushing the score and
+                delta chip off-screen on a 360px phone. */}
+            <span className="num shrink-0 text-sm font-semibold">
+              {formatScore(m.score_now)}
+            </span>
+            <span className="shrink-0">
+              <MoverChip delta={m.delta} unit="score" />
+            </span>
           </li>
         ))}
       </ul>
