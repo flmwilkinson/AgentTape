@@ -41,72 +41,92 @@ interface PillarStory {
   fm_signals: string[];
 }
 
+// Signal lists below are alphabetical within each pillar to keep
+// the visual scan consistent across FM and App. Source of truth for
+// the actual scoring is ``apps/scoring/compute.py:PILLAR_SOURCES_*``.
 const PILLARS: PillarStory[] = [
   {
     pillar: "Adoption",
     question: "Is anyone actually using this?",
     app_intro:
-      "Installs, registry presence, real-world distribution. The signals where a builder has actively chosen to ship this tool somewhere.",
+      "Installs, registry presence, real-world distribution. Includes the FM-style breadth signals — GitHub mentions across repos and Wikipedia views — for tools that have become household names.",
     app_signals: [
+      "Crates.io downloads (90d)",
+      "Docker pulls (30d)",
+      "GitHub mentions (7d)",
       "GitHub stars",
       "HF downloads (30d)",
-      "npm weekly",
-      "PyPI monthly",
-      "Docker pulls (30d)",
-      "Crates.io downloads (90d)",
       "MCP registry listed",
-      "Stack Overflow questions (7d)",
+      "npm weekly",
       "Product Hunt upvotes",
+      "PyPI monthly",
+      "Stack Overflow questions (7d)",
       "Tech-news mentions (30d)",
+      "Wikipedia views (30d)",
     ],
     fm_intro:
       "Production traffic and where the model's name shows up across the developer ecosystem. OpenRouter token volume is the closest public proxy for real billable usage.",
     fm_signals: [
-      "OpenRouter token volume (30d)",
-      "HF downloads (30d)",
-      "GitHub repos using model",
+      "Bluesky mentions (7d)",
       "GitHub mentions (7d)",
+      "GitHub repos using model",
       "GitHub stars",
-      "HN / Reddit / Bluesky / Mastodon mentions (7d)",
-      "Wikipedia views (30d)",
+      "HF downloads (30d)",
+      "HN mentions (7d)",
+      "Mastodon mentions (7d)",
+      "OpenRouter token volume (30d)",
+      "Reddit mentions (7d)",
       "Tech-news mentions (30d)",
+      "Wikipedia views (30d)",
     ],
   },
   {
     pillar: "Quality",
     question: "How capable is this on the work that matters?",
     app_intro:
-      "For applications, capability blends benchmark performance (when published) with maintainer responsiveness — issue close-rate and first-response hours, both of which separate active projects from abandonware.",
+      "Two parts: published benchmark performance plus maintainer responsiveness. The benchmark side is genuinely sparse for most application agents — we match where the tool appears in agentic-coding leaderboards (SWE-bench Verified harness entries like \"mini-SWE-agent + Claude Opus 4.7\" land on the harness), in the Galileo + HAL agent leaderboards, or in any benchmark we scrape that names the tool directly. Most tools have no published benchmark and rely entirely on the responsiveness signals.",
     app_signals: [
-      "Benchmark score (mean of normalised results)",
-      "GitHub issue close rate (30d)",
+      "Benchmark score (mean of normalised results from agentic-coding leaderboards)",
       "GitHub first-response hours (30d, inverted)",
+      "GitHub issue close rate (30d)",
     ],
     fm_intro:
-      "Mean percentile rank across the canonical FM benchmarks (SWE-bench, GPQA Diamond, MMLU-Pro, AIME, MMMU, Terminal-Bench Hard, HLE, lmarena, etc.). Percentile rank is coverage-robust: what matters is consistently beating peers on the benchmarks tested, not the absolute number on a longer-or-shorter list. A minimum of three benchmarks is required for a model to be rated — below that floor the model stays Unrated rather than carrying a misleading single-source score.",
+      "Mean percentile rank across the canonical FM benchmark suite (SWE-bench Verified, GPQA Diamond, MMLU-Pro, AIME, MMMU, Terminal-Bench Hard, HLE, SciCode, IFBench, lmarena, Open LLM, etc.). Percentile rank is coverage-robust: what matters is consistently beating peers on the benchmarks tested, not the absolute number on a longer-or-shorter list. A minimum of three benchmarks is required for a model to be rated — below that floor the model stays Unrated rather than carrying a misleading single-source score.",
     fm_signals: [
       "Benchmark percentile rank across the FM benchmark suite",
-      "Sources: Artificial Analysis API, lmarena-ai HF dataset, SWE-bench, TIGER-Lab MMLU-Pro, Open LLM Leaderboard",
+      "Sources: Artificial Analysis API · lmarena-ai HF dataset · Open LLM Leaderboard · SWE-bench · TIGER-Lab MMLU-Pro",
     ],
   },
   {
     pillar: "Momentum",
     question: "Is interest in this growing or fading?",
     app_intro:
-      "Rate of change on the adoption signals plus release cadence and Google Trends. Flat usage = score 50, doubling = 100, halving = 0.",
+      "Rate of change on the adoption signals plus release cadence, Google Trends, and academic mindshare via arXiv citation velocity. Flat usage = score 50, doubling = 100, halving = 0.",
     app_signals: [
-      "GitHub stars · HF downloads · npm · PyPI (7-day ROC)",
-      "HN / Reddit / Bluesky / Mastodon mentions (7-day ROC)",
+      "arXiv citations (7-day ROC)",
+      "Bluesky mentions (7-day ROC)",
       "GitHub releases (90d)",
+      "GitHub stars (7-day ROC)",
       "Google Trends",
+      "HF downloads (7-day ROC)",
+      "HN mentions (7-day ROC)",
+      "Mastodon mentions (7-day ROC)",
+      "npm weekly (7-day ROC)",
+      "PyPI monthly (7-day ROC)",
+      "Reddit mentions (7-day ROC)",
     ],
     fm_intro:
-      "Same rate-of-change treatment applied to FM-shaped signals. Includes academic mindshare via arXiv citation velocity — moved here from Quality because citation count is an interest signal, not a capability one.",
+      "Same rate-of-change treatment applied to FM-shaped signals. arXiv citation velocity lives here too (academic mindshare is an interest signal, not a capability one).",
     fm_signals: [
-      "OpenRouter tokens · HF downloads (7-day ROC)",
-      "HN / Reddit / Bluesky / Mastodon / GitHub mentions (7-day ROC)",
-      "Google Trends",
       "arXiv citations (7-day ROC)",
+      "Bluesky mentions (7-day ROC)",
+      "GitHub mentions (7-day ROC)",
+      "Google Trends",
+      "HF downloads (7-day ROC)",
+      "HN mentions (7-day ROC)",
+      "Mastodon mentions (7-day ROC)",
+      "OpenRouter tokens (7-day ROC)",
+      "Reddit mentions (7-day ROC)",
     ],
   },
   {
@@ -115,19 +135,20 @@ const PILLARS: PillarStory[] = [
     app_intro:
       "Contributors, forks, points and likes — signals of investment, not just consumption. An app with 1k contributors is structurally different from one with 1k downloads.",
     app_signals: [
+      "Bluesky mentions (7d)",
+      "Discord members",
       "GitHub contributors",
       "GitHub forks",
-      "HN points (7d)",
-      "Reddit points (7d)",
-      "Bluesky / Mastodon mentions (7d)",
       "HF likes",
-      "Discord members",
+      "HN points (7d)",
+      "Mastodon mentions (7d)",
+      "Reddit points (7d)",
     ],
     fm_intro:
       "Genuinely sparse for foundation models, especially closed-weight ones. We keep the pillar but Unrated is the honest answer for most Anthropic and OpenAI flagships — they don't have contributor lists or forks because there's nothing to fork.",
     fm_signals: [
-      "HF likes",
       "GitHub contributors (open-weight FMs only)",
+      "HF likes",
       "Reddit points (7d)",
     ],
   },
@@ -234,8 +255,10 @@ export default function MethodologyPage() {
         {/* ---------- 2. Refresh tiers ---------- */}
         <H2 id="refresh-tiers">2. Refresh tiers — how often signals update</H2>
         <p>
-          Signals refresh on three cadences. The split balances ticker
-          freshness against upstream rate limits.
+          Signals refresh on two cadences. The split balances ticker
+          freshness against upstream rate limits — anything hitting a
+          benchmark site or a slow JSON API runs once a day; everything
+          else runs hourly.
         </p>
         <div className="overflow-x-auto rounded-md border border-border bg-card">
           <table className="num w-full text-sm [&_td]:break-words [&_th]:break-words">
@@ -251,19 +274,13 @@ export default function MethodologyPage() {
                 <td className="px-3 py-2 font-medium">Fast</td>
                 <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  GitHub stars · HN mentions · HF trending rank · Bluesky
-                  mentions. Drives the ticker tape. Inserts are deduped
-                  per signal — the ticker only refreshes cells that
-                  actually changed.
-                </td>
-              </tr>
-              <tr className="border-b border-border align-top">
-                <td className="px-3 py-2 font-medium">Medium</td>
-                <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  GitHub forks / contributors / commits · HF downloads + likes ·
-                  npm + PyPI · Docker / Crates · Reddit · Mastodon · Stack
-                  Overflow · Product Hunt · MCP registry · arXiv citations.
+                  arXiv citations · Bluesky / HN / Mastodon / Reddit
+                  mentions · Crates.io downloads · Docker pulls · GitHub
+                  stars, forks, contributors, commits, mentions · HF
+                  downloads, likes, trending rank · MCP registry · npm
+                  weekly · Product Hunt · PyPI monthly · Stack Overflow
+                  questions. Drives the live ticker; inserts are
+                  deduped per signal so only changed values write.
                 </td>
               </tr>
               <tr className="align-top">
@@ -273,9 +290,10 @@ export default function MethodologyPage() {
                   Artificial Analysis API (10+ canonical FM benchmarks,
                   cost, speed) · FM leaderboards (lmarena, SWE-bench,
                   MMLU-Pro, Open LLM) · llm-stats per-benchmark pages ·
-                  GitHub releases · issue close-rate · first-response hours ·
-                  repos using model · Wikipedia · Discord · Google Trends ·
-                  Tech-news mentions (GDELT).
+                  Discord members · GitHub releases (90d) · GitHub
+                  issue close-rate · GitHub first-response hours ·
+                  GitHub repos using model · Google Trends · Tech-news
+                  mentions (GDELT) · Wikipedia views.
                 </td>
               </tr>
             </tbody>

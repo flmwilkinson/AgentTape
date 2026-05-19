@@ -211,51 +211,66 @@ def scaled_roc(now: float, then: float) -> float:
 
 PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
     "adoption": [
+        SignalSource.CRATES_DOWNLOADS_90D,
+        SignalSource.DOCKER_PULLS_30D,
+        # Cross-repo mentions — same signal that FMs use, equally
+        # informative for apps ("how often is this tool's name
+        # showing up in other codebases this week"). Added in the
+        # pillar-consistency pass alongside Wikipedia views.
+        SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.GITHUB_STARS,
         SignalSource.HF_DOWNLOADS_30D,
-        SignalSource.NPM_WEEKLY,
-        SignalSource.PYPI_MONTHLY,
         SignalSource.MCP_REGISTRY_LISTED,
-        SignalSource.STACKOVERFLOW_QUESTIONS_7D,
-        SignalSource.PRODUCTHUNT_UPVOTES,
-        SignalSource.DOCKER_PULLS_30D,
-        SignalSource.CRATES_DOWNLOADS_90D,
         # Mainstream tech-press coverage. Captures household-name
         # apps the social signals undercount (e.g. enterprise tools
         # that aren't on HN much).
         SignalSource.NEWS_MENTIONS_30D,
+        SignalSource.NPM_WEEKLY,
+        SignalSource.PRODUCTHUNT_UPVOTES,
+        SignalSource.PYPI_MONTHLY,
+        SignalSource.STACKOVERFLOW_QUESTIONS_7D,
+        # Apps with a Wikipedia page are household-name level —
+        # Cursor, Claude Code, ChatGPT, AutoGPT. Useful for the
+        # household-name signal the social channels miss.
+        SignalSource.WIKIPEDIA_VIEWS_30D,
     ],
     "quality": [
         SignalSource.BENCHMARK_SCORE,
-        SignalSource.GITHUB_ISSUE_CLOSE_RATE_30D,
         SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D,
+        SignalSource.GITHUB_ISSUE_CLOSE_RATE_30D,
     ],
     "momentum": [
-        SignalSource.GITHUB_STARS,
-        SignalSource.HF_DOWNLOADS_30D,
-        SignalSource.NPM_WEEKLY,
-        SignalSource.PYPI_MONTHLY,
-        SignalSource.HN_MENTIONS_7D,
-        SignalSource.REDDIT_MENTIONS_7D,
+        # arXiv citation velocity — research papers citing the tool
+        # over time. Useful for academic-adjacent apps (research
+        # frameworks, evaluation toolkits) that don't move much on
+        # HN/Reddit but get picked up in literature. Same Momentum
+        # placement as FMs use, kept consistent in this pass.
+        SignalSource.ARXIV_CITATIONS,
         SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.GITHUB_RELEASES_90D,
+        SignalSource.GITHUB_STARS,
+        SignalSource.GOOGLE_TRENDS_SCORE,
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.HN_MENTIONS_7D,
         # Mastodon mirrors Bluesky on the federated side — both
         # appear in adoption (level) and momentum (rate), neither in
         # community (would triple-count the same conversation).
         SignalSource.MASTODON_MENTIONS_7D,
-        SignalSource.GITHUB_RELEASES_90D,
-        SignalSource.GOOGLE_TRENDS_SCORE,
+        SignalSource.NPM_WEEKLY,
+        SignalSource.PYPI_MONTHLY,
+        SignalSource.REDDIT_MENTIONS_7D,
     ],
     "community": [
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.DISCORD_MEMBERS,
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.GITHUB_FORKS,
+        SignalSource.HF_LIKES,
         SignalSource.HN_POINTS_7D,
-        SignalSource.REDDIT_POINTS_7D,
-        SignalSource.BLUESKY_MENTIONS_7D,
         # Mastodon mirrors Bluesky's pattern — community for apps
         # captures contributor + commentator engagement together.
         SignalSource.MASTODON_MENTIONS_7D,
-        SignalSource.HF_LIKES,
-        SignalSource.DISCORD_MEMBERS,
+        SignalSource.REDDIT_POINTS_7D,
     ],
     # Applications don't have a meaningful Efficiency signal — they
     # run on the user's hardware and don't carry per-token pricing
@@ -267,28 +282,28 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
 
 PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
     "adoption": [
-        SignalSource.HF_DOWNLOADS_30D,
-        SignalSource.HN_MENTIONS_7D,
-        SignalSource.REDDIT_MENTIONS_7D,
         SignalSource.BLUESKY_MENTIONS_7D,
-        SignalSource.MASTODON_MENTIONS_7D,
-        SignalSource.GITHUB_STARS,
         SignalSource.GITHUB_MENTIONS_7D,
-        SignalSource.WIKIPEDIA_VIEWS_30D,
-        # OpenRouter token volume is the best public proxy for "actual
-        # production traffic" on FMs. Routinely diverges from
-        # benchmark and HF download rankings.
-        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
         # Number of GitHub repos calling this model. The most direct
         # public answer to "how widely is this model adopted by app
         # developers". Lives in adoption rather than community
         # because the user-facing question is "how popular is the
         # model" — community matters but ecosystem reach matters more.
         SignalSource.GITHUB_REPOS_USING_MODEL,
+        SignalSource.GITHUB_STARS,
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.HN_MENTIONS_7D,
+        SignalSource.MASTODON_MENTIONS_7D,
         # Tech-press coverage. The household-name signal the GPT/
         # Claude/Gemini flagships would otherwise undercount on
         # Hacker News alone.
         SignalSource.NEWS_MENTIONS_30D,
+        # OpenRouter token volume is the best public proxy for "actual
+        # production traffic" on FMs. Routinely diverges from
+        # benchmark and HF download rankings.
+        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
+        SignalSource.REDDIT_MENTIONS_7D,
+        SignalSource.WIKIPEDIA_VIEWS_30D,
     ],
     "quality": [
         # Quality is now BENCHMARK_SCORE only for foundation models.
@@ -305,20 +320,20 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.BENCHMARK_SCORE,
     ],
     "momentum": [
-        SignalSource.HF_DOWNLOADS_30D,
-        SignalSource.HN_MENTIONS_7D,
-        SignalSource.REDDIT_MENTIONS_7D,
-        SignalSource.BLUESKY_MENTIONS_7D,
-        SignalSource.MASTODON_MENTIONS_7D,
-        SignalSource.GITHUB_MENTIONS_7D,
-        SignalSource.GOOGLE_TRENDS_SCORE,
-        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
         # Academic mentions over time — newer papers citing this
         # model are a credible "still relevant" signal. The momentum
         # pillar treats it as a 7-day rate via scaled_roc, so a
         # model with a flat citation count doesn't get penalised
         # — only models gaining (or losing) academic mindshare move.
         SignalSource.ARXIV_CITATIONS,
+        SignalSource.BLUESKY_MENTIONS_7D,
+        SignalSource.GITHUB_MENTIONS_7D,
+        SignalSource.GOOGLE_TRENDS_SCORE,
+        SignalSource.HF_DOWNLOADS_30D,
+        SignalSource.HN_MENTIONS_7D,
+        SignalSource.MASTODON_MENTIONS_7D,
+        SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
+        SignalSource.REDDIT_MENTIONS_7D,
     ],
     "community": [
         # Note: BLUESKY_MENTIONS_7D, MASTODON_MENTIONS_7D and
@@ -326,8 +341,8 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         # signals already feed Adoption + Momentum, repos-using-
         # model feeds Adoption. Each signal lives in exactly one
         # pillar to keep the mean-of-scaled-signals math clean.
-        SignalSource.HF_LIKES,
         SignalSource.GITHUB_CONTRIBUTORS,
+        SignalSource.HF_LIKES,
         SignalSource.REDDIT_POINTS_7D,
     ],
     "efficiency": [
