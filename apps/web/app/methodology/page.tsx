@@ -5,16 +5,13 @@ import Link from "next/link";
 export const metadata = {
   title: "Methodology",
   description:
-    "How AgentTape discovers, scores, and indexes AI agents and foundation models — the formula, the pillar weights, the signal anchors, and the manipulation rules.",
+    "How AgentTape discovers, scores, and indexes AI agents and foundation models — the pillars, the weights, the formulas.",
 };
 
 // Resolve the methodology page's last commit timestamp at build time.
 // `git log -1 --format=%cI` gives an ISO-8601 string. We try git
 // because file mtime on Vercel is the build time, not the meaningful
-// "when was this rule last changed" answer. Falls back gracefully:
-// outside a git repo, in a sandboxed CI without .git, or when the
-// path query fails, we render a generic "current" line instead of
-// crashing the page.
+// "when was this rule last changed" answer.
 function lastRevisedISO(): string | null {
   try {
     const here = path.dirname(__filename);
@@ -31,90 +28,26 @@ function lastRevisedISO(): string | null {
 
 const LAST_REVISED = lastRevisedISO();
 
-// ----------------------------------------------------------- data tables
-//
-// These constants drive the on-page tables. Keeping them at module
-// scope makes the JSX below readable and gives one place to edit when
-// the underlying scoring rules change. Anchors must stay in lock-step
-// with apps/scoring/src/scoring/compute.py:ANCHORS, and pillar source
-// lists with PILLAR_SOURCES_APPLICATION / PILLAR_SOURCES_FOUNDATION_MODEL
-// in the same file.
-
-interface AnchorRow {
-  signal: string;
-  anchor: string;
-  notes?: string;
-}
-
-const ANCHOR_ROWS: AnchorRow[] = [
-  // Adoption-shaped signals.
-  { signal: "GitHub stars", anchor: "1,000" },
-  { signal: "GitHub forks", anchor: "200" },
-  { signal: "GitHub contributors", anchor: "30" },
-  { signal: "GitHub commits (7d)", anchor: "50" },
-  { signal: "GitHub mentions (7d)", anchor: "20" },
-  { signal: "GitHub releases (90d)", anchor: "6", notes: "≈ one every 2 weeks" },
-  { signal: "GitHub issue close rate (30d)", anchor: "100", notes: "1:1 close-to-open ratio" },
-  {
-    signal: "GitHub first-response hours (30d)",
-    anchor: "24",
-    notes: "inverted — lower is better; 24h ≈ 50",
-  },
-  { signal: "GitHub repos using model", anchor: "100", notes: "FM only — cumulative count" },
-  { signal: "HF downloads (30d)", anchor: "100,000" },
-  { signal: "HF likes", anchor: "200" },
-  {
-    signal: "HF trending rank",
-    anchor: "rank 10",
-    notes: "inverted — rank 1 ≈ 85, rank 10 = 50, rank 100 ≈ 0",
-  },
-  { signal: "npm weekly installs", anchor: "1,000" },
-  { signal: "PyPI monthly installs", anchor: "10,000" },
-  { signal: "Docker pulls (30d)", anchor: "100,000" },
-  { signal: "Crates.io downloads (90d)", anchor: "10,000" },
-  { signal: "OpenRouter token volume (30d)", anchor: "1,000,000,000", notes: "FM production traffic proxy" },
-  // Conversation / interest signals.
-  { signal: "HN mentions (7d)", anchor: "10" },
-  { signal: "HN points (7d)", anchor: "100" },
-  { signal: "Reddit mentions (7d)", anchor: "10" },
-  { signal: "Reddit points (7d)", anchor: "100" },
-  { signal: "Bluesky mentions (7d)", anchor: "10" },
-  {
-    signal: "Mastodon mentions (7d)",
-    anchor: "5",
-    notes: "federated; sums unique status URLs across mastodon.social, infosec.exchange, hachyderm.io, sigmoid.social, fosstodon.org",
-  },
-  { signal: "Stack Overflow questions (7d)", anchor: "5" },
-  { signal: "Product Hunt upvotes", anchor: "100" },
-  {
-    signal: "Tech-news mentions (30d)",
-    anchor: "30",
-    notes: "GDELT primary (~150k outlets); curated RSS scan as fallback",
-  },
-  { signal: "Wikipedia views (30d)", anchor: "100,000" },
-  { signal: "Discord members", anchor: "5,000" },
-  { signal: "Google Trends score", anchor: "30", notes: "input is already 0-100; anchor is the value-where-score-is-50" },
-  // Quality-shaped signals.
-  { signal: "Benchmark score", anchor: "no transform", notes: "already on 0-100; clipped to that range" },
-  { signal: "arXiv citations", anchor: "100", notes: "FM only" },
-  // Special-case binary.
-  {
-    signal: "MCP registry listed",
-    anchor: "binary",
-    notes: "0 → 0, 1 → 75 (a hand-picked credibility bonus, not log-scaled)",
-  },
-];
-
-interface PillarSource {
+// Per-pillar story content. Co-located here so the rendered prose
+// stays in lock-step with the source lists. Each entry says what
+// question the pillar answers, then names the signals that feed it
+// for each entity kind.
+interface PillarStory {
   pillar: string;
-  application: string[];
-  foundation_model: string[];
+  question: string;
+  app_intro: string;
+  app_signals: string[];
+  fm_intro: string;
+  fm_signals: string[];
 }
 
-const PILLAR_SOURCES: PillarSource[] = [
+const PILLARS: PillarStory[] = [
   {
     pillar: "Adoption",
-    application: [
+    question: "Is anyone actually using this?",
+    app_intro:
+      "Installs, registry presence, real-world distribution. The signals where a builder has actively chosen to ship this tool somewhere.",
+    app_signals: [
       "GitHub stars",
       "HF downloads (30d)",
       "npm weekly",
@@ -126,69 +59,93 @@ const PILLAR_SOURCES: PillarSource[] = [
       "Product Hunt upvotes",
       "Tech-news mentions (30d)",
     ],
-    foundation_model: [
-      "HF downloads (30d)",
-      "GitHub stars",
-      "GitHub mentions (7d)",
-      "GitHub repos using model",
+    fm_intro:
+      "Production traffic and where the model's name shows up across the developer ecosystem. OpenRouter token volume is the closest public proxy for real billable usage.",
+    fm_signals: [
       "OpenRouter token volume (30d)",
-      "HN mentions (7d)",
-      "Reddit mentions (7d)",
-      "Bluesky mentions (7d)",
-      "Mastodon mentions (7d)",
+      "HF downloads (30d)",
+      "GitHub repos using model",
+      "GitHub mentions (7d)",
+      "GitHub stars",
+      "HN / Reddit / Bluesky / Mastodon mentions (7d)",
       "Wikipedia views (30d)",
       "Tech-news mentions (30d)",
     ],
   },
   {
     pillar: "Quality",
-    application: [
-      "Benchmark score",
+    question: "How capable is this on the work that matters?",
+    app_intro:
+      "For applications, capability blends benchmark performance (when published) with maintainer responsiveness — issue close-rate and first-response hours, both of which separate active projects from abandonware.",
+    app_signals: [
+      "Benchmark score (mean of normalised results)",
       "GitHub issue close rate (30d)",
-      "GitHub first-response hours (30d)",
+      "GitHub first-response hours (30d, inverted)",
     ],
-    foundation_model: ["Benchmark score", "arXiv citations"],
+    fm_intro:
+      "Mean percentile rank across the canonical FM benchmarks (SWE-bench, GPQA Diamond, MMLU-Pro, AIME, MMMU, Terminal-Bench Hard, HLE, lmarena, etc.). Percentile rank is coverage-robust: what matters is consistently beating peers on the benchmarks tested, not the absolute number on a longer-or-shorter list. A minimum of three benchmarks is required for a model to be rated — below that floor the model stays Unrated rather than carrying a misleading single-source score.",
+    fm_signals: [
+      "Benchmark percentile rank across the FM benchmark suite",
+      "Sources: Artificial Analysis API, lmarena-ai HF dataset, SWE-bench, TIGER-Lab MMLU-Pro, Open LLM Leaderboard",
+    ],
   },
   {
     pillar: "Momentum",
-    application: [
-      "GitHub stars (7d ROC)",
-      "HF downloads (7d ROC)",
-      "npm weekly (7d ROC)",
-      "PyPI monthly (7d ROC)",
+    question: "Is interest in this growing or fading?",
+    app_intro:
+      "Rate of change on the adoption signals plus release cadence and Google Trends. Flat usage = score 50, doubling = 100, halving = 0.",
+    app_signals: [
+      "GitHub stars · HF downloads · npm · PyPI (7-day ROC)",
+      "HN / Reddit / Bluesky / Mastodon mentions (7-day ROC)",
       "GitHub releases (90d)",
-      "HN mentions (7d ROC)",
-      "Reddit mentions (7d ROC)",
-      "Bluesky mentions (7d ROC)",
-      "Mastodon mentions (7d ROC)",
       "Google Trends",
     ],
-    foundation_model: [
-      "HF downloads (7d ROC)",
-      "GitHub mentions (7d ROC)",
-      "OpenRouter tokens (7d ROC)",
-      "HN mentions (7d ROC)",
-      "Reddit mentions (7d ROC)",
-      "Bluesky mentions (7d ROC)",
-      "Mastodon mentions (7d ROC)",
+    fm_intro:
+      "Same rate-of-change treatment applied to FM-shaped signals. Includes academic mindshare via arXiv citation velocity — moved here from Quality because citation count is an interest signal, not a capability one.",
+    fm_signals: [
+      "OpenRouter tokens · HF downloads (7-day ROC)",
+      "HN / Reddit / Bluesky / Mastodon / GitHub mentions (7-day ROC)",
       "Google Trends",
+      "arXiv citations (7-day ROC)",
     ],
   },
   {
     pillar: "Community",
-    application: [
+    question: "Who's engaging beyond just using it?",
+    app_intro:
+      "Contributors, forks, points and likes — signals of investment, not just consumption. An app with 1k contributors is structurally different from one with 1k downloads.",
+    app_signals: [
       "GitHub contributors",
       "GitHub forks",
       "HN points (7d)",
       "Reddit points (7d)",
-      "Bluesky mentions (7d)",
-      "Mastodon mentions (7d)",
+      "Bluesky / Mastodon mentions (7d)",
       "HF likes",
       "Discord members",
     ],
-    foundation_model: ["HF likes", "GitHub contributors", "Reddit points (7d)"],
+    fm_intro:
+      "Genuinely sparse for foundation models, especially closed-weight ones. We keep the pillar but Unrated is the honest answer for most Anthropic and OpenAI flagships — they don't have contributor lists or forks because there's nothing to fork.",
+    fm_signals: [
+      "HF likes",
+      "GitHub contributors (open-weight FMs only)",
+      "Reddit points (7d)",
+    ],
+  },
+  {
+    pillar: "Efficiency",
+    question: "How practical is this to ship in production?",
+    app_intro:
+      "Not used for applications — apps run on the user's hardware and their cost/speed depends on the model they're configured with, not the tool itself.",
+    app_signals: ["— (Application entity kind has no Efficiency pillar)"],
+    fm_intro:
+      "Cost and speed via the Artificial Analysis API. Blended $/M tokens (input + output, inverse-anchored so cheaper scores higher) and median output tokens/sec. Lets a buyer see that, say, Claude Opus 4.7 and GPT-5.1 are at similar capability but very different price points.",
+    fm_signals: [
+      "Blended price (input + output $/M tokens, lower is better)",
+      "Median output tokens/sec",
+    ],
   },
 ];
+
 
 export default function MethodologyPage() {
   return (
@@ -201,8 +158,8 @@ export default function MethodologyPage() {
       </h1>
       <p className="editorial mt-6 text-xl leading-relaxed text-muted-foreground md:text-2xl">
         The index is autonomously populated by software that watches the
-        AI-agent ecosystem and admits things on the day they start to
-        matter. No curated seed list. Every input published.
+        AI ecosystem and admits things on the day they start to matter.
+        No curated seed list. Every input published.
       </p>
       <p className="mt-4 text-sm text-muted-foreground">
         Every change to scoring, weights, or index rules ships as a commit —
@@ -216,9 +173,6 @@ export default function MethodologyPage() {
         .
       </p>
 
-      {/* Table of contents — purely an at-a-glance anchor map for a
-          long page. Numbers match the H2s below so a reader can
-          scan and click. */}
       <nav
         aria-label="Methodology contents"
         className="mt-10 rounded-md border border-border bg-card p-4"
@@ -230,16 +184,13 @@ export default function MethodologyPage() {
           {[
             ["1", "Discovery", "discovery"],
             ["2", "Refresh tiers", "refresh-tiers"],
-            ["3", "AgentScore — quick version", "score-quick"],
-            ["4", "Scoring math — full version", "score-math"],
-            ["5", "Anchor table", "anchors"],
-            ["6", "Pillar sources, by kind", "pillar-sources"],
-            ["7", "Worked examples", "worked-examples"],
-            ["8", "Why some agents are Unrated", "unrated"],
-            ["9", "Tags — capability, deployment, model_dep", "tags"],
-            ["10", "Manipulation resistance", "manipulation"],
-            ["11", "Indexes", "indexes"],
-            ["12", "Show your work", "show-your-work"],
+            ["3", "The AgentScore", "score"],
+            ["4", "The pillars", "pillars"],
+            ["5", "Scoring formulas", "formulas"],
+            ["6", "Why some agents are Unrated", "unrated"],
+            ["7", "Manipulation resistance", "manipulation"],
+            ["8", "Indexes", "indexes"],
+            ["9", "Show your work", "show-your-work"],
           ].map(([num, label, anchor]) => (
             <li key={anchor} className="font-mono text-foreground/80">
               <a href={`#${anchor}`} className="hover:text-primary">
@@ -255,74 +206,36 @@ export default function MethodologyPage() {
         {/* ---------- 1. Discovery ---------- */}
         <H2 id="discovery">1. Discovery — how agents enter the index</H2>
         <p>
-          Nothing on AgentTape was added by hand. The discovery service
+          Nothing on AgentTape was added by hand. A discovery service
           sweeps a fixed list of public sources on its own schedule and
-          opens a candidate row for anything that matches an
-          AI-agent-shaped pattern. A second pass — the promoter —
-          scores each candidate and either admits it, rejects it, or
-          leaves it pending for weekly review.
-        </p>
-        <H3>Sources we sweep</H3>
-        <ul className="list-disc pl-6">
-          <li>
-            <strong>GitHub search</strong> for repos matching agent-frame
-            patterns (agent / autogen / langchain / llamaindex / mcp).
-          </li>
-          <li>
-            <strong>Hugging Face trending</strong> models and orgs.
-          </li>
-          <li>
-            <strong>OpenRouter</strong> models catalogue — every
-            published foundation model. Routing aliases (`:nitro`,
-            `:fast`, `:online`, `:beta`, `:extended`) are skipped on
-            sight; they are speed-routing variants of a canonical model,
-            not separate models. `:free` is preserved (it's a real
-            distinct billing tier).
-          </li>
-          <li>
-            <strong>MCP registries</strong> — the official MCP server
-            directory plus a few community lists.
-          </li>
-          <li>
-            <strong>npm and PyPI</strong> for packages whose names or
-            keywords match agent vocabulary.
-          </li>
-          <li>
-            <strong>arXiv</strong> for papers introducing named agents.
-          </li>
-          <li>
-            <strong>Hacker News firehose</strong> for Show-HN posts that
-            link to agent-shaped repos.
-          </li>
-        </ul>
-        <H3>Promotion</H3>
-        <p>
-          Each candidate gets an admission score on five core axes:
-          LLM dependency, agent-vocabulary match, popularity floor,
-          maintenance, and packaged distribution. Four small substance
-          bonuses sit on top (each ≤ 0.05, capped so they can't admit
-          junk on their own but tip borderline cases): three or more
-          declared topics / tags / keywords, description ≥ 80
-          characters, presence in more than one packaging ecosystem,
-          and commit activity in the last 14 days. Archived or disabled
-          GitHub repos are hard-rejected before scoring — those are a
-          known source of low-signal admissions.
+          opens a candidate row for anything matching an AI-agent or
+          foundation-model pattern. A second pass scores each candidate
+          and either admits it, rejects it, or leaves it pending for
+          weekly review.
         </p>
         <p>
-          Candidates clearing the auto-admit threshold are admitted
-          and flow into the scoring pipeline. Below the auto-reject
-          threshold are dropped. Anything in between waits for weekly
-          review. Discovered-but-unadmitted candidates appear as
-          audit-only rows; admitted agents are what the rest of the
-          site shows.
+          <strong>Sources swept:</strong> GitHub search (repos matching
+          agent-frame patterns), Hugging Face trending, OpenRouter
+          models catalogue (every published foundation model), MCP
+          registries, npm and PyPI, arXiv, and the Hacker News
+          firehose. Each source ingests on its own cadence — none of
+          them gate on the others.
+        </p>
+        <p>
+          Promotion scores each candidate on five axes: LLM dependency,
+          agent-vocabulary match, popularity floor, maintenance, and
+          packaged distribution. Four small substance bonuses (each
+          capped at 0.05) tip borderline cases — declared topics,
+          description length, multi-ecosystem packaging, recent commit
+          activity. Archived or disabled GitHub repos are
+          hard-rejected.
         </p>
 
         {/* ---------- 2. Refresh tiers ---------- */}
         <H2 id="refresh-tiers">2. Refresh tiers — how often signals update</H2>
         <p>
-          Once an agent is admitted, signals refresh on three cadences.
-          The split is a balance between freshness for the live ticker
-          and respect for upstream rate limits.
+          Signals refresh on three cadences. The split balances ticker
+          freshness against upstream rate limits.
         </p>
         <div className="overflow-x-auto rounded-md border border-border bg-card">
           <table className="num w-full text-sm [&_td]:break-words [&_th]:break-words">
@@ -338,14 +251,9 @@ export default function MethodologyPage() {
                 <td className="px-3 py-2 font-medium">Fast</td>
                 <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  GitHub stars · HN mentions (7d) · HF trending rank ·
-                  Bluesky mentions (7d). Drives the ticker tape.
-                  Originally polled every 5 min; the floor was raised
-                  to 1 hour after a storage-cost review showed each
-                  5-min tick was inserting near-identical rows.
-                  Inserts are now also deduped per signal (skipped
-                  when the new value equals the most recent prior),
-                  so the ticker only refreshes the cells that
+                  GitHub stars · HN mentions · HF trending rank · Bluesky
+                  mentions. Drives the ticker tape. Inserts are deduped
+                  per signal — the ticker only refreshes cells that
                   actually changed.
                 </td>
               </tr>
@@ -353,292 +261,109 @@ export default function MethodologyPage() {
                 <td className="px-3 py-2 font-medium">Medium</td>
                 <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  GitHub forks / contributors / 7-day commits · HF
-                  downloads + likes · npm + PyPI counts · Docker /
-                  Crates downloads · Reddit mentions + points ·
-                  Mastodon mentions (federated) · Stack Overflow
-                  questions · Product Hunt upvotes · MCP registry
-                  presence · arXiv citations.
+                  GitHub forks / contributors / commits · HF downloads + likes ·
+                  npm + PyPI · Docker / Crates · Reddit · Mastodon · Stack
+                  Overflow · Product Hunt · MCP registry · arXiv citations.
                 </td>
               </tr>
               <tr className="align-top">
                 <td className="px-3 py-2 font-medium">Slow</td>
                 <td className="px-3 py-2 text-muted-foreground">daily</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  Benchmark scores (Galileo, HAL, LLM-Stats) · FM
-                  leaderboards · GitHub releases (90d) · GitHub issue
-                  close-rate / first-response hours · GitHub repos
-                  using model (FM only) · Wikipedia views · Discord
-                  members · Google Trends · OpenRouter token volume ·
-                  Tech-news mentions (GDELT, ~150k outlets).
+                  Artificial Analysis API (10+ canonical FM benchmarks,
+                  cost, speed) · FM leaderboards (lmarena, SWE-bench,
+                  MMLU-Pro, Open LLM) · llm-stats per-benchmark pages ·
+                  GitHub releases · issue close-rate · first-response hours ·
+                  repos using model · Wikipedia · Discord · Google Trends ·
+                  Tech-news mentions (GDELT).
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* ---------- 3. AgentScore — quick version ---------- */}
-        <H2 id="score-quick">3. The AgentScore — quick version</H2>
+        {/* ---------- 3. The AgentScore ---------- */}
+        <H2 id="score">3. The AgentScore</H2>
         <p>
-          Every agent has a single 0-100 headline backed by four
-          pillars. Each pillar is independently computed; the headline
-          is a flat weighted sum of the four. Weights differ by entity
-          kind because the question "what makes a coding tool good" is
-          not the same question as "what makes a foundation model good".
+          One number, 0-100, computed as a weighted sum of pillar
+          scores. Applications have four pillars; foundation models
+          have five (Efficiency adds cost + speed, which doesn't apply
+          to apps that run on user hardware).
+        </p>
+        <p>
+          Weights differ by entity kind because the question "what
+          makes a coding tool good" is not the question "what makes a
+          foundation model good". A 70 for an app and a 70 for an FM
+          are not directly comparable — use the per-kind boards (
+          <Link href="/models" className="text-primary hover:underline">Models</Link>,{" "}
+          <Link href="/sectors" className="text-primary hover:underline">Sectors</Link>)
+          when you want a fair comparison.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-md border border-border bg-card p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Application weights
+              Application — 4 pillars
             </div>
             <ul className="mt-2 space-y-0.5 text-sm">
-              <li>
-                <span className="font-mono num">0.40</span>{" "}
-                <strong>Adoption</strong>{" "}
-                <span className="text-muted-foreground">
-                  — install counts, registry presence
-                </span>
-              </li>
-              <li>
-                <span className="font-mono num">0.20</span>{" "}
-                <strong>Quality</strong>{" "}
-                <span className="text-muted-foreground">
-                  — benchmarks, issue health
-                </span>
-              </li>
-              <li>
-                <span className="font-mono num">0.10</span>{" "}
-                <strong>Momentum</strong>{" "}
-                <span className="text-muted-foreground">— 7-day growth</span>
-              </li>
-              <li>
-                <span className="font-mono num">0.30</span>{" "}
-                <strong>Community</strong>{" "}
-                <span className="text-muted-foreground">
-                  — contributors, forks, points
-                </span>
-              </li>
+              <li><span className="font-mono num">0.40</span> <strong>Adoption</strong></li>
+              <li><span className="font-mono num">0.20</span> <strong>Quality</strong></li>
+              <li><span className="font-mono num">0.10</span> <strong>Momentum</strong></li>
+              <li><span className="font-mono num">0.30</span> <strong>Community</strong></li>
             </ul>
           </div>
           <div className="rounded-md border border-border bg-card p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Foundation model weights
+              Foundation model — 5 pillars
             </div>
             <ul className="mt-2 space-y-0.5 text-sm">
-              <li>
-                <span className="font-mono num">0.30</span>{" "}
-                <strong>Adoption</strong>{" "}
-                <span className="text-muted-foreground">
-                  — repos using it, traffic
-                </span>
-              </li>
-              <li>
-                <span className="font-mono num">0.40</span>{" "}
-                <strong>Quality</strong>{" "}
-                <span className="text-muted-foreground">
-                  — benchmarks, citations
-                </span>
-              </li>
-              <li>
-                <span className="font-mono num">0.10</span>{" "}
-                <strong>Momentum</strong>{" "}
-                <span className="text-muted-foreground">— 7-day growth</span>
-              </li>
-              <li>
-                <span className="font-mono num">0.20</span>{" "}
-                <strong>Community</strong>{" "}
-                <span className="text-muted-foreground">
-                  — contributors, points, likes
-                </span>
-              </li>
+              <li><span className="font-mono num">0.25</span> <strong>Adoption</strong></li>
+              <li><span className="font-mono num">0.35</span> <strong>Quality</strong></li>
+              <li><span className="font-mono num">0.20</span> <strong>Efficiency</strong></li>
+              <li><span className="font-mono num">0.10</span> <strong>Momentum</strong></li>
+              <li><span className="font-mono num">0.10</span> <strong>Community</strong></li>
             </ul>
           </div>
         </div>
         <p>
-          A pillar with no signals contributes <strong>zero</strong> to
-          the headline (no redistribution, no re-normalisation). That
-          is the only mechanism by which "more data wins" — there is
-          no separate coverage multiplier on top.
-        </p>
-        <p className="rounded-md border border-border bg-subtle/40 p-4 text-sm">
-          <strong>Cap-by-coverage corollary.</strong> Because each
-          pillar can only buy you up to its own weight, an Adoption-only
-          application caps at 40 (0.40 × 100), an Adoption + Community
-          application at 70, a 3-pillar application at 80, and only a
-          fully-rated 4-pillar agent can reach 100. Less data is
-          mathematically a lower ceiling.
-        </p>
-        <p>
-          Because weights differ by entity kind, two scores are{" "}
-          <em>not</em> directly comparable across kinds. A 70 for an
-          application means something different than a 70 for a
-          foundation model. Use the per-kind boards (the{" "}
-          <Link href="/models" className="text-primary hover:underline">
-            Models
-          </Link>{" "}
-          page, the{" "}
-          <Link href="/sectors" className="text-primary hover:underline">
-            Sectors
-          </Link>{" "}
-          tabs) when you want a fair comparison.
+          A pillar with no signals contributes zero to the headline (no
+          redistribution, no re-normalisation). Less data is a lower
+          ceiling, not a re-weighted average — a 3-pillar FM caps at
+          80, a 4-pillar one at 90, only a fully-rated model can reach
+          100. That keeps coverage honest. Models board lets you
+          click any column header to re-sort by that single pillar.
         </p>
 
-        {/* ---------- 4. Scoring math — full version ---------- */}
-        <H2 id="score-math">4. Scoring math — full version</H2>
-
-        <H3>4.1 How a raw signal becomes a 0-100 score</H3>
+        {/* ---------- 4. The pillars ---------- */}
+        <H2 id="pillars">4. The pillars</H2>
         <p>
-          For a count-shaped signal with raw value <em>v</em> and an
-          absolute anchor (the value at which the signal scores
-          exactly 50):
+          What each pillar answers, and the signals that drive it for
+          each entity kind. Signal lists below are the source of truth
+          — they're co-located with the source code in{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
+            apps/scoring/compute.py
+          </code>{" "}
+          and the page renders straight from that list.
         </p>
-        <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
-{`scaled(v, anchor) = min(100, 50 × log₁₀(v + 1) / log₁₀(anchor + 1))`}
-        </pre>
-        <p>
-          A log curve so a project with 1,000 stars scores 50 and a
-          project with 100,000 stars doesn't get 100× the credit. The
-          ceiling at 100 prevents any single signal from dominating.
-        </p>
-        <H3>4.2 Special cases</H3>
-        <ul className="list-disc pl-6">
-          <li>
-            <strong>Benchmark score</strong> — already on a 0-100
-            scale. Pass through, clipped to range.
-          </li>
-          <li>
-            <strong>MCP registry listed</strong> — binary signal: not
-            listed → 0, listed → 75. The 75 is a credibility bonus, not
-            a log curve.
-          </li>
-          <li>
-            <strong>HF trending rank</strong> — inverted: rank 1 ≈ 85,
-            rank 10 = 50, rank 100 ≈ 0.
-          </li>
-          <li>
-            <strong>GitHub first-response hours (30d)</strong> —
-            inverted: 0 hours ≈ 100 (instant), 24h = 50, &gt; 7 days ≈ 0.
-          </li>
-          <li>
-            <strong>Momentum signals</strong> — use{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-sm">scaled_roc</code>{" "}
-            (see 4.4) instead of the standard log-anchor.
-          </li>
-        </ul>
-
-        <H3>4.3 Pillar = mean of available scaled signals</H3>
-        <p>
-          For each pillar, take the scaled value of every signal in
-          the pillar's source list that has a reading on file. The
-          pillar score is the arithmetic mean of those values. If no
-          source in the pillar has a reading, the pillar is{" "}
-          <em>Unrated</em> — at the pillar level it's null, and at
-          the headline-math level it contributes 0.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          The two statements ("Unrated" and "contributes 0") look like
-          a contradiction but they describe different layers. The
-          pillar's own card on an agent page reads <em>Unrated</em>{" "}
-          (because there is genuinely no signal). The same pillar's
-          contribution to the headline is computed as 0 (because the
-          headline is a sum, and you can't add an unknown to a sum).
-        </p>
-
-        <H3>4.4 Momentum specifics</H3>
-        <p>
-          For each momentum source where a current reading and a
-          7-day-old reading both exist:
-        </p>
-        <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
-{`roc_7d     = (now − then) / max(then, 1)
-scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
-        </pre>
-        <p>
-          0% growth → 50, +100% → 100, −50% → 0. If a signal first
-          arrived inside the 7-day window (no "then" reading),
-          scaled_roc = 60 — a small positive bias for "newly visible"
-          rather than the punitive 0 a missing-then would otherwise
-          imply.
-        </p>
-
-        <H3>4.5 Headline = weighted sum of non-null pillars</H3>
-        <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
-{`Application:      AgentScore = 0.40·adoption + 0.20·quality
-                              + 0.10·momentum + 0.30·community
-Foundation model: AgentScore = 0.30·adoption + 0.40·quality
-                              + 0.10·momentum + 0.20·community
-
-(missing pillar contributes 0)`}
-        </pre>
-        <p>
-          Both weight sets sum to 1.0 so headlines stay on the 0-100
-          scale. If every pillar is Unrated, the agent is Unrated
-          overall — its page shows the metadata sidebar but no
-          composite, and it doesn't appear in score-ranked lists.
-        </p>
-
-        {/* ---------- 5. Anchors ---------- */}
-        <H2 id="anchors">5. Anchor table</H2>
-        <p>
-          Each anchor is the raw value at which the signal scores 50.
-          Numbers chosen so the median agent in each population lands
-          near 50 on each axis.
-        </p>
-        <div className="overflow-x-auto rounded-md border border-border bg-card">
-          <table className="num w-full text-sm [&_td]:break-words [&_th]:break-words">
-            <thead>
-              <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-3 py-2 text-left font-medium">Signal</th>
-                <th className="px-3 py-2 text-right font-medium">
-                  Anchor (= 50)
-                </th>
-                <th className="px-3 py-2 text-left font-medium">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ANCHOR_ROWS.map((r) => (
-                <tr
-                  key={r.signal}
-                  className="border-b border-border last:border-b-0 align-top"
-                >
-                  <td className="px-3 py-2">{r.signal}</td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {r.anchor}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {r.notes ?? ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* ---------- 6. Pillar source lists ---------- */}
-        <H2 id="pillar-sources">6. Pillar sources, by kind</H2>
-        <p>
-          Same formula in section 4 applies to both kinds. The source
-          list per pillar differs because the signals that matter for
-          an LLM and the signals that matter for an application agent
-          are not the same — and they shouldn't be forced into the
-          same column.
-        </p>
-        {PILLAR_SOURCES.map((p) => (
+        {PILLARS.map((p) => (
           <div
             key={p.pillar}
-            className="rounded-md border border-border bg-card p-4"
+            className="rounded-md border border-border bg-card p-5"
           >
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
               {p.pillar}
             </div>
-            <div className="mt-2 grid gap-3 text-sm md:grid-cols-2">
+            <p className="mt-1 editorial text-lg font-medium text-foreground">
+              {p.question}
+            </p>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
               <div>
                 <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
                   Application
                 </div>
-                <ul className="space-y-0.5 text-foreground/85">
-                  {p.application.map((src) => (
-                    <li key={src} className="font-mono text-xs">
+                <p className="text-sm text-muted-foreground">{p.app_intro}</p>
+                <ul className="mt-2 space-y-0.5 text-xs text-foreground/85">
+                  {p.app_signals.map((src) => (
+                    <li key={src} className="font-mono">
                       {src}
                     </li>
                   ))}
@@ -648,9 +373,10 @@ Foundation model: AgentScore = 0.30·adoption + 0.40·quality
                 <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
                   Foundation model
                 </div>
-                <ul className="space-y-0.5 text-foreground/85">
-                  {p.foundation_model.map((src) => (
-                    <li key={src} className="font-mono text-xs">
+                <p className="text-sm text-muted-foreground">{p.fm_intro}</p>
+                <ul className="mt-2 space-y-0.5 text-xs text-foreground/85">
+                  {p.fm_signals.map((src) => (
+                    <li key={src} className="font-mono">
                       {src}
                     </li>
                   ))}
@@ -660,141 +386,95 @@ Foundation model: AgentScore = 0.30·adoption + 0.40·quality
           </div>
         ))}
 
-        {/* ---------- 7. Worked examples ---------- */}
-        <H2 id="worked-examples">7. Worked examples</H2>
-
-        <H3>7.1 Foundation model — Claude Opus 4.7</H3>
+        {/* ---------- 5. Scoring formulas ---------- */}
+        <H2 id="formulas">5. Scoring formulas</H2>
         <p>
-          Suppose recent signals: HN 47 mentions (7d), Bluesky 18,
-          Reddit 12, GitHub repos using model 420, benchmark Open LLM
-          Average 87.6, 240 Reddit points (7d), no HF mirror, no news
-          mentions in the latest sweep.
+          Three families of formula, applied per signal kind. Each
+          produces a 0-100 contribution; the pillar score is the
+          arithmetic mean of available contributions.
         </p>
-        <pre className="rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
-{`Adoption sources (FM):
-  hn_mentions_7d              scaled(47, 10)      = 80.7
-  bluesky_mentions_7d         scaled(18, 10)      = 63.0
-  reddit_mentions_7d          scaled(12, 10)      = 53.6
-  github_repos_using_model    scaled(420, 100)    = 81.3
-  hf_downloads_30d            no reading          → skipped
-  github_stars                no reading          → skipped
-  github_mentions_7d          no reading          → skipped
-  wikipedia_views_30d         no reading          → skipped
-  openrouter_token_volume_30d no reading          → skipped
-  news_mentions_30d           no reading          → skipped
-  → Adoption = mean(80.7, 63.0, 53.6, 81.3) = 69.7
-
-Quality sources:
-  benchmark_score = 87.6  → 87.6 (no transform)
-  arxiv_citations no reading → skipped
-  → Quality = 87.6
-
-Momentum (7d ROC, hypothetical +20% mention growth):
-  → ~58.8
-
-Community sources (FM):
-  reddit_points_7d            scaled(240, 100)    = 59.4
-  hf_likes                    no reading          → skipped
-  github_contributors         no reading          → skipped
-  → Community = 59.4
-
-Headline (FM weights 0.30 / 0.40 / 0.10 / 0.20):
-  0.30 × 69.7 + 0.40 × 87.6 + 0.10 × 58.8 + 0.20 × 59.4
-  = 20.91 + 35.04 + 5.88 + 11.88
-  = 73.7`}
+        <H3>Counts (most signals)</H3>
+        <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
+{`scaled(v, anchor) = min(100, 50 × log₁₀(v + 1) / log₁₀(anchor + 1))`}
         </pre>
-
-        <H3>7.2 Application — claude-code</H3>
         <p>
-          GitHub stars 122k, npm install volume reflected, contributors
-          52, forks 20.2k, no benchmark on file.
+          A log curve so a project with 1,000 stars scores 50 and one
+          with 100,000 stars doesn't get 100× the credit. Each anchor
+          is the value at which the signal scores exactly 50 — chosen
+          so the median agent in each population lands near the middle
+          of the scale. Anchor table lives in source at{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
+            apps/scoring/compute.py:ANCHORS
+          </code>
+          .
         </p>
-        <pre className="rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
-{`Adoption sources (App):
-  github_stars            scaled(122k, 1k)    = 100.0
-  npm_weekly              scaled(50k, 1k)     = 87.5
-  stackoverflow_q_7d      scaled(2, 5)        = 30.7
-  producthunt_upvotes     scaled(412, 100)    = 80.8
-  hf_downloads / pypi / docker / crates / mcp / news → skipped
-  → Adoption = mean(100.0, 87.5, 30.7, 80.8) = 74.8
-
-Quality:
-  no benchmark / issue-rate / response-hours on file
-  → Quality = Unrated → contributes 0
-
-Momentum (7d ROC, ~5% star growth on a mature project):
-  → ~52.5
-
-Community sources (App):
-  github_contributors     scaled(52, 30)      = 73.6
-  github_forks            scaled(20.2k, 200)  = 100.0
-  hn_points_7d            scaled(180, 100)    = 56.9
-  → Community = mean(73.6, 100.0, 56.9) = 76.8
-
-Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
-  0.40 × 74.8 + 0.20 × 0 + 0.10 × 52.5 + 0.30 × 76.8
-  = 29.92 + 0 + 5.25 + 23.04
-  = 58.2`}
+        <H3>Benchmarks (Quality pillar)</H3>
+        <p>
+          Mean <strong>percentile rank</strong> across the agent's
+          benchmark coverage. For each benchmark the agent has been
+          scored on, its score is ranked against every other agent on
+          that benchmark and converted to a 0-100 percentile. The
+          pillar score is the mean of those percentiles.
+        </p>
+        <p>
+          Percentile rank is coverage-robust: a model with 5
+          benchmarks all at the 95th percentile beats a model with 10
+          benchmarks averaging the 70th. It's also head-to-head
+          consistent — if A strictly beats B on every shared
+          benchmark, A's mean percentile is ≥ B's. The previous
+          formula (mean of normalised scores) failed this: a model
+          could outrank a strictly-better competitor just by having
+          extra easy benchmarks pulling its mean up.
+        </p>
+        <p>
+          A coverage floor of three distinct benchmarks is required to
+          rate a model on Quality — below it the model stays Unrated.
+        </p>
+        <H3>Momentum (7-day rate of change)</H3>
+        <pre className="rounded-md border border-border bg-card p-4 font-mono text-sm leading-relaxed">
+{`roc_7d     = (now − then) / max(then, 1)
+scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
         </pre>
-
-        {/* ---------- 8. Why some agents are Unrated ---------- */}
-        <H2 id="unrated">8. Why some agents are Unrated</H2>
         <p>
-          A score requires at least one signal reading on file. A model
-          launched yesterday with no HN mentions, no HF mirror, no
-          benchmark match and no Bluesky chatter has nothing to score.
-          Its page renders metadata (context length, pricing, modality)
-          but the composite is honestly absent rather than padded. As
-          signals arrive, the pillars light up one by one.
+          0% growth → 50, +100% → 100, −50% → 0. A signal first seen
+          inside the 7-day window (no "then" reading) gets a 60 — a
+          small "newly arrived" bias, not the punitive 0 a missing
+          baseline would otherwise imply.
+        </p>
+        <H3>Special cases</H3>
+        <p>
+          A handful of signals don't fit the count log-curve.{" "}
+          <strong>MCP registry listed</strong> is binary (0 → 0, 1 →
+          75 — a hand-picked credibility bonus).{" "}
+          <strong>HF trending rank</strong> and{" "}
+          <strong>GitHub first-response hours</strong> are inverted:
+          lower input = higher score, with the same log shape mirrored.{" "}
+          <strong>Cost (blended price)</strong> is also inverted —
+          cheaper scores higher, anchored at $5/M tokens.
         </p>
 
-        {/* ---------- 9. Tags ---------- */}
-        <H2 id="tags">9. Tags — capability, deployment, model_dep</H2>
+        {/* ---------- 6. Unrated ---------- */}
+        <H2 id="unrated">6. Why some agents are Unrated</H2>
         <p>
-          Every agent carries up to four kinds of tag. Tags are
-          author-asserted where possible (GitHub topics, HF tags, npm
-          keywords) and rule-derived from the agent's name + description
-          where they aren't.
+          A pillar with no signals on file is Unrated rather than zero.
+          The pillar's card on an agent page reads "Unrated" (no data),
+          while at the headline level that pillar contributes zero
+          (because the headline is a weighted sum and you can't add an
+          unknown to a sum). The two read like a contradiction; they
+          describe different layers.
         </p>
-        <ul className="list-disc pl-6">
-          <li>
-            <strong>capability</strong> — what the agent does
-            (code-generation, browsing, research, RAG, multi-agent,
-            automation, tool-use, memory, vision, voice).
-          </li>
-          <li>
-            <strong>deployment</strong> — how it ships (library, CLI,
-            SaaS, IDE plugin, browser extension, MCP server).
-          </li>
-          <li>
-            <strong>license</strong> — SPDX (mit, apache-2.0, agpl,
-            etc.), normalised from the source repo.
-          </li>
-          <li>
-            <strong>maturity</strong> — experimental / beta / stable,
-            inferred from age + release cadence.
-          </li>
-          <li>
-            <strong>model_dep</strong> — only on application agents.
-            Indicates which foundation-model family the app is built
-            on (claude / gpt / gemini / deepseek / llama / mistral /
-            qwen / grok). Auto-detected from descriptions ("powered by
-            Claude", "built on GPT-4") and supplemented by a small
-            seed list for the high-profile apps. The "Built on Claude"
-            chips on agent pages link to{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-sm">
-              /sectors/model_dep/&lt;family&gt;
-            </code>{" "}
-            so a reader can cross-reference all apps using the same
-            family.
-          </li>
-        </ul>
+        <p>
+          Quality has the additional coverage floor — fewer than three
+          benchmarks means Unrated rather than a noisy single-source
+          score. New flagship releases often sit Unrated on Quality for
+          a few days until enough leaderboards pick them up.
+        </p>
 
-        {/* ---------- 10. Manipulation resistance ---------- */}
-        <H2 id="manipulation">10. Manipulation resistance</H2>
+        {/* ---------- 7. Manipulation ---------- */}
+        <H2 id="manipulation">7. Manipulation resistance</H2>
         <p>
           Three patterns trigger automatic flags. Flagged signals are
-          excluded from that day's score and the agent's record carries
+          excluded from that day's score; the agent's record carries
           the reason. The{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
             manipulation_resistance
@@ -805,38 +485,31 @@ Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
         <ul className="list-disc pl-6">
           <li>
             <strong>star_spike_no_contrib_diversity</strong> — a 10×
-            star jump in 24 hours with very few distinct contributors
-            on the repo. Excludes <code>github_stars</code> for that
-            tick.
+            star jump in 24 hours from very few distinct contributors.
+            Excludes <code>github_stars</code> for that tick.
           </li>
           <li>
             <strong>hf_surge_no_github</strong> — a Hugging Face
-            download surge unaccompanied by any GitHub activity.
+            download surge with no accompanying GitHub activity.
             Excludes <code>hf_downloads_30d</code>.
           </li>
           <li>
-            <strong>coordinated_hn_posting</strong> — a burst of
-            Hacker News mentions with low account-age diversity.
-            Excludes <code>hn_mentions_7d</code> and{" "}
-            <code>hn_points_7d</code>.
+            <strong>coordinated_hn_posting</strong> — a burst of HN
+            mentions with low account-age diversity. Excludes{" "}
+            <code>hn_mentions_7d</code> and <code>hn_points_7d</code>.
           </li>
         </ul>
 
-        {/* ---------- 11. Indexes ---------- */}
-        <H2 id="indexes">11. Indexes</H2>
+        {/* ---------- 8. Indexes ---------- */}
+        <H2 id="indexes">8. Indexes</H2>
         <p>
           Six indexes at launch — each with eligibility rules
           published in code, equal-weight v1, rebalanced Mondays at
-          03:00 UTC. Every diff is logged with a short narrative
-          explaining the largest changes.
+          03:00 UTC. Every diff is logged with a short narrative.
         </p>
         <ul className="list-disc pl-6">
-          <li>
-            <strong>TAPE-100</strong> — top 100 across both kinds.
-          </li>
-          <li>
-            <strong>FM-50</strong> — top 50 foundation models.
-          </li>
+          <li><strong>TAPE-100</strong> — top 100 across both kinds.</li>
+          <li><strong>FM-50</strong> — top 50 foundation models.</li>
           <li>
             <strong>CODE-25</strong> — top 25 coding agents
             (capability:code-generation, application).
@@ -846,8 +519,7 @@ Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
             (capability:browsing, application).
           </li>
           <li>
-            <strong>OSS-50</strong> — top 50 open-source applications
-            (license = mit / apache / agpl / gpl / bsd / mpl).
+            <strong>OSS-50</strong> — top 50 open-source applications.
           </li>
           <li>
             <strong>MCP-25</strong> — top 25 MCP servers
@@ -855,8 +527,8 @@ Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
           </li>
         </ul>
 
-        {/* ---------- 12. Show your work ---------- */}
-        <H2 id="show-your-work">12. Show your work</H2>
+        {/* ---------- 9. Show your work ---------- */}
+        <H2 id="show-your-work">9. Show your work</H2>
         <p>
           Every agent page exposes its raw signals as a downloadable
           CSV. Every index page links its rebalance log. Methodology
@@ -867,7 +539,7 @@ Headline (App weights 0.40 / 0.20 / 0.10 / 0.30):
           >
             repository
           </a>
-          ; corrections are welcome via{" "}
+          ; corrections welcome via{" "}
           <a
             href="https://github.com/flmwilkinson/AgentTape/issues"
             className="text-primary hover:underline"
