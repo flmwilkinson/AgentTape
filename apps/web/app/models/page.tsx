@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEventHandler } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api, type AgentSummary } from "@/lib/api-client";
@@ -123,12 +123,26 @@ function isMultimodal(modality: string): boolean {
   return /\+/.test(inputs);
 }
 
+// Sortable columns on the FM board. ``"rank"`` is the default —
+// it orders by ``score.rank_now`` which mirrors AgentScore. The
+// pillar values sort by that single pillar DESC with nulls last,
+// so a user can ask "which model is best by Quality alone?" or
+// "which is cheapest per intelligence?" without leaving the page.
+type SortKey =
+  | "rank"
+  | "agent_score"
+  | "adoption"
+  | "quality"
+  | "momentum"
+  | "efficiency";
+
 export default function ModelsPage() {
   const [family, setFamily] = useState<string>("");
   const [tier, setTier] = useState<string>("");
   const [reasoning, setReasoning] = useState<string>("");
   const [modality, setModality] = useState<string>("");
   const [openness, setOpenness] = useState<string>("");
+  const [sortBy, setSortBy] = useState<SortKey>("rank");
 
   const { data, isLoading } = useQuery({
     queryKey: ["fm-list"],
@@ -167,23 +181,33 @@ export default function ModelsPage() {
     } else if (openness === "closed") {
       out = out.filter((m) => !OPEN_FAMILIES.has(familyOf(m.slug)));
     }
-    // Sort by rank_now so the displayed rank column is monotonic.
-    // The API returns rows ordered by agent_score (full precision)
-    // but rank_now is computed at a slightly different snapshot
-    // moment, so when scores tie at e.g. 36.4 the display order
-    // and the rank number can disagree (#4, #6, #5 ...). Sorting
-    // by rank_now keeps them aligned. Rows with no rank fall
-    // through to the bottom by score.
+    // Sort. ``rank`` (default) preserves the composite-score
+    // ranking that powers the displayed #-column. Pillar sorts
+    // (quality / efficiency / etc.) re-rank by that single value
+    // DESC with nulls last — handles "Unrated" cleanly.
     out = [...out].sort((a, b) => {
-      const ra = a.score?.rank_now;
-      const rb = b.score?.rank_now;
-      if (ra != null && rb != null) return ra - rb;
-      if (ra != null) return -1;
-      if (rb != null) return 1;
-      return (b.score?.agent_score ?? 0) - (a.score?.agent_score ?? 0);
+      if (sortBy === "rank") {
+        // Match rank_now so the displayed rank column stays
+        // monotonic. The API returns rows ordered by agent_score
+        // but rank_now is computed at a slightly different snapshot
+        // so they can disagree on ties; rank_now wins.
+        const ra = a.score?.rank_now;
+        const rb = b.score?.rank_now;
+        if (ra != null && rb != null) return ra - rb;
+        if (ra != null) return -1;
+        if (rb != null) return 1;
+        return (b.score?.agent_score ?? 0) - (a.score?.agent_score ?? 0);
+      }
+      // Pillar sort: DESC, nulls last.
+      const va = a.score?.[sortBy];
+      const vb = b.score?.[sortBy];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return vb - va;
     });
     return out;
-  }, [all, family, tier, reasoning, modality, openness]);
+  }, [all, family, tier, reasoning, modality, openness, sortBy]);
 
   const totalCount = all.length;
 
@@ -280,11 +304,36 @@ export default function ModelsPage() {
                 <th className="px-3 py-2 text-right">Rank</th>
                 <th className="px-3 py-2 text-left">Model</th>
                 <th className="px-3 py-2 text-right">24h</th>
-                <th className="px-3 py-2 text-right">Score</th>
+                <SortableHeader
+                  label="Score"
+                  active={sortBy === "rank" || sortBy === "agent_score"}
+                  onClick={() => setSortBy(sortBy === "rank" ? "agent_score" : "rank")}
+                />
                 <th className="px-3 py-2 text-right">Δ24h</th>
-                <th className="px-3 py-2 text-right hidden md:table-cell">Adoption</th>
-                <th className="px-3 py-2 text-right hidden md:table-cell">Quality</th>
-                <th className="px-3 py-2 text-right hidden lg:table-cell">Momentum</th>
+                <SortableHeader
+                  label="Adoption"
+                  className="hidden md:table-cell"
+                  active={sortBy === "adoption"}
+                  onClick={() => setSortBy(sortBy === "adoption" ? "rank" : "adoption")}
+                />
+                <SortableHeader
+                  label="Quality"
+                  className="hidden md:table-cell"
+                  active={sortBy === "quality"}
+                  onClick={() => setSortBy(sortBy === "quality" ? "rank" : "quality")}
+                />
+                <SortableHeader
+                  label="Eff"
+                  className="hidden md:table-cell"
+                  active={sortBy === "efficiency"}
+                  onClick={() => setSortBy(sortBy === "efficiency" ? "rank" : "efficiency")}
+                />
+                <SortableHeader
+                  label="Momentum"
+                  className="hidden lg:table-cell"
+                  active={sortBy === "momentum"}
+                  onClick={() => setSortBy(sortBy === "momentum" ? "rank" : "momentum")}
+                />
                 <th className="px-3 py-2 text-center w-12">Cmp</th>
                 <th className="px-3 py-2 text-center w-12">Watch</th>
               </tr>
@@ -342,6 +391,11 @@ export default function ModelsPage() {
                         ? "Unrated"
                         : m.score?.quality?.toFixed(1) ?? "—"}
                     </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
+                      {m.score?.efficiency === null
+                        ? "Unrated"
+                        : m.score?.efficiency?.toFixed(1) ?? "—"}
+                    </td>
                     <td className="px-3 py-2 text-right hidden lg:table-cell">
                       {m.score?.momentum?.toFixed(1) ?? "—"}
                     </td>
@@ -360,5 +414,53 @@ export default function ModelsPage() {
         </>
       )}
     </div>
+  );
+}
+
+
+// Clickable column header that toggles a single-pillar sort on the
+// models board. Visual treatment: active state gets a chevron and
+// foreground color so users can see which sort is in effect.
+function SortableHeader({
+  label,
+  active,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  onClick: MouseEventHandler<HTMLButtonElement>;
+  className?: string;
+}) {
+  return (
+    <th
+      className={cn(
+        "px-3 py-2 text-right",
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1 uppercase tracking-wider transition-colors",
+          active
+            ? "text-foreground"
+            : "hover:text-foreground",
+        )}
+        title={`Sort by ${label}`}
+      >
+        {label}
+        <span
+          aria-hidden
+          className={cn(
+            "transition-opacity",
+            active ? "opacity-100" : "opacity-0",
+          )}
+        >
+          ↓
+        </span>
+      </button>
+    </th>
   );
 }

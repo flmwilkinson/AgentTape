@@ -102,6 +102,10 @@ export type ScoreEnvelope = {
   quality: number | null;
   momentum: number | null;
   community: number | null;
+  // FM-only 5th pillar (cost+speed via Artificial Analysis).
+  // Always null for applications, sometimes null for FMs without
+  // AA coverage. UI must distinguish "Unrated" from a low score.
+  efficiency: number | null;
   manipulation_resistance: number | null;
   computed_at: string | null;
   // 24-hour delta. null = no history old enough; 0 = computed and flat.
@@ -266,6 +270,7 @@ export const api = {
         quality: number | null;
         momentum: number | null;
         community: number | null;
+        efficiency: number | null;
       }[]
     >(`/agents/${slug}/score-history`, {
       searchParams: { window },
@@ -417,6 +422,7 @@ export const api = {
             quality: number | null;
             momentum: number | null;
             community: number | null;
+            efficiency: number | null;
             score_24h_ago: number | null;
             delta_24h: number | null;
           };

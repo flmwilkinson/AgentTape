@@ -39,6 +39,7 @@ export function AgentLiveHeader({ agent }: Props) {
         quality: ev.quality ?? null,
         momentum: ev.momentum ?? null,
         community: ev.community ?? null,
+        efficiency: ev.efficiency ?? null,
         manipulation_resistance: ev.manipulation_resistance ?? null,
         computed_at: new Date().toISOString(),
         score_24h_ago: prev?.score_24h_ago ?? null,
