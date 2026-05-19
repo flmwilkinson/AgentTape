@@ -413,39 +413,68 @@ trusted as a comparable signal."""
 async def _agent_benchmark_score(
     session: AsyncSession, agent_id: UUID
 ) -> float | None:
-    """Mean of latest benchmark scores across every benchmark this
-    agent has results on. Each score is normalised against its
-    benchmark's max_score so multiple benchmarks combine cleanly.
+    """Mean percentile rank across the agent's benchmark coverage.
 
-    Coverage gate: returns None when the agent has fewer than
-    ``MIN_BENCHMARK_COVERAGE`` distinct benchmarks. The Quality pillar
-    then reads as Unrated, which is the correct state for a model
-    we've only seen on one or two leaderboards — averaging 1-2
-    points produces a number that looks comparable to a model with
-    7 points but isn't.
+    For each benchmark the agent has been scored on, computes its
+    percentile rank among the population of agents on that
+    benchmark. Returns the mean percentile across the agent's
+    benchmarks.
+
+    This replaces a prior mean-of-normalised-scores formula which
+    produced wrong head-to-head rankings whenever models had
+    different benchmark coverage. The pathological case observed
+    in prod: GPT-5.5 strictly beat GPT-5.1 on all 5 of their shared
+    benchmarks (aa-coding, aa-intelligence, gpqa-diamond, ifbench,
+    scicode), but GPT-5.1 outranked it because GPT-5.1 had 5 extra
+    benchmarks (some inflated by the AA fractional bug, some
+    genuinely easy like math/aime where most models score high).
+
+    Percentile rank fixes this:
+
+    * Coverage-robust — what matters is consistently beating peers
+      on the benchmarks tested, not absolute score on a longer-or-
+      shorter benchmark list.
+    * Head-to-head consistent — if A beats B on every shared
+      benchmark, A's mean percentile is >= B's.
+    * Difficulty-adjusted — 60 on a hard benchmark (median 40) is
+      worth more than 60 on a saturated one (median 90), because
+      population-relative position is what the percentile captures.
+
+    Coverage gate: same ``MIN_BENCHMARK_COVERAGE`` floor. Below it
+    the agent stays Unrated regardless of percentile (a model with
+    one 99th-percentile benchmark is still under-measured).
     """
     r = await session.execute(
         text(
             """
-            WITH latest AS (
-                SELECT br.benchmark_id, br.score, b.max_score,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY br.benchmark_id
-                           ORDER BY br.captured_at DESC
-                       ) AS rn
+            WITH latest_per_pair AS (
+                -- Latest score per (agent, benchmark). DISTINCT ON
+                -- gives us one row per pair, keyed by the most recent
+                -- captured_at within that pair.
+                SELECT DISTINCT ON (br.agent_id, br.benchmark_id)
+                    br.agent_id,
+                    br.benchmark_id,
+                    br.score
                 FROM benchmark_results br
-                JOIN benchmarks b ON b.id = br.benchmark_id
-                WHERE br.agent_id = :aid
+                ORDER BY br.agent_id, br.benchmark_id, br.captured_at DESC
+            ),
+            percentiles AS (
+                -- Rank each (agent, benchmark) row within its benchmark's
+                -- population. PERCENT_RANK gives 0 for the lowest score
+                -- and 1 for the highest; multiply by 100 to surface as a
+                -- 0-100 quality contribution.
+                SELECT
+                    agent_id,
+                    100.0 * PERCENT_RANK() OVER (
+                        PARTITION BY benchmark_id ORDER BY score
+                    ) AS pct
+                FROM latest_per_pair
             )
             SELECT
                 count(*)::int AS n,
-                AVG(
-                    CASE
-                        WHEN max_score IS NULL OR max_score <= 0 THEN score
-                        ELSE score / max_score * 100
-                    END
-                )::float AS avg_norm
-            FROM latest WHERE rn = 1
+                AVG(pct)::float AS mean_pct
+            FROM percentiles
+            WHERE agent_id = :aid
             """
         ),
         {"aid": agent_id},
@@ -453,10 +482,10 @@ async def _agent_benchmark_score(
     row = r.first()
     if row is None:
         return None
-    n, avg_norm = row[0], row[1]
-    if n is None or avg_norm is None or n < MIN_BENCHMARK_COVERAGE:
+    n, mean_pct = row[0], row[1]
+    if n is None or mean_pct is None or n < MIN_BENCHMARK_COVERAGE:
         return None
-    return float(avg_norm)
+    return float(mean_pct)
 
 
 async def _agent_kind(session: AsyncSession, agent_id: UUID) -> str:

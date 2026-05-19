@@ -195,7 +195,16 @@ class ArtificialAnalysisIngestor(Ingestor):
                 # 31.5 instead of ~87 because GPQA / MMLU-Pro / SWE-bench
                 # all wrote as 0.94 / 0.89 / 0.87 unchanged.
                 if 0.0 <= score <= 1.5:
-                    score *= 100.0
+                    # Fraction → percentage. Cap at 100 because some
+                    # AA fields exceed 1.0 (pass@K scoring on
+                    # competition benchmarks like AIME, where 1.25
+                    # = 125% relative-to-baseline). 1.25 * 100 = 125
+                    # is meaningless on the 0-100 scale and inflates
+                    # Quality averages. Verified in prod: GPT-5.1
+                    # had AIME=125 and MMMU=125, pulling its
+                    # Quality up to 81 when capped values would
+                    # have given ~70.
+                    score = min(score * 100.0, 100.0)
                 elif not (0.0 <= score <= 100.0):
                     continue
                 if bench_slug not in bench_ids:
