@@ -688,12 +688,21 @@ async def index_history(
     rows = await session.execute(
         text(
             """
-            SELECT s.captured_at, s.composite_value
-            FROM index_snapshots s
-            JOIN indexes i ON i.id = s.index_id
-            WHERE i.slug = :slug AND s.captured_at >= :since
-            ORDER BY s.captured_at ASC
-            LIMIT :limit
+            -- Take the NEWEST :limit rows in the window, then sort ASC
+            -- for the chart. The naive "ORDER BY ASC LIMIT N" returned
+            -- the OLDEST N rows in the window, which silently dropped
+            -- the latest snapshots once a 30-day window held more
+            -- snapshots than the limit (chart looked stuck at a date
+            -- mid-window even though fresh rows were being written).
+            SELECT * FROM (
+                SELECT s.captured_at, s.composite_value
+                FROM index_snapshots s
+                JOIN indexes i ON i.id = s.index_id
+                WHERE i.slug = :slug AND s.captured_at >= :since
+                ORDER BY s.captured_at DESC
+                LIMIT :limit
+            ) sub
+            ORDER BY captured_at ASC
             """
         ),
         {"slug": slug, "since": since, "limit": limit},
