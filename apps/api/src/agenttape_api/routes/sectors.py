@@ -237,7 +237,7 @@ async def get_sectors_top(
                     a.id, a.slug, a.name, a.entity_kind,
                     a.homepage_url, a.github_repo,
                     cs.agent_score AS agent_score,
-                    cs.adoption, cs.quality, cs.momentum, cs.community,
+                    cs.adoption, cs.quality, cs.momentum, cs.community, cs.efficiency,
                     s24.score_24h_ago,
                     ROW_NUMBER() OVER (
                         PARTITION BY t.value
