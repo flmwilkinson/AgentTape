@@ -425,6 +425,67 @@ typical cohort that most frontier models clear) before Quality is
 trusted as a comparable signal."""
 
 
+async def _all_agent_benchmark_percentiles(
+    session: AsyncSession,
+) -> dict[UUID, float | None]:
+    """Mean benchmark percentile rank for every agent in ONE query.
+
+    Called at the top of ``recompute_agents`` and passed down to the
+    per-agent compute as a dict lookup. Goes from N expensive window-
+    function queries per batch to one.
+
+    Burned the Neon free-tier compute budget (96 / 100 CU-hours in 22
+    days) before this batching landed: the prior per-agent call ran
+    ``PERCENT_RANK() OVER (PARTITION BY benchmark_id ORDER BY score)``
+    scanning the full ``benchmark_results`` table on every invocation,
+    multiplied by ~820 agents × 288 heartbeats/day. Batched, it's
+    one window-function pass per heartbeat regardless of population.
+
+    Returns a map ``agent_id → mean_percentile_or_None``. Agents
+    below ``MIN_BENCHMARK_COVERAGE`` get ``None`` so the Quality
+    pillar reads as Unrated rather than carrying a misleading
+    single-source score — same gate as the single-agent path.
+    """
+    r = await session.execute(
+        text(
+            """
+            WITH latest_per_pair AS (
+                SELECT DISTINCT ON (br.agent_id, br.benchmark_id)
+                    br.agent_id, br.benchmark_id, br.score
+                FROM benchmark_results br
+                ORDER BY br.agent_id, br.benchmark_id, br.captured_at DESC
+            ),
+            percentiles AS (
+                SELECT
+                    agent_id,
+                    100.0 * PERCENT_RANK() OVER (
+                        PARTITION BY benchmark_id ORDER BY score
+                    ) AS pct
+                FROM latest_per_pair
+            )
+            SELECT
+                agent_id,
+                count(*)::int AS n,
+                AVG(pct)::float AS mean_pct
+            FROM percentiles
+            GROUP BY agent_id
+            """
+        )
+    )
+    out: dict[UUID, float | None] = {}
+    for row in r:
+        agent_id, n, mean_pct = row[0], row[1], row[2]
+        if (
+            n is not None
+            and mean_pct is not None
+            and n >= MIN_BENCHMARK_COVERAGE
+        ):
+            out[agent_id] = float(mean_pct)
+        else:
+            out[agent_id] = None
+    return out
+
+
 async def _agent_benchmark_score(
     session: AsyncSession, agent_id: UUID
 ) -> float | None:
@@ -555,6 +616,7 @@ async def _pillar_value(
     sources: list[SignalSource],
     excluded: set[SignalSource],
     is_momentum: bool,
+    benchmark_percentiles: dict[UUID, float | None] | None = None,
 ) -> tuple[float | None, dict[str, Any]]:
     """Compute one pillar.
 
@@ -562,6 +624,12 @@ async def _pillar_value(
     signal had a reading (the pillar is Unrated for this agent).
     inputs records each source we consulted with its raw value, the
     scaled contribution, and any reason it was skipped.
+
+    ``benchmark_percentiles`` is the batch-precomputed lookup of
+    mean-percentile-by-agent. When provided, the Quality pillar
+    uses it as an O(1) dict read instead of running a fresh
+    window-function query per agent. Falls back to the per-agent
+    SQL when None (preserves single-agent test paths).
     """
     inputs: dict[str, Any] = {}
     contributions: list[float] = []
@@ -573,8 +641,14 @@ async def _pillar_value(
 
         if pillar == "quality" and src == SignalSource.BENCHMARK_SCORE:
             # Quality is special: the score lives in benchmark_results,
-            # not the signals table.
-            value = await _agent_benchmark_score(session, agent_id)
+            # not the signals table. Prefer the batch-precomputed dict
+            # — the per-agent SQL alternative below scans the full
+            # benchmark_results table with a window partition and
+            # killed Neon's compute budget when called in a hot loop.
+            if benchmark_percentiles is not None:
+                value = benchmark_percentiles.get(agent_id)
+            else:
+                value = await _agent_benchmark_score(session, agent_id)
             if value is None:
                 inputs[src.value] = {"status": "no_data"}
                 continue
@@ -646,7 +720,17 @@ async def compute_for_agent(
     agent_id: UUID,
     pop: PopulationStats,
     settings: Settings | None = None,
+    benchmark_percentiles: dict[UUID, float | None] | None = None,
 ) -> PillarScores:
+    """Compute the headline + pillar scores for one agent.
+
+    ``benchmark_percentiles`` is an optional batch-precomputed lookup
+    of mean-percentile-by-agent. Callers running a recompute over
+    many agents (the heartbeat, the debouncer flush) should compute
+    it once with ``_all_agent_benchmark_percentiles`` and pass it in
+    so the Quality pillar is an O(1) dict read per agent instead of
+    a full window-function query per agent.
+    """
     settings = settings or get_settings()
     flags = await _agent_flags(session, agent_id)
     excluded = _excluded_sources(flags)
@@ -655,16 +739,20 @@ async def compute_for_agent(
     pillar_map = _pillar_sources(kind)
 
     adoption, adoption_in = await _pillar_value(
-        session, agent_id, "adoption", pillar_map["adoption"], excluded, False
+        session, agent_id, "adoption", pillar_map["adoption"], excluded, False,
+        benchmark_percentiles=benchmark_percentiles,
     )
     quality, quality_in = await _pillar_value(
-        session, agent_id, "quality", pillar_map["quality"], excluded, False
+        session, agent_id, "quality", pillar_map["quality"], excluded, False,
+        benchmark_percentiles=benchmark_percentiles,
     )
     momentum, momentum_in = await _pillar_value(
-        session, agent_id, "momentum", pillar_map["momentum"], excluded, True
+        session, agent_id, "momentum", pillar_map["momentum"], excluded, True,
+        benchmark_percentiles=benchmark_percentiles,
     )
     community, community_in = await _pillar_value(
-        session, agent_id, "community", pillar_map["community"], excluded, False
+        session, agent_id, "community", pillar_map["community"], excluded, False,
+        benchmark_percentiles=benchmark_percentiles,
     )
     # FM-only 5th pillar — empty list for applications returns None
     # which is the correct Unrated state, not a fake zero.
@@ -675,6 +763,7 @@ async def compute_for_agent(
         pillar_map.get("efficiency", []),
         excluded,
         False,
+        benchmark_percentiles=benchmark_percentiles,
     )
 
     pillars = PillarScores(
@@ -863,13 +952,23 @@ async def recompute_agents(
     settings = settings or get_settings()
     pop = await population_stats(session)
 
+    # Precompute mean benchmark percentile per agent in one query
+    # rather than running an expensive window-function CTE per agent
+    # below. Burned the Neon free-tier compute budget when this was
+    # per-agent (96 / 100 CU-hours in 22 days). One query per batch
+    # is essentially free.
+    benchmark_percentiles = await _all_agent_benchmark_percentiles(session)
+
     written = 0
     deduped = 0
     rank_changes = 0
     unrated = 0
     for aid in agent_ids:
         prior = await _prior_headline(session, aid)
-        pillars = await compute_for_agent(session, aid, pop, settings)
+        pillars = await compute_for_agent(
+            session, aid, pop, settings,
+            benchmark_percentiles=benchmark_percentiles,
+        )
         if pillars.agent_score is None:
             unrated += 1
             continue

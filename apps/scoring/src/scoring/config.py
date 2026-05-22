@@ -19,15 +19,18 @@ class Settings(BaseSettings):
     # 50 signals change in that window.
     recompute_debounce_seconds: int = 60
 
-    # Index snapshot + heartbeat cadence. Aligned with ingestion FAST
-    # tier (5 min) so every visible surface — sectors, indexes,
-    # models, agents — refreshes on the same clock. The user-facing
-    # promise is "ticking every 5 minutes"; nothing should be lying.
-    # Foundation models still produce flat lines between metadata
-    # changes (their score is derived from OpenRouter facts, not
-    # ingestion signals) but you'll see the timestamp advance.
-    snapshot_interval_seconds: int = 5 * 60
-    heartbeat_recompute_seconds: int = 5 * 60
+    # Index snapshot + heartbeat cadence. 1 hour to match the
+    # ingestion fast/medium tiers (which moved from 5 min to 1 hour
+    # in commit 84d269a to bound Neon storage growth). Originally
+    # aligned at 5 min — when ingestion slowed but heartbeat
+    # didn't, the scoring loop recomputed every admitted agent 12
+    # times an hour to fold in data that was only updating once
+    # an hour. Plus the per-agent benchmark percentile query
+    # ran ~820 times per heartbeat, which burned the Neon free-tier
+    # compute budget (96 / 100 CU-hours in 22 days). Both fixed:
+    # heartbeat slowed here, query batched in compute.py.
+    snapshot_interval_seconds: int = 60 * 60
+    heartbeat_recompute_seconds: int = 60 * 60
 
     # Pillar weights are entity-kind specific. Applications and
     # foundation models have different "what makes them good" profiles:
