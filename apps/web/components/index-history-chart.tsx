@@ -19,6 +19,16 @@ export function IndexHistoryChart({ history }: Props) {
     ts: new Date(h.captured_at).getTime(),
     composite: h.composite_value,
   }));
+  // Force Recharts to label the first, middle, and latest data point.
+  // Auto-tick generation otherwise picks "nice" intervals and drops
+  // the rightmost tick when it would crash the chart edge, which
+  // made fresh snapshots look like the line was stuck at the
+  // second-to-last date.
+  const ticks = data.length
+    ? Array.from(
+        new Set([data[0].ts, data[Math.floor(data.length / 2)].ts, data[data.length - 1].ts]),
+      )
+    : undefined;
   return (
     <div className="h-72 w-full rounded-md border border-border bg-card p-2">
       <ResponsiveContainer width="100%" height="100%">
@@ -34,6 +44,7 @@ export function IndexHistoryChart({ history }: Props) {
             dataKey="ts"
             type="number"
             domain={["dataMin", "dataMax"]}
+            ticks={ticks}
             tickFormatter={(t) =>
               new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             }
