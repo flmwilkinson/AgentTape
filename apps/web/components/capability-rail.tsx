@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Github, Globe } from "lucide-react";
 import { formatScore } from "@/lib/format";
+import { MobileCollapse } from "@/components/mobile-collapse";
 import { MoverChip } from "@/components/mover-chip";
 import { CAPABILITIES } from "@/lib/taxonomy";
 
@@ -116,22 +117,32 @@ export function CapabilityRail({ groups }: Props) {
           key={g.value}
           className="rounded-md border border-border bg-card"
         >
-          <div className="flex items-baseline justify-between border-b border-border px-4 py-2.5">
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                {g.display_name}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {BLURBS[g.value]}
-              </div>
-            </div>
-            <Link
-              href={`/sectors/capability/${g.value}`}
-              className="text-[10px] font-mono uppercase tracking-wider text-primary hover:underline"
-            >
-              All →
-            </Link>
-          </div>
+          {/* Mobile collapses each capability so the section is a tidy
+              list of 10 headers instead of ~40 stacked rows. Desktop
+              renders inline (toggle hidden by MobileCollapse). The
+              "All →" link sits outside the toggle so a user can tap
+              through to the sector page without first expanding the
+              card. */}
+          <MobileCollapse
+            header={
+              <>
+                <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  {g.display_name}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {BLURBS[g.value]}
+                </div>
+              </>
+            }
+            trailing={
+              <Link
+                href={`/sectors/capability/${g.value}`}
+                className="text-[10px] font-mono uppercase tracking-wider text-primary hover:underline"
+              >
+                All →
+              </Link>
+            }
+          >
           <ul>
             {g.agents.map((a, i) => (
               <li
@@ -194,6 +205,7 @@ export function CapabilityRail({ groups }: Props) {
               </li>
             ))}
           </ul>
+          </MobileCollapse>
         </div>
       ))}
     </div>

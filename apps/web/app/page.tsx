@@ -176,17 +176,6 @@ export default async function FloorPage() {
               Full search →
             </Link>
           </div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {CAPABILITIES.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/sectors/capability/${c.slug}`}
-                className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:border-primary/40 hover:bg-subtle"
-              >
-                {c.label}
-              </Link>
-            ))}
-          </div>
           {/* CapabilityRail is server-rendered through one
               /sectors/top fetch — wrapped in Suspense so its
               latency doesn't gate first-byte. The CapabilityRailLoader
@@ -601,19 +590,16 @@ function MoverList({
         {items.map((m) => (
           <li
             key={m.agent.slug}
-            // ``overflow-hidden`` backstops the rounded-border parent
-            // so any malformed long content can't visually escape.
-            className="flex items-center gap-3 overflow-hidden border-t border-border px-4 py-2.5 first:border-t-0"
+            // ``items-start`` so when a long name wraps to a second
+            // line the score+chip still align to the top of the row.
+            className="flex items-start gap-3 border-t border-border px-4 py-2.5 first:border-t-0"
           >
             <Link
               href={`/agents/${m.agent.slug}`}
-              className="min-w-0 flex-1 truncate text-sm hover:text-primary"
+              className="min-w-0 flex-1 break-words text-sm leading-snug hover:text-primary"
             >
               {m.agent.name}
             </Link>
-            {/* ``shrink-0`` on both trailing elements so a long name
-                clips via truncate rather than pushing the score and
-                delta chip off-screen on a 360px phone. */}
             <span className="num shrink-0 text-sm font-semibold">
               {formatScore(m.score_now)}
             </span>
