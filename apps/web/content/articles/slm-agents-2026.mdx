@@ -137,12 +137,14 @@ naming would lift slowly rather than overnight.
       under the Apache 2.0 licence.
     </p>
     <p>
-      The 31B Dense beats Llama 4 (~400B total parameters) on
-      AIME 2026 (89.2% vs 88.3%), LiveCodeBench v6 (80.0% vs
-      77.1%), GPQA Diamond (84.3% vs 82.3%), and τ2-bench Agentic
-      (86.4% vs 85.5%). The 26B MoE with 3.8B active parameters
-      reaches 88.3% on AIME 2026 — almost identical to the dense
-      31B. Sparse activation is no longer costing reasoning quality.
+      The 31B Dense edges out its own 26B MoE sibling (3.8B active
+      parameters) across the reasoning suite: AIME 2026
+      (89.2% vs 88.3%), LiveCodeBench v6 (80.0% vs 77.1%),
+      GPQA Diamond (84.3% vs 82.3%), and τ2-bench Agentic
+      (86.4% vs 85.5%). The headline isn't the dense win — the
+      headline is that a 3.8B-active sparse model trails by one
+      to three points across the board. Sparse activation is no
+      longer costing reasoning quality.
     </p>
     <p>
       The number that matters most for the agentic case is the
@@ -157,8 +159,8 @@ naming would lift slowly rather than overnight.
     title="Gemma 4"
     badge="Open-weight"
     rows={[
-      { key: "31B vs Llama 4 (~400B)", value: "Wins on 4/4", big: true },
-      { key: "τ2-bench gen-over-gen", value: "6.6% → 86.4%" },
+      { key: "τ2-bench gen-over-gen", value: "6.6% → 86.4%", big: true },
+      { key: "26B MoE on AIME 2026", value: "88.3%" },
       { key: "26B MoE active params", value: "3.8B" },
       { key: "Context", value: "256K · 140 languages" },
       { key: "Licence", value: "Apache 2.0 · no MAU caps" },
@@ -191,11 +193,12 @@ naming would lift slowly rather than overnight.
       benchmarks, and ahead of them on agentic tool use.
     </p>
     <p>
-      Qwen3-Coder-Next, released in February 2026, sits underneath
-      both. 80B total, 3B active. 70.6% on SWE-Agent, 71.1% on
-      MiniSWE-Agent, 71.3% on OpenHands. Qwen has surpassed 700
-      million cumulative downloads on Hugging Face — the most
-      downloaded model family in the world.
+      The pattern across the Qwen3.6 family is the one the NVIDIA
+      paper called for: a dense small model that holds its own on
+      reasoning benchmarks, plus a sparse-MoE small model that
+      pulls level on agentic tool use at a fraction of the active-
+      parameter cost. Both run on hardware a single developer can
+      afford.
     </p>
   </SectionContent>
   <SpecCard
@@ -222,9 +225,9 @@ naming would lift slowly rather than overnight.
     <p>
       The single clearest demonstration that a 14B model can outrun
       a 70B model on reasoning when the training pipeline targets
-      reasoning specifically. Phi-4-reasoning scores 75.3% on AIME
-      2024, beating DeepSeek-R1-Distill-Llama-70B (69.3%) by six
-      points. Phi-4-reasoning-plus, with a short reinforcement-
+      reasoning specifically. Phi-4-reasoning scores 74.6% on AIME
+      2024, beating DeepSeek-R1-Distill-Llama-70B (69.3%) by more
+      than five points. Phi-4-reasoning-plus, with a short reinforcement-
       learning phase on top, reaches 81.3% on AIME 2024 — within
       a few points of the full DeepSeek-R1 (671B MoE) and OpenAI
       o3-mini.
@@ -245,7 +248,7 @@ naming would lift slowly rather than overnight.
     title="Phi-4-reasoning"
     badge="Specialised"
     rows={[
-      { key: "14B vs 70B on AIME 2024", value: "75.3% vs 69.3%", big: true },
+      { key: "14B vs 70B on AIME 2024", value: "74.6% vs 69.3%", big: true },
       { key: "Phi-4-reasoning-plus AIME", value: "81.3%" },
       { key: "Domain", value: "Math, coding, planning" },
       { key: "Vision variant", value: "Phi-4-reasoning-vision-15B" },
@@ -277,11 +280,9 @@ naming would lift slowly rather than overnight.
       NVIDIA Nemotron 3 Nano (December 2025, refreshed May 2026) is
       a 30B-A3B hybrid Mamba-Transformer MoE — 3B active parameters
       per token, designed explicitly as the perception sub-agent in
-      a heterogeneous stack. Nemotron 3 Nano Omni, launched May 7,
-      2026, delivers 9× higher throughput than other open omni-
-      modal models at the same interactivity. H Company's computer-
-      use agent runs on top of it at 1920×1080 native input
-      resolution.
+      a heterogeneous stack. Nemotron 3 Nano Omni, launched
+      April 28, 2026, delivers 9× higher throughput than other open
+      omni-modal models at the same interactivity.
     </p>
   </SectionContent>
   <SpecCard
@@ -305,49 +306,47 @@ DeepSeek V4-Flash, released April 24, 2026, lists at **$0.28 per
 million output tokens**. Claude Opus 4.6 lists at **$25 per
 million**. That is 89× cheaper, not 7×. The V4-Pro variant
 (1.6T total parameters, 49B active, MIT licence) scores 80.6% on
-SWE-bench Verified — within 0.2 points of Opus 4.6 — at $3.48 per
-million output tokens. The 7× gap applies to Pro. The 89× gap
+SWE-bench Verified — within 0.2 points of Opus 4.6 — at **$0.87
+per million output tokens** (a permanent cut effective
+May 22, 2026). The ~29× gap applies to Pro. The 89× gap
 applies to Flash.
 </Prose>
 
 <Prose>
-The Chinese open-weight ecosystem — DeepSeek, Qwen, Kimi K2.6,
-GLM-5 — has moved from "competitive on price" to "competitive on
-benchmarks AND priced at 5-30× below Western frontier models" in
-twelve months. Qwen has reached 700M cumulative downloads on
-Hugging Face. Chinese open-weight models now hold four of the top
-five positions on the open-weight leaderboard. The combined
-market share of DeepSeek and Qwen alone went from 1% in
-January 2025 to 15% in January 2026.
+The Chinese open-weight ecosystem — DeepSeek and Qwen the most
+visible examples — has moved from "competitive on price" to
+"competitive on benchmarks AND priced at 5–30× below Western
+frontier models" inside twelve months. The two-part claim used
+to be a single-part claim. That change is what reframes the
+buy-vs-build decision for every team currently paying frontier-
+model rates for sub-tasks a 7–35B open-weight model could
+handle.
 </Prose>
 
 <PullQuote>
 A production agentic-coding pipeline processing 50 million output
-tokens per month costs $174 on DeepSeek V4-Pro versus $1,250 on
-Claude Opus 4.6. At 500 million tokens per month, the gap becomes
-$1,740 versus $12,500. The architecture matters more at scale, not
-less.
+tokens per month costs $43.50 on DeepSeek V4-Pro versus $1,250
+on Claude Opus 4.6. At 500 million tokens per month, the gap
+becomes $435 versus $12,500. The architecture matters more at
+scale, not less.
 </PullQuote>
 
 <Prose>
-The companion numbers from the Q1 2026 vendor telemetry releases:
-agent cost-per-task dropped 9 to 66× year-over-year. Customer-
-service ticket resolution at $0.46 (versus $4.18 human-handled).
-Code-review PRs at $0.72 (versus $48 senior-engineer time).
-McKinsey's Global AI Survey 2026 puts median knowledge-worker
-hours saved at 6.4 per week per seat in production deployments.
-The Anthropic enterprise telemetry release puts it at 7.2 for
-Claude Opus 4.7 and Sonnet 4.6 customers. The constraint on these
-deployments is not capability. The constraint is the cost of
-running them — which is precisely the constraint a heterogeneous
-SLM stack relaxes.
+The constraint on production agentic deployments is no longer
+capability. It is the cost of running them at meaningful volume
+— which is precisely the constraint a heterogeneous SLM stack
+relaxes. A team paying frontier rates for every parsing step,
+every tool call, every format conversion is paying the LLM-only
+tax. The two largest line items in most agent budgets — sub-task
+routing and structured-output generation — are the two line items
+that move first under a heterogeneous architecture.
 </Prose>
 
 <SectionDivider number="04" label="The counterweight no one should ignore" />
 
 <Prose>
 The most important paper in this corpus is not the NVIDIA one. It
-is Aakash Advani's *When Small Models Are Right for Wrong
+is Laksh Advani's *When Small Models Are Right for Wrong
 Reasons: Process Verification for Trustworthy Agents*, arXiv
 2601.00513, January 2026. The paper analyses 10,734 reasoning
 traces across three commonly deployed SLMs — Llama-3-8B,
@@ -422,16 +421,14 @@ the bill at the end. Buyers don't write position papers.
 </Prose>
 
 <Prose>
-NVIDIA wrote the position paper because NVIDIA sells the GPUs the
-heterogeneous stack runs on whether it sells one big model or
-forty small ones. Belcak and co-authors flagged the awkward
-implication in the paper's response section: "It might seem odd
-for NVIDIA, one of the biggest beneficiaries of the LLM boom, to
-make this argument. But pushing smaller, cheaper models could
-grow the overall AI market and help embed the technology more
-deeply across businesses and consumer devices." The pitch is
-literally that the market gets bigger if the cost per agent drops
-by an order of magnitude.
+NVIDIA wrote the position paper because NVIDIA sells the GPUs
+the heterogeneous stack runs on whether the industry settles on
+one big model or forty small ones. Belcak and co-authors openly
+acknowledge the apparent conflict of NVIDIA arguing for smaller
+models, and the pitch reduces to: the total market gets bigger
+if the per-agent cost drops by an order of magnitude. NVIDIA
+sells more GPUs into a bigger, cheaper agent economy than into a
+narrower frontier-only one.
 </Prose>
 
 <Prose>
@@ -456,12 +453,10 @@ the empirical work of the last 60 days, looks like this:
 The reason the second architecture isn't the default in May 2026
 isn't that it doesn't work. It's that nobody whose business
 depends on the first architecture has any reason to push it. The
-Karpathy line worth thinking about is the one about cognitive
-architectures shifting from monolithic to modular as a function of
-maturity, not as a function of who is selling them. The shift to
-modular is already happening at companies that have done the
-math. It will start showing up in published case studies through
-2026.
+shift from monolithic to modular cognitive architectures is a
+function of maturity, not of who is selling the platform. It is
+already happening at companies that have done the math. It will
+start showing up in published case studies through 2026.
 </Prose>
 
 <SectionDivider number="06" label="What to actually build" />
@@ -476,7 +471,7 @@ math. It will start showing up in published case studies through
     {
       job: "Specialised reasoning",
       pick: "Phi-4-reasoning · DeepSeek V4-Pro · Gemma 4 31B Dense",
-      why: "Math, coding, planning — anywhere process matters. Phi-4-reasoning at 14B matches DeepSeek-R1-Distill-Llama-70B. Gemma 4 31B matches Llama 4 (~400B). These are not approximations of frontier capability. They are the frontier on a meaningful subset of the work.",
+      why: "Math, coding, planning — anywhere process matters. Phi-4-reasoning at 14B matches DeepSeek-R1-Distill-Llama-70B. Gemma 4's 26B MoE reaches 88.3% on AIME 2026 with just 3.8B active parameters per token, within one point of the 31B Dense. These are not approximations of frontier capability. They are the frontier on a meaningful subset of the work.",
     },
     {
       job: "Strategic decisions · novel reasoning",
