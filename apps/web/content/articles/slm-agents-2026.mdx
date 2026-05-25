@@ -1,0 +1,519 @@
+export const meta = {
+  slug: "slm-agents-2026-empirical-case",
+  title:
+    "Anatomy of the SLM turn — what 60 days of model releases just made empirically true",
+  description:
+    "Gemma 3 27B scored 6.6% on τ2-bench. Gemma 4 31B scores 86.4%. Qwen3.6-27B now outperforms Qwen3.5-397B on SWE-bench. The position paper NVIDIA published in June 2025 was right. The architecture that benefits from being right doesn't ship from the labs that built the current stack.",
+  published_at: "2026-05-25",
+  kind: "report",
+  keywords: [
+    "small language models agents",
+    "nvidia belcak slm position paper",
+    "gemma 4 qwen 3.6 phi-4",
+    "heterogeneous agent architecture",
+    "deepseek v4 cost economics",
+  ],
+};
+
+<Lede>
+On April 2, 2026, Google DeepMind released Gemma 4. The 31B Dense
+model scored 86.4% on τ2-bench, the agentic-tool-use benchmark.
+The previous generation, Gemma 3 27B, scored 6.6% on the same
+benchmark. Three weeks later, on April 22, Alibaba released
+Qwen3.6-27B — a dense 27B-parameter model that scored 77.2% on
+SWE-bench Verified, beating the same lab's 397B-parameter Qwen3.5
+MoE model by a full point. Four days after that, DeepSeek shipped
+V4-Flash at $0.28 per million output tokens, roughly 89 times
+cheaper than Claude Opus 4.6 at parity on most coding tasks. The
+small-model thesis NVIDIA published in June 2025 went from
+position paper to received wisdom over the course of one calendar
+quarter.
+</Lede>
+
+<StatGrid
+  items={[
+    {
+      label: "Gemma 4 jump (one model generation)",
+      name: "6.6% → 86.4%",
+      detail: "τ2-bench agentic tool use · Gemma 3 27B vs Gemma 4 31B",
+    },
+    {
+      label: "Qwen3.6-27B vs Qwen3.5-397B",
+      name: "77.2% / 76.2%",
+      detail: "SWE-bench Verified · 27B dense beats 397B MoE",
+    },
+    {
+      label: "DeepSeek V4-Flash vs Opus 4.6",
+      name: "89×",
+      detail: "Output token cost ratio · near-parity on coding benchmarks",
+    },
+    {
+      label: "Right-for-wrong-reasons rate",
+      name: "50–69%",
+      detail: "7-9B model correct answers with flawed reasoning (RIS audit)",
+    },
+  ]}
+/>
+
+<Prose>
+The NVIDIA position paper that called this — *Small Language Models
+are the Future of Agentic AI*, Peter Belcak and seven co-authors,
+June 2, 2025 — made three claims. SLMs (under 10B parameters) are
+already sufficient for most agentic tasks. Heterogeneous
+architectures, where small specialised models do the routine work
+and a large generalist gets called in only for novel reasoning,
+are the natural fit for how agents actually compose. The
+economics — 10 to 30 times lower inference cost per token, faster
+fine-tuning, simpler infrastructure — make the shift not optional.
+The paper's case studies on MetaGPT, Open Operator and Cradle
+estimated 40 to 70% of LLM invocations could be handled by
+specialised SLMs today.
+</Prose>
+
+<Prose>
+The reason the paper is worth re-reading in May 2026 isn't that
+the argument was clever. The argument was clever in June 2025,
+and the agent industry kept right on building LLM-only stacks for
+ten months anyway. The reason to re-read it is that the past 60
+days of model releases moved the empirical case from "plausible"
+to "settled" on most agentic workloads. The architecture has
+changed faster than the procurement cycle that buys it.
+</Prose>
+
+<SectionDivider number="01" label="The case the position paper made" />
+
+<Prose>
+NVIDIA's argument rested on three empirical claims that were
+defensible but not yet decisive in mid-2025.
+</Prose>
+
+<AxesGrid
+  items={[
+    {
+      label: "A1: SLMs are sufficient for most agent work",
+      body: "An AI agent is, in the paper's framing, a heavily instructed and externally choreographed gateway to a language model. Most agent invocations are repetitive, narrowly scoped, structured-output tasks — parse user intent, call this API, format that response, route this command. Models below 10B parameters were already matching or beating much larger models on these specific tasks. The June 2025 examples included Microsoft's Phi-3-Small, NVIDIA's Nemotron-H, HuggingFace's SmolLM2, Salesforce's xLAM, and DeepSeek-R1-Distill.",
+    },
+    {
+      label: "A2: SLMs fit the architecture better",
+      body: "Agentic systems decompose complex goals into modular sub-tasks. Each sub-task is small, fine-tunable, and benefits from format reliability over conversational range. Belcak's framing: \"stop using a hammer to kill a fly.\" Heterogeneous architectures (multiple models of varying sizes) match the structure of the problem in a way a single frontier model does not.",
+    },
+    {
+      label: "A3: The economics are unavoidable at scale",
+      body: "Serving a 7B SLM costs 10-30× less per token than a 70-175B LLM in latency, energy, and FLOPs. Fine-tuning is hours, not weeks. Many SLMs run on consumer hardware. The macro disparity NVIDIA flagged: in 2024, $57B was spent on AI cloud infrastructure to support an LLM API market of $5.6B — a ten-to-one gap that only makes sense if the LLM-first operational model is permanent. The paper called this the \"now-legacy praxis.\"",
+    },
+    {
+      label: "The case studies (MetaGPT, Open Operator, Cradle)",
+      body: "Replaceable LLM invocations, estimated by tracing real agent traffic: MetaGPT 60% (code generation, structured responses), Open Operator 40% (command parsing, template generation), Cradle 70% (repetitive GUI workflows). The paper included a six-step conversion algorithm: collect data, filter, cluster tasks, pick the right SLM, fine-tune, iterate. None of the six steps were easy. All six were doable.",
+    },
+  ]}
+/>
+
+<Prose>
+The paper's authors anticipated the obvious counter-arguments and
+named them as B1 through B7. The most honest one — B1 — was that
+the LLM-only model exists because of a large upfront investment in
+centralised inference infrastructure that creates path dependence
+regardless of which architecture is technically superior. Belcak
+and co-authors conceded the point and moved on. The case for
+change was that *even partial replacement* would shift the
+economics of the agent industry, and that the inertia they were
+naming would lift slowly rather than overnight.
+</Prose>
+
+<SectionDivider number="02" label="What the last 60 days proved" />
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Gemma 4
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Google DeepMind · April 2, 2026 · Apache 2.0
+    </div>
+    <p>
+      Four model sizes: E2B (~2.3B effective parameters), E4B,
+      a 26B Mixture-of-Experts with 3.8B active per token, and
+      a 31B Dense. 256K context. 140+ languages. No MAU restrictions
+      under the Apache 2.0 licence.
+    </p>
+    <p>
+      The 31B Dense beats Llama 4 (~400B total parameters) on
+      AIME 2026 (89.2% vs 88.3%), LiveCodeBench v6 (80.0% vs
+      77.1%), GPQA Diamond (84.3% vs 82.3%), and τ2-bench Agentic
+      (86.4% vs 85.5%). The 26B MoE with 3.8B active parameters
+      reaches 88.3% on AIME 2026 — almost identical to the dense
+      31B. Sparse activation is no longer costing reasoning quality.
+    </p>
+    <p>
+      The number that matters most for the agentic case is the
+      τ2-bench jump. Gemma 3 27B scored 6.6% on τ2-bench in
+      mid-2025. Gemma 4 31B scores 86.4%. An 80-point gain in
+      agentic tool-use in one model generation, at smaller-than-
+      frontier scale. The lift is not from scaling. It is from
+      training that prioritised the task.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Gemma 4"
+    badge="Open-weight"
+    rows={[
+      { key: "31B vs Llama 4 (~400B)", value: "Wins on 4/4", big: true },
+      { key: "τ2-bench gen-over-gen", value: "6.6% → 86.4%" },
+      { key: "26B MoE active params", value: "3.8B" },
+      { key: "Context", value: "256K · 140 languages" },
+      { key: "Licence", value: "Apache 2.0 · no MAU caps" },
+    ]}
+  />
+</Section>
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Qwen3.6
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Alibaba · April 22, 2026 · Apache 2.0
+    </div>
+    <p>
+      Two open-weight releases in the same week, both relevant. The
+      27B dense version scores 77.2% on SWE-bench Verified, beating
+      the same lab's 397B-parameter Qwen3.5-A17B MoE at 76.2%. Also
+      53.5% on SWE-bench Pro (vs 50.9%) and 59.3% on Terminal-Bench
+      2.0 (vs 52.5%). All running on a single RTX 4090.
+    </p>
+    <p>
+      The 35B-A3B variant is the more interesting one for the agent
+      case. 35B total parameters, only 3B active per forward pass.
+      It scores 73.4% on SWE-bench Verified, 67.2% on SWE-bench
+      Multilingual, 51.5% on Terminal-Bench 2.0, 37.0% on MCPMark,
+      62.8% on MCP-Atlas, and 67.2% on TAU3-Bench. A 3B-active model
+      on the same shortlist as the frontier agents on three of those
+      benchmarks, and ahead of them on agentic tool use.
+    </p>
+    <p>
+      Qwen3-Coder-Next, released in February 2026, sits underneath
+      both. 80B total, 3B active. 70.6% on SWE-Agent, 71.1% on
+      MiniSWE-Agent, 71.3% on OpenHands. Qwen has surpassed 700
+      million cumulative downloads on Hugging Face — the most
+      downloaded model family in the world.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Qwen3.6"
+    badge="Open-weight"
+    rows={[
+      { key: "27B SWE-bench Verified", value: "77.2%", big: true },
+      { key: "vs Qwen3.5-397B", value: "+1.0pp" },
+      { key: "35B-A3B active params", value: "3B" },
+      { key: "MCPMark · MCP-Atlas", value: "37% · 63%" },
+      { key: "Self-host hardware", value: "Single RTX 4090" },
+    ]}
+  />
+</Section>
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Phi-4-reasoning
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      Microsoft · April 2025 (refreshed March 2026)
+    </div>
+    <p>
+      The single clearest demonstration that a 14B model can outrun
+      a 70B model on reasoning when the training pipeline targets
+      reasoning specifically. Phi-4-reasoning scores 75.3% on AIME
+      2024, beating DeepSeek-R1-Distill-Llama-70B (69.3%) by six
+      points. Phi-4-reasoning-plus, with a short reinforcement-
+      learning phase on top, reaches 81.3% on AIME 2024 — within
+      a few points of the full DeepSeek-R1 (671B MoE) and OpenAI
+      o3-mini.
+    </p>
+    <p>
+      Phi-4-reasoning-vision-15B, released March 4, 2026, was the
+      paper that gave the architecture its agent-shaped framing.
+      Microsoft positioned it as a model that "knows when to think
+      and when thinking is a waste of time" — a design optimised
+      for autonomous-software-agent loops where latency and compact
+      model size matter. Tested as the perception sub-agent in
+      computer-use stacks, the model handles UI grounding for
+      buttons, menus, and text fields with reliability competitive
+      with much larger systems.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Phi-4-reasoning"
+    badge="Specialised"
+    rows={[
+      { key: "14B vs 70B on AIME 2024", value: "75.3% vs 69.3%", big: true },
+      { key: "Phi-4-reasoning-plus AIME", value: "81.3%" },
+      { key: "Domain", value: "Math, coding, planning" },
+      { key: "Vision variant", value: "Phi-4-reasoning-vision-15B" },
+      { key: "Framing", value: "\"Knows when to think\"" },
+    ]}
+  />
+</Section>
+
+<Section>
+  <SectionContent>
+    <h2 className="editorial mt-0 text-2xl font-semibold leading-tight md:text-3xl">
+      Salesforce xLAM-2 · NVIDIA Nemotron 3 Nano
+    </h2>
+    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      The specialist tool-callers · 2025-2026
+    </div>
+    <p>
+      The class that the NVIDIA paper specifically called out. xLAM
+      (Salesforce's family of Large Action Models, fine-tuned for
+      function calling) reaches the top of the Berkeley Function
+      Calling Leaderboard at every scale. xLAM-2-70B-fc-r achieves
+      56.2% on τ-bench, beating Llama 3.1 70B Instruct (38.2%),
+      DeepSeek v3 (40.6%), and GPT-4o (52.9%). The 1B "Tiny Giant"
+      variant — 1 billion parameters total — scores 78.94% overall
+      on BFCL and outperforms GPT-3.5-Turbo plus many larger
+      generalist models.
+    </p>
+    <p>
+      NVIDIA Nemotron 3 Nano (December 2025, refreshed May 2026) is
+      a 30B-A3B hybrid Mamba-Transformer MoE — 3B active parameters
+      per token, designed explicitly as the perception sub-agent in
+      a heterogeneous stack. Nemotron 3 Nano Omni, launched May 7,
+      2026, delivers 9× higher throughput than other open omni-
+      modal models at the same interactivity. H Company's computer-
+      use agent runs on top of it at 1920×1080 native input
+      resolution.
+    </p>
+  </SectionContent>
+  <SpecCard
+    title="Specialist SLMs"
+    badge="Tool calling"
+    rows={[
+      { key: "xLAM-2-70B on τ-bench", value: "56.2%", big: true },
+      { key: "xLAM-1B on BFCL", value: "78.94%" },
+      { key: "Nemotron 3 Nano active params", value: "3B (of 30B)" },
+      { key: "Nano Omni throughput", value: "9× vs alternatives" },
+      { key: "Beats on BFCL", value: "GPT-4o · Claude 3.5 Sonnet" },
+    ]}
+  />
+</Section>
+
+<SectionDivider number="03" label="The economic case caught up too" />
+
+<Prose>
+The cost picture has moved faster than the capability picture.
+DeepSeek V4-Flash, released April 24, 2026, lists at **$0.28 per
+million output tokens**. Claude Opus 4.6 lists at **$25 per
+million**. That is 89× cheaper, not 7×. The V4-Pro variant
+(1.6T total parameters, 49B active, MIT licence) scores 80.6% on
+SWE-bench Verified — within 0.2 points of Opus 4.6 — at $3.48 per
+million output tokens. The 7× gap applies to Pro. The 89× gap
+applies to Flash.
+</Prose>
+
+<Prose>
+The Chinese open-weight ecosystem — DeepSeek, Qwen, Kimi K2.6,
+GLM-5 — has moved from "competitive on price" to "competitive on
+benchmarks AND priced at 5-30× below Western frontier models" in
+twelve months. Qwen has reached 700M cumulative downloads on
+Hugging Face. Chinese open-weight models now hold four of the top
+five positions on the open-weight leaderboard. The combined
+market share of DeepSeek and Qwen alone went from 1% in
+January 2025 to 15% in January 2026.
+</Prose>
+
+<PullQuote>
+A production agentic-coding pipeline processing 50 million output
+tokens per month costs $174 on DeepSeek V4-Pro versus $1,250 on
+Claude Opus 4.6. At 500 million tokens per month, the gap becomes
+$1,740 versus $12,500. The architecture matters more at scale, not
+less.
+</PullQuote>
+
+<Prose>
+The companion numbers from the Q1 2026 vendor telemetry releases:
+agent cost-per-task dropped 9 to 66× year-over-year. Customer-
+service ticket resolution at $0.46 (versus $4.18 human-handled).
+Code-review PRs at $0.72 (versus $48 senior-engineer time).
+McKinsey's Global AI Survey 2026 puts median knowledge-worker
+hours saved at 6.4 per week per seat in production deployments.
+The Anthropic enterprise telemetry release puts it at 7.2 for
+Claude Opus 4.7 and Sonnet 4.6 customers. The constraint on these
+deployments is not capability. The constraint is the cost of
+running them — which is precisely the constraint a heterogeneous
+SLM stack relaxes.
+</Prose>
+
+<SectionDivider number="04" label="The counterweight no one should ignore" />
+
+<Prose>
+The most important paper in this corpus is not the NVIDIA one. It
+is Aakash Advani's *When Small Models Are Right for Wrong
+Reasons: Process Verification for Trustworthy Agents*, arXiv
+2601.00513, January 2026. The paper analyses 10,734 reasoning
+traces across three commonly deployed SLMs — Llama-3-8B,
+Mistral-7B, Qwen-2.5-7B — on mathematical reasoning, multi-hop
+QA, and commonsense reasoning. The headline finding is that
+**50 to 69% of correct answers from these models contain
+fundamentally flawed reasoning.** The model arrives at the right
+output through a process that is mathematically or logically
+wrong, and standard accuracy metrics cannot tell the difference.
+</Prose>
+
+<Prose>
+Advani's worked example: the model says "20% of 60 is 12. Answer:
+12." The output is correct. The internal computation used 0.2
+where it should have used 0.15 and got 12 by coincidence on a
+specific instance. In autonomous operation, this kind of hidden
+failure compounds. An agent might approve a transaction, make a
+medical recommendation, or control a system based on a chain of
+right-for-wrong answers, each one passing its accuracy check and
+none of them right for any reproducible reason.
+</Prose>
+
+<Prose>
+The paper introduces the Reasoning Integrity Score (RIS), a
+process-based metric validated with κ=0.657 inter-rater
+agreement, and then tests which interventions help. The findings
+are not what most production teams would assume:
+</Prose>
+
+<TradeoffTable
+  rows={[
+    {
+      job: "Retrieval-augmented generation (RAG)",
+      pick: "Helps reasoning integrity",
+      why: "Cohen's d = 0.23 to 0.93 across tasks. RAG grounds the model's calculations in external evidence, reducing the error rate by 7.6%. The mechanism is concrete: the model can no longer invent values for variables it has not been given, so the right-for-wrong-reasons paths get foreclosed at the source.",
+    },
+    {
+      job: "Self-critique / meta-cognitive prompting",
+      pick: "Actively harms small models",
+      why: "Cohen's d = -0.14 to -0.33. Asking a 7-9B model to critique its own reasoning amplifies the underlying confusion rather than resolving it. The model lacks sufficient capacity to produce a reliable second-pass evaluation. The intervention everyone reaches for first is the one that backfires hardest.",
+    },
+    {
+      job: "Process verification (distilled classifier)",
+      pick: "Cheap and effective",
+      why: "Advani distilled the verification capability into a neural classifier achieving 0.86 F1 score with a 100× speedup. Process verification at scale is now an economically defensible part of the production stack, not a research artefact.",
+    },
+  ]}
+/>
+
+<Prose>
+The paper's conclusion: "accuracy alone is dangerously insufficient
+when models can be right for entirely wrong reasons." The
+defensible production architecture for SLM agents in 2026 is not
+naked SLM. It is **SLM + RAG + process verification**. The
+heterogeneous stack the NVIDIA paper called for has a third
+component the position paper did not emphasise enough — the
+verification layer that catches the failures the accuracy metric
+hides.
+</Prose>
+
+<SectionDivider number="05" label="The architecture nobody is selling" />
+
+<Prose>
+The structural fact about the SLM thesis is that it does not have
+a natural marketing budget. Frontier-model labs sell one big
+model and a per-token API. Agent platforms sell scaffolding on top
+of one big model. Cloud providers sell GPU capacity sized for one
+big model. The actor with the most direct interest in promoting
+the heterogeneous SLM stack — small specialist models, deterministic
+orchestration, RAG, process verification — is the buyer who pays
+the bill at the end. Buyers don't write position papers.
+</Prose>
+
+<Prose>
+NVIDIA wrote the position paper because NVIDIA sells the GPUs the
+heterogeneous stack runs on whether it sells one big model or
+forty small ones. Belcak and co-authors flagged the awkward
+implication in the paper's response section: "It might seem odd
+for NVIDIA, one of the biggest beneficiaries of the LLM boom, to
+make this argument. But pushing smaller, cheaper models could
+grow the overall AI market and help embed the technology more
+deeply across businesses and consumer devices." The pitch is
+literally that the market gets bigger if the cost per agent drops
+by an order of magnitude.
+</Prose>
+
+<Prose>
+The architectural blueprint, drawn from the position paper plus
+the empirical work of the last 60 days, looks like this:
+</Prose>
+
+<AxesGrid
+  items={[
+    {
+      label: "The default path (LLM-only stack)",
+      body: "One frontier model. Every agent call goes through it. The harness compresses context, the prompt does the heavy lifting, and the cost scales linearly with every step the agent takes. Optimisations happen at the prompt level, the context level, and the API level — none of them at the architecture level.",
+    },
+    {
+      label: "The heterogeneous SLM stack",
+      body: "A frontier model for the strategic-decision step. Specialised SLMs for parsing, routing, format conversion, tool-calling, and structured output. RAG for grounding. A distilled verification classifier checking reasoning integrity on critical paths. Most of the calls run on the cheap models. The frontier model is reserved for the part of the task that actually needs it. Operating cost falls by 80% or more. Reliability rises because the failure modes are explicit and bounded.",
+    },
+  ]}
+/>
+
+<Prose>
+The reason the second architecture isn't the default in May 2026
+isn't that it doesn't work. It's that nobody whose business
+depends on the first architecture has any reason to push it. The
+Karpathy line worth thinking about is the one about cognitive
+architectures shifting from monolithic to modular as a function of
+maturity, not as a function of who is selling them. The shift to
+modular is already happening at companies that have done the
+math. It will start showing up in published case studies through
+2026.
+</Prose>
+
+<SectionDivider number="06" label="What to actually build" />
+
+<TradeoffTable
+  rows={[
+    {
+      job: "Sub-agents doing structured work",
+      pick: "Qwen3.6-35B-A3B · Gemma 4 26B MoE · xLAM-2-8B",
+      why: "Tool-calling, parsing, routing, format conversion. The capability gap to frontier models on these specific tasks is below 5 percentage points. The cost gap is 10× or more. The latency gap (3B active parameters vs 200B+ active) is the difference between a useful agent loop and a frustrating one.",
+    },
+    {
+      job: "Specialised reasoning",
+      pick: "Phi-4-reasoning · DeepSeek V4-Pro · Gemma 4 31B Dense",
+      why: "Math, coding, planning — anywhere process matters. Phi-4-reasoning at 14B matches DeepSeek-R1-Distill-Llama-70B. Gemma 4 31B matches Llama 4 (~400B). These are not approximations of frontier capability. They are the frontier on a meaningful subset of the work.",
+    },
+    {
+      job: "Strategic decisions · novel reasoning",
+      pick: "Claude Opus 4.7 · GPT-5.5 · Gemini 3.1 Pro · DeepSeek V4-Pro",
+      why: "ARC-AGI-3-class novelty, ambiguous strategic planning, the work where the model genuinely has to reason rather than retrieve. Frontier-only. Used sparingly. The cost is justified because the call count is small.",
+    },
+    {
+      job: "Verification and grounding (non-negotiable)",
+      pick: "RAG layer · distilled process-verification classifier",
+      why: "The Advani paper made naked-SLM deployment indefensible for any agent that touches money, health, identity, or infrastructure. RAG grounds calculations; a distilled verifier at 0.86 F1 catches the right-for-wrong-reasons failures the accuracy metric hides. Both are now cheap enough to ship.",
+    },
+  ]}
+/>
+
+<Prose>
+The six-step conversion algorithm from the NVIDIA paper still
+holds up two model generations later. Collect usage telemetry
+from the agent in production. Filter and curate the traffic.
+Cluster tasks into recurring patterns. Pick the right SLM for
+each cluster. Fine-tune iteratively, with the verification layer
+running in shadow. Promote SLMs to production traffic as each one
+clears its integrity bar. The work is unglamorous. It pays back
+within months at production volume.
+</Prose>
+
+<Closer>
+The empirical case for the heterogeneous SLM stack is now stronger
+than the case for the LLM-only stack on most agent workloads. The
+architecture isn't being sold by the labs that benefit from selling
+something else. That's the part that hasn't changed yet. It is
+also the part that buyers, not vendors, will change first.
+</Closer>
+
+<CTAPanel
+  tag="Live Index"
+  title={<>The model mix, <em>tracked weekly</em></>}
+  body="Open-weight releases, specialist tool-callers, the long tail of fine-tuned variants, and the frontier they're catching up to all move at different speeds. AgentTape tracks which models are entering production stacks, which are losing share, and where the cost-per-task numbers are actually going."
+  href="/indexes"
+  cta_label="View the live indexes"
+/>
