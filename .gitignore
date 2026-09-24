@@ -37,3 +37,7 @@ venv/
 # Logs
 *.log
 logs/
+
+# Database dumps — never commit (the repo is public).
+*.sql
+*.dump
