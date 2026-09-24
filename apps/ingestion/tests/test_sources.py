@@ -697,6 +697,8 @@ def test_fm_hn_phrase_skips_generic_single_word():
 
     assert fm_hn_phrase("Pareto") is None
     assert fm_hn_phrase("Other: Pareto") is None
+    assert fm_hn_phrase("Perplexity: Sonar") is None
+    assert fm_hn_phrase("Qwen: Qwen-Max ") == '"Qwen-Max"'
     assert fm_hn_phrase(None) is None
 
 
