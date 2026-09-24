@@ -158,12 +158,29 @@ export default function ModelsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["fm-list"],
-    queryFn: () =>
-      api.listAgents({
+    // The API caps a page at 500 and the catalogue is past that, so
+    // page until ``total`` — a single 500-row request silently hid
+    // the lowest-ranked models and made the header count read 500.
+    queryFn: async () => {
+      const PAGE = 500;
+      const first = await api.listAgents({
         entity_kind: "foundation_model",
         sort: "score",
-        limit: 500,
-      }),
+        limit: PAGE,
+      });
+      const items = [...first.items];
+      while (items.length < first.total) {
+        const next = await api.listAgents({
+          entity_kind: "foundation_model",
+          sort: "score",
+          limit: PAGE,
+          offset: items.length,
+        });
+        if (next.items.length === 0) break;
+        items.push(...next.items);
+      }
+      return { ...first, items };
+    },
   });
 
   const all = data?.items ?? [];
