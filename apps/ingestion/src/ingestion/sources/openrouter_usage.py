@@ -23,6 +23,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -90,7 +92,7 @@ class OpenRouterTokenVolume30dIngestor(Ingestor):
 # ----------------------------------------------------------------- helpers
 
 
-async def _fetch_rankings(http) -> list[dict[str, Any]] | None:
+async def _fetch_rankings(http: httpx.AsyncClient) -> list[dict[str, Any]] | None:
     """Hit the unofficial rankings endpoint, return the model list or None."""
     try:
         r = await http.get(RANKINGS, timeout=30.0)

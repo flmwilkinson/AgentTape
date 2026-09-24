@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import sys
+from typing import Any
 
 from ingestion.config import get_settings
 from ingestion.db import session_factory
@@ -35,7 +36,7 @@ logging.basicConfig(
 log = logging.getLogger("ingestion.run")
 
 
-async def _run_one_source(name: str) -> dict:
+async def _run_one_source(name: str) -> dict[str, Any]:
     settings = get_settings()
     cls = INGESTOR_BY_NAME[name]
     redis_client = await open_redis(settings)
@@ -53,12 +54,12 @@ async def _run_one_source(name: str) -> dict:
         await redis_client.aclose()
 
 
-async def _run_one_tier(name: str) -> dict:
+async def _run_one_tier(name: str) -> dict[str, Any]:
     settings = get_settings()
     return await run_tier(settings, name, TIERS[name])
 
 
-async def _run_all_tiers() -> dict:
+async def _run_all_tiers() -> dict[str, Any]:
     settings = get_settings()
     out = []
     for tier_name, classes in TIERS.items():
@@ -68,10 +69,10 @@ async def _run_all_tiers() -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ingestion.run")
-    targets = (
-        [TierName.FAST, TierName.MEDIUM, TierName.SLOW, "all"]
-        + sorted(INGESTOR_BY_NAME)
-    )
+    targets = [
+        TierName.FAST, TierName.MEDIUM, TierName.SLOW, "all",
+        *sorted(INGESTOR_BY_NAME),
+    ]
     parser.add_argument(
         "target",
         choices=targets,

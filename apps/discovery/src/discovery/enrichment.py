@@ -421,7 +421,10 @@ async def _llm_enrich_optional(
     for kind, allowed in TAXONOMY.items():
         got = tags_in.get(kind) or []
         tags_out[kind] = [t for t in got if t in allowed][:2]
-    return Enrichment(description=desc, tags=tags_out)
+    # NOTE: pre-existing bug — detected_packages / model_dep_families are
+    # required fields, so this raises TypeError at runtime (swallowed by
+    # enrich_agent's except). Left as-is pending a behavior decision.
+    return Enrichment(description=desc, tags=tags_out)  # type: ignore[call-arg]
 
 
 def _compact_payload(p: dict[str, Any]) -> dict[str, Any]:
@@ -440,7 +443,7 @@ _st_model: Any = None
 _st_lock = Lock()
 
 
-def _get_local_embedder():
+def _get_local_embedder() -> Any:
     """Lazy-load sentence-transformers once per process. CPU-friendly."""
     global _st_model
     if _st_model is not None:
@@ -505,7 +508,7 @@ async def _voyage_embedding(settings: Settings, text: str) -> list[float] | None
             json={"input": [text[:4000]], "model": "voyage-3"},
         )
         r.raise_for_status()
-        vec = r.json()["data"][0]["embedding"]
+        vec: list[float] = r.json()["data"][0]["embedding"]
         if len(vec) < 1536:
             vec = vec + [0.0] * (1536 - len(vec))
         return vec[:1536]

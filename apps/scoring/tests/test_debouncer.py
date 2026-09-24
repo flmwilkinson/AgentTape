@@ -7,8 +7,6 @@ from __future__ import annotations
 import time
 import uuid
 
-import pytest
-
 from scoring.config import Settings
 from scoring.debouncer import Debouncer
 

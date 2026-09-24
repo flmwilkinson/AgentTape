@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 @router.get("", response_model=Page[AgentSummary])
 async def list_agents(
+    session: Annotated[AsyncSession, Depends(get_session)],
     q: str | None = Query(None, description="Substring match on slug/name/description"),
     tag_kind: str | None = Query(None, description="Filter by tag kind (capability/domain/...)"),
     tag_value: str | None = Query(None, description="Filter by tag value"),
@@ -35,7 +36,6 @@ async def list_agents(
     sort: str = Query("score", pattern="^(score|discovered|name)$"),
     limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> Page[AgentSummary]:
     items, total = await queries.list_agents(
         session,
@@ -47,13 +47,15 @@ async def list_agents(
         limit=limit,
         offset=offset,
     )
-    return Page[AgentSummary](items=items, total=total, limit=limit, offset=offset)
+    return Page[AgentSummary](
+        items=cast("list[AgentSummary]", items), total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/{slug}", response_model=AgentDetail)
 async def get_agent(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> AgentDetail:
     detail = await queries.get_agent_by_slug(session, slug)
     if detail is None:
@@ -73,11 +75,11 @@ async def get_agent(
 
 @router.get("/{slug}/signals", response_model=list[SignalSeries])
 async def get_agent_signals(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     sources: list[str] | None = Query(None, description="Filter by signal_source values"),
     window: str = Query("30d", pattern="^(1h|1d|7d|30d|90d|all)$"),
     limit: int = Query(2000, ge=1, le=10_000),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[SignalSeries]:
     detail = await queries.get_agent_by_slug(session, slug)
     if detail is None:
@@ -95,10 +97,10 @@ async def get_agent_signals(
 
 @router.get("/{slug}/score-history")
 async def get_agent_score_history(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     window: str = Query("30d", pattern="^(1h|1d|7d|30d|90d|all)$"),
     limit: int = Query(2000, ge=1, le=10_000),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
     """Score timeseries for one agent. Used by /compare's overlay chart."""
     detail = await queries.get_agent_by_slug(session, slug)
@@ -112,8 +114,8 @@ async def get_agent_score_history(
 
 @router.get("/{slug}/benchmarks", response_model=list[BenchmarkResultOut])
 async def get_agent_benchmarks(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[BenchmarkResultOut]:
     detail = await queries.get_agent_by_slug(session, slug)
     if detail is None:
@@ -124,9 +126,9 @@ async def get_agent_benchmarks(
 
 @router.get("/{slug}/signals.csv")
 async def get_agent_signals_csv(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     window: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> StreamingResponse:
     """Raw signals as a downloadable CSV. One row per signal reading.
 
@@ -160,9 +162,9 @@ async def get_agent_signals_csv(
 
 @router.get("/{slug}/similar", response_model=list[SimilarAgent])
 async def get_similar_agents(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     limit: int = Query(10, ge=1, le=50),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[SimilarAgent]:
     detail = await queries.get_agent_by_slug(session, slug)
     if detail is None:

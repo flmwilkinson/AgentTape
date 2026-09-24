@@ -22,7 +22,7 @@ class TagWithCount(BaseModel):
 
 @router.get("", response_model=list[TagWithCount])
 async def list_tags(
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[TagWithCount]:
     rows = await queries.list_tags(session)
     return [TagWithCount(**r) for r in rows]

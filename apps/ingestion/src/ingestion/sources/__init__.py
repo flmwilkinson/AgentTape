@@ -28,10 +28,6 @@ from ingestion.sources.github_response_time import (
     GithubFirstResponseHours30dIngestor,
 )
 from ingestion.sources.google_trends import GoogleTrendsScoreIngestor
-from ingestion.sources.openrouter_pricing import OpenRouterPricingIngestor
-from ingestion.sources.openrouter_usage import (
-    OpenRouterTokenVolume30dIngestor,
-)
 from ingestion.sources.hackernews import HNMentions7dIngestor
 from ingestion.sources.huggingface import (
     HFDownloads30dIngestor,
@@ -41,6 +37,10 @@ from ingestion.sources.huggingface import (
 from ingestion.sources.mastodon_mentions import MastodonMentions7dIngestor
 from ingestion.sources.mcp import MCPRegistryListedIngestor
 from ingestion.sources.news_mentions import NewsMentionsIngestor
+from ingestion.sources.openrouter_pricing import OpenRouterPricingIngestor
+from ingestion.sources.openrouter_usage import (
+    OpenRouterTokenVolume30dIngestor,
+)
 from ingestion.sources.packages import NPMWeeklyIngestor, PyPIMonthlyIngestor
 from ingestion.sources.producthunt import ProductHuntUpvotesIngestor
 from ingestion.sources.reddit import (
@@ -76,10 +76,10 @@ __all__ = [
     "HFTrendingRankIngestor",
     "HNMentions7dIngestor",
     "Ingestor",
-    "MastodonMentions7dIngestor",
     "MCPRegistryListedIngestor",
-    "NewsMentionsIngestor",
+    "MastodonMentions7dIngestor",
     "NPMWeeklyIngestor",
+    "NewsMentionsIngestor",
     "OpenRouterPricingIngestor",
     "OpenRouterTokenVolume30dIngestor",
     "ProductHuntUpvotesIngestor",

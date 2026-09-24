@@ -22,6 +22,8 @@ from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 from urllib.parse import quote
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -66,7 +68,7 @@ class WikipediaViews30dIngestor(Ingestor):
         return [r for r in results if r is not None]
 
 
-async def _views(http, title: str, since: str, until: str) -> int | None:
+async def _views(http: httpx.AsyncClient, title: str, since: str, until: str) -> int | None:
     """Sum of daily pageviews for the article over [since, until]."""
     safe_title = quote(title.replace(" ", "_"), safe="")
     try:

@@ -5,9 +5,8 @@ import json
 import uuid
 
 import pytest
-from sqlalchemy import text
-
 from realtime import snapshots
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("_reset_data")]
 

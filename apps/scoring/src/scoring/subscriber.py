@@ -41,7 +41,7 @@ async def run_subscriber(
             _handle(debouncer, message.get("channel"), message.get("data"))
     finally:
         await pubsub.unsubscribe(*CHANNELS)
-        await pubsub.aclose()
+        await pubsub.aclose()  # type: ignore[no-untyped-call]  # redis 7.x PubSub.aclose is unannotated
         await client.aclose()
 
 

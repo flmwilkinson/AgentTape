@@ -32,7 +32,7 @@ class HNMentions7dIngestor(Ingestor):
         sem = asyncio.Semaphore(4)
 
         async def one(a: AgentRow) -> SignalReading | None:
-            params = {
+            params: dict[str, str | int] = {
                 "tags": "(story,comment)",
                 "numericFilters": f"created_at_i>{since}",
                 "hitsPerPage": 0,

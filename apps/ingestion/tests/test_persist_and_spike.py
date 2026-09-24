@@ -12,16 +12,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import pytest
-from sqlalchemy import text
-
 from ingestion.config import Settings
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("_reset_data")]
 

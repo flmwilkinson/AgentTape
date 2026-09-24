@@ -55,7 +55,7 @@ async def main() -> int:
             timeout = max(0.05, deadline - time.monotonic())
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             frame = json.loads(raw)
             if frame.get("type") != "event":

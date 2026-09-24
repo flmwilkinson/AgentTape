@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 import redis.asyncio as redis_async
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -44,12 +45,14 @@ app.add_middleware(
 # applies the limit to every route; routes that need stricter limits
 # can decorate themselves with @limiter.limit(...).
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")
-async def attach_rate_limit(request: Request, call_next):
+async def attach_rate_limit(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     # slowapi looks for ``request.state.view_rate_limit`` (a string like
     # "60/minute") to decide which bucket to count against. Setting it
     # per-request lets us key auth vs anon off the X-API-Key header.
@@ -94,7 +97,8 @@ async def ready() -> dict[str, Any]:
             socket_connect_timeout=2,
             socket_timeout=2,
         )
-        await client.ping()
+        # redis-py stubs type ping() as ``Awaitable[bool] | bool`` for both clients.
+        await cast("Awaitable[bool]", client.ping())
         await client.aclose()
         checks["redis"] = True
     except Exception as e:  # noqa: BLE001

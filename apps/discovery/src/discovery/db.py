@@ -19,7 +19,7 @@ def _async_url(url: str) -> str:
     params (``sslmode``, ``channel_binding``) that asyncpg rejects.
     Neon enforces TLS at the transport layer regardless.
     """
-    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
     if url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)

@@ -23,7 +23,7 @@ def _async_url(url: str) -> str:
          does not. We don't lose security — Neon enforces TLS at
          the transport layer regardless of the URL flag.
     """
-    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
     if url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)

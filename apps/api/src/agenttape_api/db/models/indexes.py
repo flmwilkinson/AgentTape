@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey, Numeric, String, Text, func
 from sqlalchemy import Index as SAIndex
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agenttape_api.db.base import Base
@@ -23,7 +25,7 @@ class Index(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     methodology_md: Mapped[str | None] = mapped_column(Text)
     rebalance_frequency: Mapped[str] = mapped_column(String(64), nullable=False)
-    eligibility_rules: Mapped[dict | None] = mapped_column(JSONB)
+    eligibility_rules: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class IndexMember(Base):
@@ -67,7 +69,7 @@ class IndexSnapshot(Base):
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
     composite_value: Mapped[float] = mapped_column(Numeric(20, 6), nullable=False)
-    constituents: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    constituents: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     __table_args__ = (
         SAIndex(
@@ -92,9 +94,9 @@ class Rebalance(Base):
     run_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
-    additions: Mapped[dict | None] = mapped_column(JSONB)
-    removals: Mapped[dict | None] = mapped_column(JSONB)
-    weight_changes: Mapped[dict | None] = mapped_column(JSONB)
+    additions: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    removals: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    weight_changes: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     narrative_md: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (

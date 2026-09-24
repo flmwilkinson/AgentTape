@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from realtime.config import Settings
 from realtime.connection import Connection
 
@@ -45,7 +44,7 @@ async def test_overflow_drops_oldest_and_emits_one_warning():
     while True:
         try:
             received.append(await asyncio.wait_for(it.__anext__(), timeout=0.2))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if len(received) > 6:  # safety
             break
@@ -76,7 +75,7 @@ async def test_warning_resets_after_consumer_catches_up():
     while True:
         try:
             seen.append(await asyncio.wait_for(it.__anext__(), timeout=0.2))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if len(seen) > 5:
             break
@@ -90,7 +89,7 @@ async def test_warning_resets_after_consumer_catches_up():
     while True:
         try:
             seen2.append(await asyncio.wait_for(it.__anext__(), timeout=0.2))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if len(seen2) > 5:
             break

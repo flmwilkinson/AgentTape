@@ -88,7 +88,7 @@ _MIN_TOKEN_LEN = 4
 _NOISE = {
     "agent", "code", "ai", "ml", "llm", "model", "free", "fast",
     "pro", "max", "mini", "nano", "thinking", "instruct", "preview",
-    "beta", "alpha", "experimental", "free", "chat",
+    "beta", "alpha", "experimental", "chat",
 }
 
 

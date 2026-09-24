@@ -35,13 +35,13 @@ class HFTrendingScout(Scout):
     name: ClassVar[str] = "hf_trending"
     interval_seconds: ClassVar[int] = 60 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         for kind, path in (("model", "/models"), ("space", "/spaces")):
             async for c in self._fetch(kind, path):
                 yield c
 
     async def _fetch(self, kind: str, path: str) -> AsyncIterator[Candidate]:
-        params = {"sort": "trendingScore", "direction": -1, "limit": 100, "full": "true"}
+        params: dict[str, str | int] = {"sort": "trendingScore", "direction": -1, "limit": 100, "full": "true"}
         headers = {"Accept": "application/json"}
         if self.settings.huggingface_token:
             headers["Authorization"] = f"Bearer {self.settings.huggingface_token}"

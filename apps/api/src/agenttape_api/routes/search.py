@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import APIRouter, Depends, Query
@@ -10,29 +10,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agenttape_api import queries
 from agenttape_api.deps import get_session
-from agenttape_api.schemas import SearchHit, SearchResult
+from agenttape_api.schemas import FacetCount, SearchHit, SearchResult
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
 @router.get("/suggest")
 async def search_suggest(
+    session: Annotated[AsyncSession, Depends(get_session)],
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(8, ge=1, le=20),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Fast prefix-prioritised autocomplete. Returns name+slug+kind only."""
     return await queries.search_suggest(session, q=q, limit=limit)
 
 
 @router.get("", response_model=SearchResult)
 async def search(
+    session: Annotated[AsyncSession, Depends(get_session)],
     q: str = Query(..., min_length=1, max_length=200),
     mode: str = Query("text", pattern="^(text|vibe)$"),
     limit: int = Query(20, ge=1, le=100),
     tag_kind: str | None = Query(None, max_length=64),
     tag_value: str | None = Query(None, max_length=128),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> SearchResult:
     # Vibe search uses a vector index that doesn't currently know about
     # tags, so when a facet is selected we fall back to text mode so
@@ -52,7 +52,10 @@ async def search(
     facets = await queries.facet_counts(session)
     return SearchResult(
         hits=[SearchHit(**h) for h in hits],
-        facets={k: [{"value": v["value"], "count": v["count"]} for v in vs] for k, vs in facets.items()},
+        facets=cast(
+            "dict[str, list[FacetCount]]",
+            {k: [{"value": v["value"], "count": v["count"]} for v in vs] for k, vs in facets.items()},
+        ),
     )
 
 
@@ -69,7 +72,7 @@ async def _embed(query: str) -> list[float] | None:
                 json={"input": [query[:4000]], "model": "voyage-3"},
             )
             r.raise_for_status()
-            vec = r.json()["data"][0]["embedding"]
+            vec: list[float] = r.json()["data"][0]["embedding"]
             if len(vec) < 1536:
                 vec = vec + [0.0] * (1536 - len(vec))
             return vec[:1536]

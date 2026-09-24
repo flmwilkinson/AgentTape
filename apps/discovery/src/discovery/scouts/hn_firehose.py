@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from discovery.enums import DiscoverySource
 from discovery.scouts.base import Candidate, Scout
@@ -31,7 +31,7 @@ class HNFirehoseScout(Scout):
     name: ClassVar[str] = "hn_firehose"
     interval_seconds: ClassVar[int] = 5 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         # Last 24h. The 5-min cadence means most calls return only a
         # handful of new stories; the wider window catches anything
         # missed during downtime.
@@ -54,7 +54,7 @@ class HNFirehoseScout(Scout):
                 async for c in self._candidates_from_hit(hit):
                     yield c
 
-    async def _candidates_from_hit(self, hit: dict) -> AsyncIterator[Candidate]:
+    async def _candidates_from_hit(self, hit: dict[str, Any]) -> AsyncIterator[Candidate]:
         title = hit.get("title") or ""
         url = hit.get("url") or ""
         story_text = hit.get("story_text") or ""

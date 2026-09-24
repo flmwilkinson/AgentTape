@@ -1,7 +1,7 @@
 """/events — paginated firehose for journalists."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 @router.get("", response_model=Page[EventOut])
 async def list_events(
+    session: Annotated[AsyncSession, Depends(get_session)],
     kind: str | None = Query(
         None,
         description=(
@@ -24,9 +25,8 @@ async def list_events(
     ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> Page[EventOut]:
     items, total = await queries.list_events(
         session, kind=kind, limit=limit, offset=offset
     )
-    return Page[EventOut](items=items, total=total, limit=limit, offset=offset)
+    return Page[EventOut](items=cast("list[EventOut]", items), total=total, limit=limit, offset=offset)

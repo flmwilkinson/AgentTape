@@ -12,7 +12,9 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar, cast
+
+import httpx
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -28,7 +30,7 @@ class _RedditAuth:
         self.expires_at: float = 0.0
 
     async def get(
-        self, http, client_id: str, client_secret: str, user_agent: str
+        self, http: httpx.AsyncClient, client_id: str, client_secret: str, user_agent: str
     ) -> str | None:
         if self.token and time.time() < self.expires_at - 60:
             return self.token
@@ -53,8 +55,8 @@ _AUTH = _RedditAuth()
 
 
 async def _search(
-    http, ua: str, token: str, query: str, since_ts: int
-) -> dict | None:
+    http: httpx.AsyncClient, ua: str, token: str, query: str, since_ts: int
+) -> dict[str, Any] | None:
     try:
         r = await http.get(
             "https://oauth.reddit.com/search.json",
@@ -74,7 +76,7 @@ async def _search(
         return None
     if r.status_code != 200:
         return None
-    return r.json()
+    return cast("dict[str, Any]", r.json())
 
 
 class _RedditIngestor(Ingestor):

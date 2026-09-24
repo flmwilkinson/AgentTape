@@ -17,6 +17,7 @@ import json
 import logging
 import signal
 import sys
+from typing import Any
 
 import redis.asyncio as redis_async
 
@@ -41,11 +42,11 @@ logging.basicConfig(
 log = logging.getLogger("scoring.run")
 
 
-async def _open_redis():
+async def _open_redis() -> redis_async.Redis:
     return redis_async.from_url(get_settings().redis_url, decode_responses=True)
 
 
-async def _cmd_recompute() -> dict:
+async def _cmd_recompute() -> dict[str, Any]:
     redis_client = await _open_redis()
     try:
         async with session_factory()() as session:
@@ -59,7 +60,7 @@ async def _cmd_recompute() -> dict:
         await redis_client.aclose()
 
 
-async def _cmd_rebalance(slug: str | None) -> dict:
+async def _cmd_rebalance(slug: str | None) -> dict[str, Any]:
     redis_client = await _open_redis()
     try:
         async with session_factory()() as session:
@@ -71,13 +72,13 @@ async def _cmd_rebalance(slug: str | None) -> dict:
         await redis_client.aclose()
 
 
-async def _cmd_snapshot() -> dict:
+async def _cmd_snapshot() -> dict[str, Any]:
     async with session_factory()() as session:
         await ensure_indexes(session)
         return await snapshot_all_indexes(session)
 
 
-async def _cmd_init() -> dict:
+async def _cmd_init() -> dict[str, Any]:
     async with session_factory()() as session:
         await ensure_indexes(session)
     return {"initialized": list(CATALOG_BY_SLUG)}

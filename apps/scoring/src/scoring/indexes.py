@@ -32,7 +32,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -188,7 +188,7 @@ async def ensure_indexes(session: AsyncSession) -> None:
 
 async def _index_id(session: AsyncSession, slug: str) -> UUID:
     r = await session.execute(text("SELECT id FROM indexes WHERE slug = :s"), {"s": slug})
-    return r.scalar_one()
+    return cast(UUID, r.scalar_one())
 
 
 # ---------------------------------------------------------------- selection

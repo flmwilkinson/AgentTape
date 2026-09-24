@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Version comes from package.json "packageManager"; also pinning
+      # it here makes the action fail with "Multiple versions of pnpm".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -31,13 +31,19 @@ jobs:
     name: python (lint + typecheck + test)
     runs-on: ubuntu-latest
     strategy:
+      # Report every service instead of cancelling the rest on the
+      # first failure.
+      fail-fast: false
       matrix:
         service: [api, realtime, discovery, ingestion, scoring]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+          # No uv.lock in the repo; the default glob (**/uv.lock)
+          # matched nothing and failed the step.
+          cache-dependency-glob: apps/${{ matrix.service }}/pyproject.toml
       - name: Install Python 3.12
         run: uv python install 3.12
       - name: Install service deps

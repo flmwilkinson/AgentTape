@@ -67,7 +67,7 @@ class GithubSearchScout(Scout):
     name: ClassVar[str] = "github_search"
     interval_seconds: ClassVar[int] = 30 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         # 1. Free-text matches, two sort orders each.
         last_week = (datetime.now(UTC) - timedelta(days=7)).date().isoformat()
         for q in TEXT_QUERIES:
@@ -111,7 +111,8 @@ class GithubSearchScout(Scout):
             log.info("github code search needs a token; skipping")
             return {"items": []}
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
     async def _search_repos(
         self, q: str, sort: str

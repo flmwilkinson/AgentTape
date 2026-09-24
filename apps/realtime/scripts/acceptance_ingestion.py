@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import subprocess
 import sys
 import time
 
@@ -61,7 +60,7 @@ async def main() -> int:
             while True:
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=20.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return None
                 frame = json.loads(raw)
                 if frame.get("type") != "event":
@@ -72,11 +71,10 @@ async def main() -> int:
                     return frame
 
         ws_task = asyncio.create_task(read_until_tick())
-        stdout, stderr = await proc.communicate()
-        ingestion_done = time.monotonic()
+        _stdout, stderr = await proc.communicate()
         try:
             frame = await asyncio.wait_for(ws_task, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("FAIL: no tick frame arrived within 2s after ingestion finished")
             print("ingestion stderr tail:")
             sys.stdout.write(stderr.decode("utf-8", errors="replace")[-2000:])

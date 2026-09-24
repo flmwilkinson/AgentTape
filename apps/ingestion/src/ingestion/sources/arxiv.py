@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
-import feedparser
+import feedparser  # type: ignore[import-untyped]
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading

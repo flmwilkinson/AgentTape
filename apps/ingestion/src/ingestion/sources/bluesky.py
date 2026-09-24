@@ -17,6 +17,8 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 from ingestion.sources.hackernews import fm_hn_phrase
@@ -51,7 +53,7 @@ class _BskyAuth:
         # Bumped on 429 / network failure / non-200.
         self.retry_after: float = 0.0
 
-    async def get(self, http, handle: str, password: str) -> str | None:
+    async def get(self, http: httpx.AsyncClient, handle: str, password: str) -> str | None:
         now = time.time()
         if self.access_jwt and now < self.expires_at - 60:
             return self.access_jwt
@@ -93,7 +95,7 @@ class _BskyAuth:
         self._store(data, now)
         return self.access_jwt
 
-    async def _refresh(self, http, now: float) -> bool:
+    async def _refresh(self, http: httpx.AsyncClient, now: float) -> bool:
         try:
             r = await http.post(
                 f"{PDS_BASE}{REFRESH_PATH}",
@@ -185,7 +187,7 @@ def _query_for(a: AgentRow) -> str | None:
     return f'"{name}"' if " " in name else name
 
 
-async def _count(http, headers: dict[str, str], query: str, since: str) -> int | None:
+async def _count(http: httpx.AsyncClient, headers: dict[str, str], query: str, since: str) -> int | None:
     """Return total hits for the query in the past week, or None."""
     params: dict[str, Any] = {"q": query, "limit": 100, "since": since}
     try:

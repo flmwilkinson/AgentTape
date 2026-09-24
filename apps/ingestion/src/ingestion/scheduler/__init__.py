@@ -17,8 +17,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
+from apscheduler.triggers.interval import IntervalTrigger  # type: ignore[import-untyped]
 
 from ingestion.config import Settings, get_settings
 from ingestion.db import session_factory
@@ -102,7 +102,7 @@ def build_schedulers(settings: Settings | None = None) -> dict[str, AsyncIOSched
         if s.strip()
     }
 
-    plan = (
+    plan: tuple[tuple[str, list[type[Ingestor]], int], ...] = (
         (TierName.FAST, FAST, settings.fast_tier_seconds),
         (TierName.MEDIUM, MEDIUM, settings.medium_tier_seconds),
         (TierName.SLOW, SLOW, settings.slow_tier_seconds),

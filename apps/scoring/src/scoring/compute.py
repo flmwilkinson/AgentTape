@@ -34,10 +34,10 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scoring.config import Settings, get_settings
@@ -186,13 +186,13 @@ def scaled(value: float, source: SignalSource) -> float:
             0.0,
             min(100.0, 100.0 - 50.0 * math.log10(value + 1) / math.log10(anchor + 1)),
         )
-    anchor = ANCHORS.get(source)
-    if anchor is None:
+    log_anchor = ANCHORS.get(source)
+    if log_anchor is None:
         # Unknown signal — neutral score. Shouldn't happen if enums match.
         return 50.0
     if value < 0:
         value = 0.0
-    return min(100.0, 50.0 * math.log10(value + 1) / math.log10(anchor + 1))
+    return min(100.0, 50.0 * math.log10(value + 1) / math.log10(log_anchor + 1))
 
 
 def scaled_roc(now: float, then: float) -> float:
@@ -573,7 +573,7 @@ async def _agent_kind(session: AsyncSession, agent_id: UUID) -> str:
     return (row[0] if row and row[0] else "application")
 
 
-async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict | None:
+async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict[str, Any] | None:
     r = await session.execute(
         text("SELECT manipulation_flags FROM agents WHERE id = :id"),
         {"id": agent_id},
@@ -582,7 +582,7 @@ async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict | None:
     return row[0] if row and row[0] else None
 
 
-def _excluded_sources(manipulation_flags: dict | None) -> set[SignalSource]:
+def _excluded_sources(manipulation_flags: dict[str, Any] | None) -> set[SignalSource]:
     if not manipulation_flags:
         return set()
     out: set[SignalSource] = set()
@@ -599,7 +599,7 @@ def _excluded_sources(manipulation_flags: dict | None) -> set[SignalSource]:
     return out
 
 
-def _manipulation_resistance(manipulation_flags: dict | None) -> float:
+def _manipulation_resistance(manipulation_flags: dict[str, Any] | None) -> float:
     if not manipulation_flags:
         return 1.0
     n = len(manipulation_flags)
@@ -912,10 +912,10 @@ async def persist_score(
             "mr": pillars.manipulation_resistance,
         },
     )
-    return r.scalar_one()
+    return cast(UUID, r.scalar_one())
 
 
-def _scores_equal(prev, pillars: PillarScores) -> bool:
+def _scores_equal(prev: Row[Any], pillars: PillarScores) -> bool:
     """Compare a stored score row to a freshly-computed PillarScores.
 
     Float-noise tolerance: anything within 0.01 of the prior on every

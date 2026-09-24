@@ -26,7 +26,7 @@ class OpenRouterModelsScout(Scout):
     name: ClassVar[str] = "openrouter_models"
     interval_seconds: ClassVar[int] = 24 * 60 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         try:
             r = await self._http.get("https://openrouter.ai/api/v1/models")
         except Exception as e:  # noqa: BLE001

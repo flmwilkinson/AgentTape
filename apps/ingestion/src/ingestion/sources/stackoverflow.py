@@ -18,7 +18,9 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
+
+import httpx
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -86,7 +88,7 @@ def _tag_for(a: AgentRow) -> str | None:
     return name
 
 
-async def _count(http, tag: str, params: dict) -> int | None:
+async def _count(http: httpx.AsyncClient, tag: str, params: dict[str, Any]) -> int | None:
     try:
         r = await http.get(
             f"{API}/questions",

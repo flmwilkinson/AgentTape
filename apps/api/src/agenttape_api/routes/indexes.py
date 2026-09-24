@@ -21,7 +21,7 @@ router = APIRouter(prefix="/indexes", tags=["indexes"])
 
 @router.get("", response_model=list[IndexSummary])
 async def list_indexes(
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[IndexSummary]:
     rows = await queries.list_indexes(session)
     return [IndexSummary(**r) for r in rows]
@@ -31,8 +31,8 @@ async def list_indexes(
 # so /indexes/histories doesn't match the slug-pattern route below.
 @router.get("/histories", response_model=dict[str, list[IndexSnapshotOut]])
 async def get_all_index_histories(
+    session: Annotated[AsyncSession, Depends(get_session)],
     window: str = Query("30d", pattern="^(1d|7d|30d|90d|all)$"),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> dict[str, list[IndexSnapshotOut]]:
     """Returns ``{ slug: [snapshots] }`` for every index in one query.
 
@@ -53,8 +53,8 @@ async def get_all_index_histories(
 
 @router.get("/{slug}", response_model=IndexDetail)
 async def get_index(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> IndexDetail:
     detail = await queries.get_index_detail(session, slug)
     if detail is None:
@@ -64,10 +64,10 @@ async def get_index(
 
 @router.get("/{slug}/history", response_model=list[IndexSnapshotOut])
 async def get_index_history(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     window: str = Query("30d", pattern="^(1d|7d|30d|90d|all)$"),
     limit: int = Query(2000, ge=1, le=10_000),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[IndexSnapshotOut]:
     rows = await queries.index_history(
         session, slug=slug, since=_window_to_since(window), limit=limit
@@ -77,9 +77,9 @@ async def get_index_history(
 
 @router.get("/{slug}/rebalances", response_model=list[RebalanceOut])
 async def get_index_rebalances(
+    session: Annotated[AsyncSession, Depends(get_session)],
     slug: str,
     limit: int = Query(50, ge=1, le=200),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[RebalanceOut]:
     rows = await queries.index_rebalances(session, slug=slug, limit=limit)
     return [RebalanceOut(**r) for r in rows]

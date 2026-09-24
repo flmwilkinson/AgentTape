@@ -12,7 +12,6 @@ import os
 import sys
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 import pytest_asyncio

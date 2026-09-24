@@ -28,7 +28,15 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "ASYNC", "RUF"]
-ignore = ["E501"]
+ignore = [
+    "E501",
+    # House style, not defects:
+    "RUF001", "RUF002", "RUF003",  # em dashes / arrows in prose
+    "RUF100",  # "noqa: BLE001" markers document intent even with BLE off
+    "UP042",   # StrEnum changes str() of the existing enums
+    "B008",    # FastAPI Query()/Depends() defaults
+    "N806",    # class aliases like TrendReq = _get_pytrends_cls()
+]
 
 [tool.mypy]
 python_version = "3.12"

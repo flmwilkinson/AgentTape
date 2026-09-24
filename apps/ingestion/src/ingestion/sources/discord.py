@@ -21,6 +21,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -56,7 +58,7 @@ class DiscordMembersIngestor(Ingestor):
         return [r for r in results if r is not None]
 
 
-async def _members(http, code: str) -> int | None:
+async def _members(http: httpx.AsyncClient, code: str) -> int | None:
     """Approximate member count for the invite, or None on error.
 
     A stale or revoked invite returns 404 — we treat that as "data

@@ -17,6 +17,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -62,7 +64,7 @@ class GithubReleases90dIngestor(Ingestor):
 
 
 async def _release_count(
-    http,
+    http: httpx.AsyncClient,
     headers: dict[str, str],
     owner: str,
     repo: str,

@@ -26,7 +26,7 @@ class MCPRegistriesScout(Scout):
     name: ClassVar[str] = "mcp_registries"
     interval_seconds: ClassVar[int] = 6 * 60 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         async for c in self._fetch_official():
             yield c
         async for c in self._fetch_glama():
@@ -35,7 +35,7 @@ class MCPRegistriesScout(Scout):
     async def _fetch_official(self) -> AsyncIterator[Candidate]:
         cursor: str | None = None
         for _ in range(10):  # cap pagination depth
-            params = {"limit": 100}
+            params: dict[str, str | int] = {"limit": 100}
             if cursor:
                 params["cursor"] = cursor
             r = await self._http.get(

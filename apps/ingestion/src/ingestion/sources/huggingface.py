@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import ClassVar
+from typing import ClassVar, cast
+
+import httpx
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -123,7 +125,7 @@ class HFTrendingRankIngestor(Ingestor):
 
 
 async def _hf_model_metric(
-    http, hf_id: str, token: str | None, field: str
+    http: httpx.AsyncClient, hf_id: str, token: str | None, field: str
 ) -> int | None:
     try:
         r = await http.get(
@@ -134,10 +136,10 @@ async def _hf_model_metric(
     if r.status_code != 200:
         return None
     data = r.json()
-    return data.get(field)
+    return cast("int | None", data.get(field))
 
 
-async def _fetch_trending_ranks(http, token: str | None) -> dict[str, int]:
+async def _fetch_trending_ranks(http: httpx.AsyncClient, token: str | None) -> dict[str, int]:
     try:
         r = await http.get(
             f"{HF_API}/models",

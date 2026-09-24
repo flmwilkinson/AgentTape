@@ -46,7 +46,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -330,7 +330,7 @@ class ArtificialAnalysisIngestor(Ingestor):
 # ----------------------------------------------------------------- helpers
 
 
-def _dig(obj: dict, path: str) -> Any:
+def _dig(obj: dict[str, Any], path: str) -> Any:
     """Walk a dotted path into a nested dict. Returns None on miss."""
     cur: Any = obj
     for part in path.split("."):
@@ -367,7 +367,7 @@ async def _ensure_benchmark(
     r = await session.execute(
         text("SELECT id FROM benchmarks WHERE name = :n"), {"n": slug}
     )
-    return r.scalar_one()
+    return cast(UUID, r.scalar_one())
 
 
 async def _latest_results(

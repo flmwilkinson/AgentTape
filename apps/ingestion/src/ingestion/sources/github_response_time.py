@@ -21,6 +21,8 @@ import statistics
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -69,7 +71,7 @@ class GithubFirstResponseHours30dIngestor(Ingestor):
 
 
 async def _median_response_hours(
-    http,
+    http: httpx.AsyncClient,
     headers: dict[str, str],
     owner: str,
     repo: str,
@@ -133,7 +135,7 @@ async def _median_response_hours(
 
 
 async def _first_non_op_comment(
-    http,
+    http: httpx.AsyncClient,
     headers: dict[str, str],
     owner: str,
     repo: str,

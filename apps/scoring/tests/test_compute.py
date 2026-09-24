@@ -15,17 +15,14 @@ from __future__ import annotations
 
 import random
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
-
 from scoring.compute import (
-    all_admitted_agent_ids,
     compute_for_agent,
     population_stats,
     recompute_agents,
 )
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("_reset_data")]
 

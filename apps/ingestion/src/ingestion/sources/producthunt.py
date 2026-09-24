@@ -16,6 +16,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -93,7 +95,7 @@ def _slug_for(a: AgentRow) -> str | None:
     return slug
 
 
-async def _votes(http, headers: dict[str, str], slug: str) -> int | None:
+async def _votes(http: httpx.AsyncClient, headers: dict[str, str], slug: str) -> int | None:
     try:
         r = await http.post(
             GRAPHQL_URL,

@@ -16,8 +16,8 @@ import sys
 
 from ingestion.config import get_settings
 from ingestion.scheduler import run_tier
-from ingestion.tiers import SLOW, TierName
 from ingestion.telemetry import init as init_telemetry
+from ingestion.tiers import SLOW, TierName
 
 init_telemetry("agenttape-slow-tier")
 log = logging.getLogger(__name__)

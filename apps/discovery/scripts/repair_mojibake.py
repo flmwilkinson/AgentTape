@@ -17,11 +17,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from discovery.config import get_settings
 from discovery.enrichment import _MOJIBAKE_FIXES, _clean_text
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("repair_mojibake")

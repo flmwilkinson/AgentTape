@@ -18,6 +18,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -53,7 +55,7 @@ class DockerHubPulls30dIngestor(Ingestor):
         return [r for r in results if r is not None]
 
 
-async def _pull_count(http, repo: str) -> int | None:
+async def _pull_count(http: httpx.AsyncClient, repo: str) -> int | None:
     """Lifetime pull_count for the Docker Hub repo, or None on miss.
 
     Docker Hub does not expose a 30-day window in this endpoint — the

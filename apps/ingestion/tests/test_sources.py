@@ -10,7 +10,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from ingestion.config import Settings
 from ingestion.enums import SignalSource
 from ingestion.sources.arxiv import ArxivIngestor
@@ -36,18 +35,18 @@ def _client(handler) -> httpx.AsyncClient:
 
 
 def _agent(**overrides: Any) -> AgentRow:
-    base = dict(
-        id=uuid.uuid4(),
-        slug="example-agent",
-        name="Example Agent",
-        github_repo="example/agent",
-        hf_org=None,
-        hf_model_ids=None,
-        package_names=None,
-        arxiv_ids=None,
-        facts=None,
-        entity_kind="application",
-    )
+    base = {
+        "id": uuid.uuid4(),
+        "slug": "example-agent",
+        "name": "Example Agent",
+        "github_repo": "example/agent",
+        "hf_org": None,
+        "hf_model_ids": None,
+        "package_names": None,
+        "arxiv_ids": None,
+        "facts": None,
+        "entity_kind": "application",
+    }
     base.update(overrides)
     return AgentRow(**base)
 
@@ -581,6 +580,7 @@ def test_fm_leaderboards_find_agent_prefers_shortest_slug():
     canonical slug or the -fast variant.
     """
     import uuid
+
     from ingestion.sources.fm_leaderboards import _find_agent_for_name, _normalize
 
     canonical_id = uuid.uuid4()
@@ -602,6 +602,7 @@ def test_fm_leaderboards_find_agent_swe_bench_harness_format():
     prefix + decorators and still find the model.
     """
     import uuid
+
     from ingestion.sources.fm_leaderboards import _find_agent_for_name, _normalize
 
     opus_id = uuid.uuid4()
@@ -657,7 +658,7 @@ def test_aa_benchmark_field_map_covers_intelligence_index():
     # The composite itself is also a benchmark.
     assert "evaluations.artificial_analysis_intelligence_index" in BENCHMARK_FIELD_MAP
     # All entries map to (slug, category) tuples.
-    for aa_field, mapped in BENCHMARK_FIELD_MAP.items():
+    for mapped in BENCHMARK_FIELD_MAP.values():
         assert isinstance(mapped, tuple) and len(mapped) == 2
 
 

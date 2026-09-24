@@ -11,13 +11,12 @@ testcontainers. They verify that:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -93,7 +92,7 @@ async def test_signals_routes_rows_to_correct_monthly_partition(
     )
 
     # Use this month and next month — the migration pre-creates both.
-    now = datetime.now(timezone.utc).replace(day=15, hour=12, minute=0, second=0, microsecond=0)
+    now = datetime.now(UTC).replace(day=15, hour=12, minute=0, second=0, microsecond=0)
     next_month = (now.replace(day=1) + timedelta(days=40)).replace(day=15)
 
     for ts in (now, next_month):
@@ -127,7 +126,7 @@ async def test_partition_helper_creates_future_partition(
     session: AsyncSession,
 ) -> None:
     """The ingestion service calls agenttape_create_signals_partition ahead of each month."""
-    far_future = datetime(2099, 7, 1, tzinfo=timezone.utc).date()
+    far_future = datetime(2099, 7, 1, tzinfo=UTC).date()
     await session.execute(
         text("SELECT agenttape_create_signals_partition(:d)"),
         {"d": far_future},
@@ -184,7 +183,7 @@ async def test_current_scores_returns_latest_per_agent(session: AsyncSession) ->
     a = await _insert_agent(session, "agent-a")
     b = await _insert_agent(session, "agent-b")
 
-    base = datetime.now(timezone.utc) - timedelta(hours=3)
+    base = datetime.now(UTC) - timedelta(hours=3)
     await _insert_score(session, a, base, 1.0)
     await _insert_score(session, a, base + timedelta(hours=1), 2.0)
     await _insert_score(session, a, base + timedelta(hours=2), 3.0)  # latest for A
@@ -215,7 +214,7 @@ async def test_current_scores_one_row_per_agent_under_load(
     agent_ids = [
         await _insert_agent(session, f"loadtest-{i:03d}") for i in range(n_agents)
     ]
-    base = datetime.now(timezone.utc) - timedelta(days=1)
+    base = datetime.now(UTC) - timedelta(days=1)
 
     for i, aid in enumerate(agent_ids):
         for k in range(scores_per_agent):

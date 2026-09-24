@@ -32,6 +32,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -130,7 +132,7 @@ def _query_term(a: AgentRow) -> str | None:
     return f'"{name}"'
 
 
-async def _count(http, headers: dict[str, str], term: str) -> int | None:
+async def _count(http: httpx.AsyncClient, headers: dict[str, str], term: str) -> int | None:
     """Return total repo count for the search term across all of
     GitHub, or None on any API failure.
 
@@ -138,7 +140,7 @@ async def _count(http, headers: dict[str, str], term: str) -> int | None:
     exist; that's fine — our anchor is 100, so anything that would
     saturate at 1000 also pegs the 100 ceiling on scaled().
     """
-    params = {"q": term, "per_page": 1}
+    params: dict[str, str | int] = {"q": term, "per_page": 1}
     try:
         r = await http.get(CODE_SEARCH, headers=headers, params=params)
     except Exception:  # noqa: BLE001

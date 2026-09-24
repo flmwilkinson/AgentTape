@@ -64,7 +64,7 @@ class MastodonMentions7dIngestor(Ingestor):
             instance: str, term: str
         ) -> set[str]:
             url = f"https://{instance}/api/v2/search"
-            params = {
+            params: dict[str, str | int] = {
                 "q": term,
                 "type": "statuses",
                 "limit": 40,

@@ -14,7 +14,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------- score
 
 
@@ -145,7 +144,7 @@ class AgentDetail(AgentSummary):
     eligibility_score: float | None
     eligibility_reasons: dict[str, Any] | None
     manipulation_flags: dict[str, Any] | None
-    tags: list[TagOut]
+    tags: list[TagOut]  # type: ignore[assignment]  # pydantic field override narrows the base's dict shape
     # Source-of-truth metadata not on the row itself (e.g. OpenRouter
     # context_length, pricing, modality for foundation models).
     facts: dict[str, Any] = Field(default_factory=dict)
@@ -258,7 +257,7 @@ class EventOut(BaseModel):
 T = TypeVar("T")
 
 
-class Page(BaseModel, Generic[T]):
+class Page(BaseModel, Generic[T]):  # noqa: UP046 — pydantic generic
     """Cursor-less offset paging — fine for the typical 100s-of-rows list size."""
 
     items: list[T]

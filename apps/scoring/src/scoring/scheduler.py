@@ -19,16 +19,18 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import redis.asyncio as redis_async
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import text
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
+from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
+from apscheduler.triggers.interval import IntervalTrigger  # type: ignore[import-untyped]
+from sqlalchemy import CursorResult, text
 
 from scoring.compute import all_admitted_agent_ids, recompute_agents
 from scoring.config import Settings, get_settings
-from scoring.db import engine as get_engine, session_factory
+from scoring.db import engine as get_engine
+from scoring.db import session_factory
 from scoring.indexes import ensure_indexes, rebalance_all, snapshot_all_indexes
 
 log = logging.getLogger(__name__)
@@ -176,7 +178,7 @@ async def _retention_cleanup_job() -> None:
                     {"cutoff": dc_cutoff},
                 ),
             ):
-                r = await session.execute(text(sql), params)
+                r = cast(CursorResult[Any], await session.execute(text(sql), params))
                 affected[label] = r.rowcount if r.rowcount is not None else -1
             await session.commit()
         log.info("retention deletes: %s", affected)

@@ -1,12 +1,9 @@
 """Index + rebalance tests."""
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
-from sqlalchemy import text
-
 from scoring.compute import recompute_agents
 from scoring.indexes import (
     CATALOG_BY_SLUG,
@@ -14,6 +11,7 @@ from scoring.indexes import (
     rebalance_index,
     snapshot_all_indexes,
 )
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("_reset_data")]
 

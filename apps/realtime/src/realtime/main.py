@@ -20,7 +20,9 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import AbstractAsyncContextManager
+from typing import Any, cast
 
 import redis.asyncio as redis_async
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -87,7 +89,7 @@ async def ready() -> dict[str, Any]:
             socket_connect_timeout=2,
             socket_timeout=2,
         )
-        await client.ping()
+        await cast(Awaitable[bool], client.ping())
         await client.aclose()
         checks["redis"] = True
     except Exception as e:  # noqa: BLE001
@@ -121,7 +123,7 @@ def _client_ip(websocket: WebSocket) -> str:
 
 async def _enforce_limit(
     websocket: WebSocket, stream_key: str
-):
+) -> AbstractAsyncContextManager[None] | None:
     """Reserve a slot or close the socket. Returns the reserve cm or None."""
     ip = _client_ip(websocket)
     cm = reserve(ip, stream_key)
@@ -222,7 +224,7 @@ async def ws_watchlist(websocket: WebSocket) -> None:
         try:
             raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
             slugs = list((json.loads(raw) or {}).get("slugs") or [])
-        except (asyncio.TimeoutError, json.JSONDecodeError):
+        except (TimeoutError, json.JSONDecodeError):
             await websocket.close(code=4400, reason="no slugs supplied")
             return
     if not slugs:
@@ -254,11 +256,11 @@ async def _forward_ws(conn: Connection, websocket: WebSocket) -> None:
 
 
 @app.get("/sse/ticker", tags=["sse"])
-async def sse_ticker():
+async def sse_ticker() -> EventSourceResponse:
     conn = Connection(["events.global"])
     await conn.start()
 
-    async def gen():
+    async def gen() -> AsyncIterator[dict[str, Any]]:
         try:
             async with session_factory()() as session:
                 yield {
@@ -274,7 +276,7 @@ async def sse_ticker():
 
 
 @app.get("/sse/agent/{slug}", tags=["sse"])
-async def sse_agent(slug: str):
+async def sse_agent(slug: str) -> EventSourceResponse:
     async with session_factory()() as session:
         snap = await snapshots.agent_snapshot(session, slug)
     if snap is None:
@@ -283,7 +285,7 @@ async def sse_agent(slug: str):
     conn = Connection([f"events.agent.{slug}"])
     await conn.start()
 
-    async def gen():
+    async def gen() -> AsyncIterator[dict[str, Any]]:
         try:
             yield {"event": "snapshot", "data": json.dumps(snap)}
             async for frame in conn.messages():
@@ -295,7 +297,7 @@ async def sse_agent(slug: str):
 
 
 @app.get("/sse/index/{slug}", tags=["sse"])
-async def sse_index(slug: str):
+async def sse_index(slug: str) -> EventSourceResponse:
     async with session_factory()() as session:
         snap = await snapshots.index_snapshot(session, slug)
     if snap is None:
@@ -304,7 +306,7 @@ async def sse_index(slug: str):
     conn = Connection([f"events.index.{slug}"])
     await conn.start()
 
-    async def gen():
+    async def gen() -> AsyncIterator[dict[str, Any]]:
         try:
             yield {"event": "snapshot", "data": json.dumps(snap)}
             async for frame in conn.messages():
@@ -316,12 +318,12 @@ async def sse_index(slug: str):
 
 
 @app.get("/sse/watchlist", tags=["sse"])
-async def sse_watchlist(slug: list[str] = Query(..., min_length=1)):
+async def sse_watchlist(slug: list[str] = Query(..., min_length=1)) -> EventSourceResponse:
     channels = [f"events.agent.{s}" for s in slug]
     conn = Connection(channels)
     await conn.start()
 
-    async def gen():
+    async def gen() -> AsyncIterator[dict[str, Any]]:
         try:
             async with session_factory()() as session:
                 yield {

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis_async
 from fastapi import FastAPI, HTTPException
@@ -27,7 +28,7 @@ log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     schedulers: dict[str, Any] = {}
     if os.environ.get("INGESTION_SCHEDULER", "on").lower() != "off":
         schedulers = build_schedulers(get_settings())
@@ -65,7 +66,7 @@ async def ready() -> dict[str, Any]:
             socket_connect_timeout=2,
             socket_timeout=2,
         )
-        await client.ping()
+        await cast(Awaitable[bool], client.ping())
         await client.aclose()
         checks["redis"] = True
     except Exception as e:  # noqa: BLE001

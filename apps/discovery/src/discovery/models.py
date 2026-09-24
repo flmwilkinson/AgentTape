@@ -6,10 +6,12 @@ gives us typed handles for the rows discovery reads/writes.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import ARRAY, Enum, ForeignKey, Numeric, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from discovery.enums import (
@@ -35,7 +37,7 @@ class DiscoveryCandidate(Base):
         nullable=False,
     )
     source_id: Mapped[str] = mapped_column(String(512), nullable=False)
-    raw_payload: Mapped[dict | None] = mapped_column(JSONB)
+    raw_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     found_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
@@ -61,7 +63,7 @@ class Agent(Base):
     github_repo: Mapped[str | None] = mapped_column(String(255))
     hf_org: Mapped[str | None] = mapped_column(String(255))
     hf_model_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    package_names: Mapped[dict | None] = mapped_column(JSONB)
+    package_names: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     arxiv_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
     discovered_at: Mapped[datetime] = mapped_column(
@@ -76,11 +78,11 @@ class Agent(Base):
         server_default="pending",
     )
     eligibility_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
-    eligibility_reasons: Mapped[dict | None] = mapped_column(JSONB)
+    eligibility_reasons: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     last_admitted_check_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True)
     )
-    manipulation_flags: Mapped[dict | None] = mapped_column(JSONB)
+    manipulation_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # embedding (pgvector) is written via raw SQL; we don't bind it on the model.
 
     created_at: Mapped[datetime] = mapped_column(
@@ -103,7 +105,7 @@ class Event(Base):
     agent_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL")
     )
-    payload: Mapped[dict | None] = mapped_column(JSONB)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

@@ -18,6 +18,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -84,7 +86,7 @@ class GithubIssueCloseRate30dIngestor(Ingestor):
         return [r for r in results if r is not None]
 
 
-async def _count(http, headers: dict[str, str], q: str) -> int | None:
+async def _count(http: httpx.AsyncClient, headers: dict[str, str], q: str) -> int | None:
     """Total_count for a /search/issues query, or None on transient error."""
     try:
         r = await http.get(

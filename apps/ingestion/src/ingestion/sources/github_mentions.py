@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
+
+import httpx
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -104,14 +105,14 @@ def _query_term(a: AgentRow) -> str | None:
     return f'"{name}"'
 
 
-async def _count(http, headers: dict[str, str], term: str, since: str) -> int | None:
+async def _count(http: httpx.AsyncClient, headers: dict[str, str], term: str, since: str) -> int | None:
     """Return total repo count for the search term in past 7d, or None."""
     # GitHub code search supports a pushed: qualifier on the repo, so
     # we filter to repos updated in the last week. The Search API
     # caps total_count at 1000 even when more matches exist; that's
     # fine — our anchor is 20 mentions, so anything saturating at
     # 1000 just hits the 100 cap on scaled().
-    params = {
+    params: dict[str, str | int] = {
         "q": f"{term} pushed:>{since}",
         "per_page": 1,  # we only need the count
     }

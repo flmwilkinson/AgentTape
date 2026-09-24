@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from alembic import op
 
-
 revision = "0013_efficiency_view"
 down_revision = "0012_efficiency_signals"
 branch_labels = None

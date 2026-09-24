@@ -49,7 +49,7 @@ class Debouncer:
                     self._stop.wait(),
                     timeout=self._tick_interval(),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             await self.flush(redis_client)
 

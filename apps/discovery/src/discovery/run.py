@@ -61,7 +61,7 @@ async def _run_all() -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="discovery.run")
-    targets = sorted(SCOUT_BY_NAME) + ["promoter", "all"]
+    targets = [*sorted(SCOUT_BY_NAME), "promoter", "all"]
     parser.add_argument(
         "target",
         choices=targets,

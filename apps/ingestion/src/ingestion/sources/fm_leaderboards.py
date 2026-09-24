@@ -22,9 +22,10 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 from uuid import UUID
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -256,8 +257,8 @@ def _name_variants(name: str) -> list[str]:
 
 def _find_agent_for_name(
     name: str,
-    sorted_agent_norms: list[tuple[str, "UUID"]],
-) -> "UUID | None":
+    sorted_agent_norms: list[tuple[str, UUID]],
+) -> UUID | None:
     """Best-effort match from a leaderboard's published model name to
     one of our admitted agents.
 
@@ -411,7 +412,7 @@ async def _ensure_benchmark(
         {"n": name, "u": url, "m": max_score},
     )
     r = await session.execute(text("SELECT id FROM benchmarks WHERE name = :n"), {"n": name})
-    return r.scalar_one()
+    return cast(UUID, r.scalar_one())
 
 
 async def _upsert_result(
@@ -460,7 +461,7 @@ async def _upsert_result(
 
 
 async def _fetch_rows(
-    http,
+    http: httpx.AsyncClient,
     board: _Leaderboard,
     *,
     hf_token: str | None = None,
@@ -495,7 +496,7 @@ async def _fetch_rows(
 
 
 async def _fetch_hf_paginated(
-    http,
+    http: httpx.AsyncClient,
     base_url: str,
     parser: str = "hf_dataset_rows",
     *,

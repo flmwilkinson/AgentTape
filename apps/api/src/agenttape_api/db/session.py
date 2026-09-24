@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -17,7 +18,7 @@ def _async_url(url: str) -> str:
     params (``sslmode``, ``channel_binding``) that asyncpg rejects.
     Neon enforces TLS at the transport layer regardless.
     """
-    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
     if url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
@@ -35,11 +36,11 @@ def get_database_url() -> str:
     return _async_url(url)
 
 
-_engine = None
+_engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def engine():  # type: ignore[no-untyped-def]
+def engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         _engine = create_async_engine(get_database_url(), pool_pre_ping=True)

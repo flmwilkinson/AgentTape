@@ -23,6 +23,7 @@ SCOUT_BY_NAME: dict[str, type[Scout]] = {cls.name: cls for cls in ALL_SCOUTS}
 
 __all__ = [
     "ALL_SCOUTS",
+    "SCOUT_BY_NAME",
     "ArxivScout",
     "Candidate",
     "GithubSearchScout",
@@ -30,6 +31,5 @@ __all__ = [
     "HNFirehoseScout",
     "MCPRegistriesScout",
     "PackageSearchScout",
-    "SCOUT_BY_NAME",
     "Scout",
 ]

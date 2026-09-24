@@ -15,11 +15,11 @@ router = APIRouter(prefix="/discovery", tags=["discovery"])
 
 @router.get("/recent", response_model=list[AgentSummary])
 async def recent_admissions(
+    session: Annotated[AsyncSession, Depends(get_session)],
     limit: int = Query(50, ge=1, le=200),
     entity_kind: str | None = Query(
         None, pattern="^(application|foundation_model)$"
     ),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[AgentSummary]:
     rows = await queries.recent_admissions(
         session, limit=limit, entity_kind=entity_kind

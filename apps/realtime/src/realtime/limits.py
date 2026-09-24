@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -35,12 +36,12 @@ PER_STREAM_LIMIT = 1
 PER_IP_LIMIT = 10
 
 
-class WSLimitExceeded(Exception):
+class WSLimitExceeded(Exception):  # noqa: N818 — public name, imported by main
     pass
 
 
 @asynccontextmanager
-async def reserve(ip: str, stream_key: str):
+async def reserve(ip: str, stream_key: str) -> AsyncIterator[None]:
     """Reserve a connection slot, yield, release on exit."""
     async with _lock:
         if _state.per_stream[(ip, stream_key)] >= PER_STREAM_LIMIT:

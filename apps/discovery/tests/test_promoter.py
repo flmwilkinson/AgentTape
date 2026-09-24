@@ -15,9 +15,8 @@ import json
 import uuid
 
 import pytest
-from sqlalchemy import text
-
 from discovery.promoter import run_promoter, score_candidate
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("_reset_data")]
 

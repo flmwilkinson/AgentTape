@@ -11,6 +11,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -45,7 +47,7 @@ class MCPRegistryListedIngestor(Ingestor):
         return out
 
 
-async def _from_official(http) -> set[str]:
+async def _from_official(http: httpx.AsyncClient) -> set[str]:
     out: set[str] = set()
     cursor = None
     for _ in range(10):
@@ -76,7 +78,7 @@ async def _from_official(http) -> set[str]:
     return out
 
 
-async def _from_glama(http) -> set[str]:
+async def _from_glama(http: httpx.AsyncClient) -> set[str]:
     out: set[str] = set()
     page = 1
     for _ in range(10):

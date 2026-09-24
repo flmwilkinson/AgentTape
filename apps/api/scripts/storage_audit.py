@@ -52,7 +52,7 @@ async def main() -> None:
     if url.startswith("postgresql://"):
         url = "postgresql+asyncpg://" + url[len("postgresql://") :]
     # asyncpg doesn't accept libpq-only query params; strip them.
-    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
     parts = urlsplit(url)
     drop = {"sslmode", "channel_binding"}
     qs = [(k, v) for k, v in parse_qsl(parts.query) if k not in drop]

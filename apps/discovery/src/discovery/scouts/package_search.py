@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from discovery.enums import DiscoverySource
 from discovery.scouts.base import Candidate, Scout
@@ -56,7 +56,7 @@ class PackageSearchScout(Scout):
     name: ClassVar[str] = "package_search"
     interval_seconds: ClassVar[int] = 24 * 60 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         async for c in self._npm():
             yield c
         async for c in self._pypi():
@@ -113,7 +113,7 @@ class PackageSearchScout(Scout):
             )
 
 
-def _gh_from_links(links: dict) -> str | None:
+def _gh_from_links(links: dict[str, Any]) -> str | None:
     for key in ("repository", "homepage", "bugs"):
         v = (links.get(key) or "").lower()
         if "github.com/" in v:
@@ -124,7 +124,7 @@ def _gh_from_links(links: dict) -> str | None:
     return None
 
 
-def _gh_from_pypi(urls: dict, home_page: str | None) -> str | None:
+def _gh_from_pypi(urls: dict[str, Any], home_page: str | None) -> str | None:
     candidates = list(urls.values()) + ([home_page] if home_page else [])
     for v in candidates:
         if not v:

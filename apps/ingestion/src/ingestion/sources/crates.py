@@ -16,6 +16,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
+import httpx
+
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
@@ -54,7 +56,7 @@ class CratesDownloads90dIngestor(Ingestor):
         return [r for r in results if r is not None]
 
 
-async def _recent_downloads(http, name: str) -> int | None:
+async def _recent_downloads(http: httpx.AsyncClient, name: str) -> int | None:
     """90-day download count for the named crate, or None."""
     try:
         r = await http.get(API.format(name=name))

@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import sys
+from datetime import UTC
 from typing import Any
 
 
@@ -47,9 +48,9 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Python's formatTime doesn't expand %f — build the timestamp by hand
         # so we get millisecond precision in ISO8601 form.
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        ts = datetime.fromtimestamp(record.created, tz=UTC)
         payload: dict[str, Any] = {
             "ts": ts.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             "level": record.levelname,

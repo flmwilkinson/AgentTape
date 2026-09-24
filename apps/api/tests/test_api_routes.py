@@ -7,7 +7,6 @@ assertions on the strict ScoreEnvelope shape.
 """
 from __future__ import annotations
 
-import json
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -15,7 +14,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 from agenttape_api.main import app
 
 API_DIR = Path(__file__).resolve().parents[1]

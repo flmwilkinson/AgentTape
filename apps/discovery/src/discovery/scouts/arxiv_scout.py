@@ -20,7 +20,7 @@ import re
 from collections.abc import AsyncIterator
 from typing import ClassVar
 
-import feedparser
+import feedparser  # type: ignore[import-untyped]
 
 from discovery.enums import DiscoverySource
 from discovery.scouts.base import Candidate, Scout
@@ -41,7 +41,7 @@ class ArxivScout(Scout):
     name: ClassVar[str] = "arxiv_scout"
     interval_seconds: ClassVar[int] = 24 * 60 * 60
 
-    async def discover(self) -> AsyncIterator[Candidate]:  # type: ignore[override]
+    async def discover(self) -> AsyncIterator[Candidate]:
         r = await self._http.get(
             ARXIV_API,
             params={

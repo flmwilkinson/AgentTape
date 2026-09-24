@@ -3,11 +3,10 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
+from agenttape_api.db import models  # noqa: F401  -- register models on Base.metadata
+from agenttape_api.db.base import Base
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-
-from agenttape_api.db.base import Base
-from agenttape_api.db import models  # noqa: F401  -- register models on Base.metadata
 
 config = context.config
 

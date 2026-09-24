@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import ClassVar
 
@@ -68,7 +69,7 @@ class ArxivCitationsIngestor(Ingestor):
         results = await asyncio.gather(*(one(a) for a in agents))
         return [r for r in results if r is not None]
 
-    def _provider(self):
+    def _provider(self) -> Callable[[str], Awaitable[int | None]] | None:
         """Return an awaitable (arxiv_id) -> int|None, or None to skip."""
         if self.settings.openalex_mailto:
             mailto = self.settings.openalex_mailto

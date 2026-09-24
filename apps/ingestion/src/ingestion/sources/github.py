@@ -76,12 +76,12 @@ class GithubForksIngestor(Ingestor):
     tier: ClassVar[str] = "medium"
 
     async def fetch(self, agents: list[AgentRow]) -> list[SignalReading]:
-        targets = [
+        repos = [
             (a, _split_repo(a.github_repo or ""))
             for a in agents
             if a.github_repo
         ]
-        targets = [(a, t) for a, t in targets if t]
+        targets = [(a, t) for a, t in repos if t]
         if not targets:
             return []
         if self.settings.github_token:

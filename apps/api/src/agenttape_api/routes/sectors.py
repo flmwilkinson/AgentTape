@@ -45,10 +45,10 @@ def _verdict(delta: float | None) -> str:
 
 @router.get("/{kind}/{value}/history")
 async def get_sector_history(
+    session: Annotated[AsyncSession, Depends(get_session)],
     kind: str,
     value: str,
     window: str = Query("30d", pattern="^(1d|7d|30d|90d|all)$"),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
     """Time-bucketed average AgentScore for the cohort tagged (kind, value).
 
@@ -118,9 +118,9 @@ async def get_sector_history(
 
 @router.get("")
 async def get_sectors(
+    session: Annotated[AsyncSession, Depends(get_session)],
     kind: str = Query("capability", pattern="^(capability|deployment|maturity)$"),
     window: str = Query("7d", pattern="^(1d|7d|30d)$"),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
     delta_map = {
         "1d": timedelta(days=1),
@@ -195,12 +195,12 @@ async def get_sectors(
 
 @router.get("/top")
 async def get_sectors_top(
+    session: Annotated[AsyncSession, Depends(get_session)],
     kind: str = Query("capability", pattern="^(capability|deployment|maturity)$"),
     top: int = Query(3, ge=1, le=10),
     entity_kind: str | None = Query(
         None, pattern="^(application|foundation_model)$"
     ),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[dict[str, Any]]:
     """Top-N agents per tag value, in one query.
 

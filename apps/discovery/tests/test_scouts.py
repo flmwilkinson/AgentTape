@@ -10,11 +10,9 @@ cassettes — they are tagged ``@pytest.mark.live`` and skipped by default.
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import httpx
 import pytest
-
 from discovery.config import Settings
 from discovery.enums import DiscoverySource
 from discovery.scouts.arxiv_scout import ArxivScout

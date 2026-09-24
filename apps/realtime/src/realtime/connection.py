@@ -145,5 +145,5 @@ class Connection:
                         "detail": "events dropped; you fell behind the queue",
                     }
                 yield frame
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield SENTINEL_HEARTBEAT

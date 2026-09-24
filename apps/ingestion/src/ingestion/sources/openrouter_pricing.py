@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -41,8 +41,9 @@ def _slug(name: str) -> str:
 
 def _blended_per_million(pricing: dict[str, Any]) -> float | None:
     try:
-        prompt = float(pricing.get("prompt"))
-        completion = float(pricing.get("completion"))
+        # float(None) raises TypeError, handled below.
+        prompt = float(cast(Any, pricing.get("prompt")))
+        completion = float(cast(Any, pricing.get("completion")))
     except (TypeError, ValueError):
         return None
     if prompt <= 0 or completion <= 0:

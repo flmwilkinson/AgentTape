@@ -46,7 +46,8 @@ import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 
-import feedparser
+import feedparser  # type: ignore[import-untyped]
+import httpx
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
@@ -152,7 +153,7 @@ class NewsMentionsIngestor(Ingestor):
                     )
                 else:
                     for (aid, _term), result in zip(
-                        per_agent_terms.items(), results
+                        per_agent_terms.items(), results, strict=True
                     ):
                         if isinstance(result, int):
                             primary[aid] = result
@@ -192,7 +193,7 @@ class NewsMentionsIngestor(Ingestor):
         return out
 
 
-async def _load_rss_corpus(http) -> list[str]:
+async def _load_rss_corpus(http: httpx.AsyncClient) -> list[str]:
     async def grab(url: str) -> str | None:
         try:
             r = await http.get(url, timeout=8.0)

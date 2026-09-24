@@ -108,8 +108,6 @@ def _enum(name: str) -> postgresql.ENUM:
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-
     # --- extensions -----------------------------------------------------
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")

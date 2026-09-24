@@ -15,6 +15,7 @@ router = APIRouter(prefix="/movers", tags=["movers"])
 
 @router.get("", response_model=list[MoverOut])
 async def get_movers(
+    session: Annotated[AsyncSession, Depends(get_session)],
     window: str = Query("1d", pattern="^(1h|1d|7d|30d)$"),
     limit: int = Query(50, ge=1, le=200),
     capability: str | None = Query(None, max_length=64),
@@ -22,7 +23,6 @@ async def get_movers(
     entity_kind: str | None = Query(
         None, pattern="^(application|foundation_model|framework|mcp_server)$"
     ),
-    session: Annotated[AsyncSession, Depends(get_session)] = ...,
 ) -> list[MoverOut]:
     rows = await queries.movers(
         session,

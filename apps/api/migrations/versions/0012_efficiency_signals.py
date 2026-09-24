@@ -27,7 +27,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "0012_efficiency_signals"
 down_revision = "0011_mastodon_mentions"
 branch_labels = None

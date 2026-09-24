@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -37,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from discovery.config import Settings, get_settings
 from discovery.enrichment import compute_embedding, enrich_agent
-from discovery.enums import DiscoverySource, DiscoveryVia, EligibilityStatus
+from discovery.enums import DiscoverySource, DiscoveryVia
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ DISCOVERY_VIA_BY_SOURCE: dict[DiscoverySource, DiscoveryVia] = {
 }
 
 
-async def run_promoter(session: AsyncSession, settings: Settings | None = None) -> dict:
+async def run_promoter(session: AsyncSession, settings: Settings | None = None) -> dict[str, Any]:
     settings = settings or get_settings()
     redis_client = redis_async.from_url(settings.redis_url, decode_responses=True)
 
@@ -213,9 +212,10 @@ def score_candidate(
 
     blob = _haystack(payload)
 
-    if LLM_DEP_PATTERNS.search(blob):
+    llm_dep = LLM_DEP_PATTERNS.search(blob)
+    if llm_dep:
         score += 0.4
-        reasons["llm_dep"] = LLM_DEP_PATTERNS.search(blob).group(0).lower()
+        reasons["llm_dep"] = llm_dep.group(0).lower()
 
     if AGENT_VOCAB.search(blob):
         score += 0.2
@@ -509,7 +509,7 @@ async def _admit(
 
 
 async def _reject(
-    session: AsyncSession, candidate_id: UUID, score: float, reasons: dict
+    session: AsyncSession, candidate_id: UUID, score: float, reasons: dict[str, Any]
 ) -> None:
     await session.execute(
         text(
