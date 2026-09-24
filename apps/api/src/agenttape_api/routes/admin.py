@@ -23,8 +23,7 @@ import asyncio
 import os
 import secrets
 import time
-from collections.abc import Awaitable
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import httpx
 import redis.asyncio as redis_async
@@ -234,7 +233,7 @@ async def _redis_ping_ms() -> float | None:
         )
         t0 = time.perf_counter()
         # redis-py stubs type ping() as ``Awaitable[bool] | bool`` for both clients.
-        await cast("Awaitable[bool]", client.ping())
+        await client.ping()
         dt = (time.perf_counter() - t0) * 1000
         await client.aclose()
         return round(dt, 2)

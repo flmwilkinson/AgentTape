@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any
 
 import redis.asyncio as redis_async
 from fastapi import FastAPI, Request, Response
@@ -98,7 +98,7 @@ async def ready() -> dict[str, Any]:
             socket_timeout=2,
         )
         # redis-py stubs type ping() as ``Awaitable[bool] | bool`` for both clients.
-        await cast("Awaitable[bool]", client.ping())
+        await client.ping()
         await client.aclose()
         checks["redis"] = True
     except Exception as e:  # noqa: BLE001

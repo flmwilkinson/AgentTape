@@ -50,7 +50,8 @@ jobs:
         working-directory: apps/${{ matrix.service }}
         run: |
           uv venv --python 3.12 .venv
-          uv pip install --python .venv/bin/python -e .
+          # dev group carries testcontainers/psycopg for the DB-backed tests.
+          uv pip install --python .venv/bin/python -e . --group dev
           uv pip install --python .venv/bin/python ruff mypy pytest pytest-asyncio httpx
       - name: ruff
         working-directory: apps/${{ matrix.service }}

@@ -46,7 +46,7 @@ def _get_pytrends_cls() -> Any | None:
     if _pytrends_cls is not None:
         return _pytrends_cls
     try:
-        from pytrends.request import TrendReq  # type: ignore[import-not-found]
+        from pytrends.request import TrendReq  # type: ignore[import-untyped]
     except Exception:  # noqa: BLE001
         return None
     _pytrends_cls = TrendReq

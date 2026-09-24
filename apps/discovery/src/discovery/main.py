@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 import redis.asyncio as redis_async
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
@@ -123,7 +123,7 @@ async def ready() -> dict[str, Any]:
         )
         # redis-py types ping() as ``Awaitable[bool] | bool``; the asyncio
         # client always returns the awaitable.
-        await cast(Awaitable[bool], client.ping())
+        await client.ping()
         await client.aclose()
         checks["redis"] = True
     except Exception as e:  # noqa: BLE001
