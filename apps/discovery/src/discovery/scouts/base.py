@@ -78,14 +78,24 @@ class Scout(ABC):
     async def _insert_candidate(
         self, session: AsyncSession, cand: Candidate
     ) -> bool:
-        """Insert ON CONFLICT DO NOTHING; return True iff a new row was added."""
+        """Insert a new candidate; return True iff a new row was added.
+
+        On conflict, a promoted candidate whose raw_payload was nulled
+        gets it back. That payload is the agent's facts store
+        (openrouter_id etc.) and older retention runs stripped it, so
+        re-seeing the candidate heals the agent. ``xmax = 0`` tells a
+        fresh insert apart from that repair update.
+        """
         result = await session.execute(
             text(
                 """
                 INSERT INTO discovery_candidates (id, source, source_id, raw_payload)
                 VALUES (gen_random_uuid(), CAST(:source AS discovery_source), :sid, CAST(:payload AS jsonb))
-                ON CONFLICT (source, source_id) DO NOTHING
-                RETURNING id
+                ON CONFLICT (source, source_id) DO UPDATE
+                    SET raw_payload = EXCLUDED.raw_payload
+                    WHERE discovery_candidates.raw_payload IS NULL
+                      AND discovery_candidates.promoted_to_agent_id IS NOT NULL
+                RETURNING (xmax = 0) AS inserted
                 """
             ),
             {
@@ -94,7 +104,8 @@ class Scout(ABC):
                 "payload": _to_json(cand.raw_payload),
             },
         )
-        return result.first() is not None
+        row = result.first()
+        return bool(row and row[0])
 
 
 def _to_json(payload: dict[str, Any]) -> str:

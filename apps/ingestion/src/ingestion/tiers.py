@@ -42,6 +42,7 @@ from ingestion.sources import (
     MCPRegistryListedIngestor,
     NewsMentionsIngestor,
     NPMWeeklyIngestor,
+    OpenRouterPricingIngestor,
     OpenRouterTokenVolume30dIngestor,
     ProductHuntUpvotesIngestor,
     PyPIMonthlyIngestor,
@@ -88,6 +89,9 @@ MEDIUM: list[type[Ingestor]] = [
     # itself only updates every few hours but a stable cadence
     # gives the chart a clean tick.
     OpenRouterTokenVolume30dIngestor,
+    # Blended $/M price for every OpenRouter model — the Efficiency
+    # pillar's cost input. One public request per tick.
+    OpenRouterPricingIngestor,
 ]
 
 SLOW: list[type[Ingestor]] = [

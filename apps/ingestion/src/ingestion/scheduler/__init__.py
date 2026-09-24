@@ -46,12 +46,22 @@ async def run_tier(
         ingestors = [cls(settings) for cls in ingestor_classes]
         try:
             async def run_one(ing: Ingestor) -> dict[str, Any]:
-                async with session_factory()() as session:
-                    stats = await ing.run(session, agents, redis_client)
+                # Isolate failures. Ingestors that override run() (AA,
+                # FM leaderboards) do DB work outside the base class's
+                # fetch guard, and one raising used to propagate out of
+                # gather, end the slow-tier one-shot, and cancel every
+                # sibling mid-transaction — so nothing in the tier
+                # committed for months.
+                try:
+                    async with session_factory()() as session:
+                        stats = await ing.run(session, agents, redis_client)
+                except Exception:  # noqa: BLE001
+                    log.exception("ingestor %s run failed", ing.name)
+                    return {"ingestor": ing.name, "error": True}
                 return {"ingestor": ing.name, **stats}
 
-            results = await asyncio.gather(
-                *(run_one(ing) for ing in ingestors), return_exceptions=False
+            results = list(
+                await asyncio.gather(*(run_one(ing) for ing in ingestors))
             )
         finally:
             for ing in ingestors:

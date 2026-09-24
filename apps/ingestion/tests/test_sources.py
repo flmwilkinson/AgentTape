@@ -678,3 +678,84 @@ async def test_semantic_scholar_sums_citations():
     finally:
         await ing.aclose()
     assert readings and readings[0].value == 17.0
+
+
+# ---------------------------------------------------- hn phrase for FMs
+
+
+def test_fm_hn_phrase_strips_provider_and_quotes():
+    from ingestion.sources.hackernews import fm_hn_phrase
+
+    assert fm_hn_phrase("OpenAI: GPT-5.2") == '"GPT-5.2"'
+    assert fm_hn_phrase("Anthropic: Claude Opus 5 (batch)") == '"Claude Opus 5 batch"'
+    assert fm_hn_phrase("Goliath 120B") == '"Goliath 120B"'
+
+
+def test_fm_hn_phrase_skips_generic_single_word():
+    """'Pareto' matched every 'Pareto frontier' comment on HN."""
+    from ingestion.sources.hackernews import fm_hn_phrase
+
+    assert fm_hn_phrase("Pareto") is None
+    assert fm_hn_phrase("Other: Pareto") is None
+    assert fm_hn_phrase(None) is None
+
+
+async def test_hn_mentions_fm_uses_quoted_name_phrase():
+    settings = Settings()
+    a = _agent(
+        slug="openai-gpt-5-2",
+        name="OpenAI: GPT-5.2",
+        github_repo=None,
+        entity_kind="foundation_model",
+    )
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.url.params)
+        return httpx.Response(200, json={"nbHits": 3})
+
+    ing = HNMentions7dIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a, _agent(name="Pareto", entity_kind="foundation_model")])
+    finally:
+        await ing.aclose()
+    assert [r.agent_id for r in readings] == [a.id]
+    assert seen["query"] == '"GPT-5.2"'
+    assert seen["advancedSyntax"] == "true"
+
+
+# ------------------------------------------------------ openrouter pricing
+
+
+async def test_openrouter_pricing_blends_and_matches_by_id_or_slug():
+    from ingestion.sources.openrouter_pricing import OpenRouterPricingIngestor
+
+    by_id = _agent(
+        slug="whatever",
+        entity_kind="foundation_model",
+        facts={"openrouter_id": "openai/gpt-5.2"},
+    )
+    by_slug = _agent(slug="anthropic-claude-opus-5", entity_kind="foundation_model")
+    free = _agent(slug="z-ai-glm-4-5-air-free", entity_kind="foundation_model")
+    app = _agent(slug="openai-gpt-5-2")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [
+            {"id": "openai/gpt-5.2", "name": "OpenAI: GPT-5.2",
+             "pricing": {"prompt": "0.000002", "completion": "0.000008"}},
+            {"id": "anthropic/claude-opus-5", "name": "Anthropic: Claude Opus 5",
+             "pricing": {"prompt": "0.000015", "completion": "0.000075"}},
+            {"id": "z-ai/glm-4.5-air:free", "name": "Z.ai: GLM 4.5 Air (free)",
+             "pricing": {"prompt": "0", "completion": "0"}},
+            {"id": "openrouter/auto", "name": "Auto Router",
+             "pricing": {"prompt": "-1", "completion": "-1"}},
+        ]})
+
+    ing = OpenRouterPricingIngestor(Settings(), http=_client(handler))
+    try:
+        readings = await ing.fetch([by_id, by_slug, free, app])
+    finally:
+        await ing.aclose()
+    got = {r.agent_id: r.value for r in readings}
+    assert got == {by_id.id: 5.0, by_slug.id: 45.0}
+    assert all(r.source == SignalSource.OPENROUTER_PRICE_BLENDED for r in readings)

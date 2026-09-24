@@ -1,13 +1,15 @@
 """Hacker News mention count over the last 7 days.
 
 One Algolia call per agent isn't free but the count is small (one batch
-per fast tier tick) and the API is generous. We search by the agent's
-slug AND by its github_repo full name to catch both naming styles.
+per fast tier tick) and the API is generous. Applications search by
+github_repo full name, falling back to slug; foundation models search
+by their display name as an exact phrase (see ``fm_hn_phrase``).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -30,20 +32,23 @@ class HNMentions7dIngestor(Ingestor):
         sem = asyncio.Semaphore(4)
 
         async def one(a: AgentRow) -> SignalReading | None:
-            term = a.github_repo or a.slug
+            params = {
+                "tags": "(story,comment)",
+                "numericFilters": f"created_at_i>{since}",
+                "hitsPerPage": 0,
+            }
+            if a.entity_kind == "foundation_model":
+                term = fm_hn_phrase(a.name)
+                # Honour the quoted phrase.
+                params["advancedSyntax"] = "true"
+            else:
+                term = a.github_repo or a.slug
             if not term:
                 return None
+            params["query"] = term
             async with sem:
                 try:
-                    r = await self._http.get(
-                        ALGOLIA,
-                        params={
-                            "query": term,
-                            "tags": "(story,comment)",
-                            "numericFilters": f"created_at_i>{since}",
-                            "hitsPerPage": 0,
-                        },
-                    )
+                    r = await self._http.get(ALGOLIA, params=params)
                 except Exception:  # noqa: BLE001
                     return None
             if r.status_code != 200:
@@ -60,3 +65,25 @@ class HNMentions7dIngestor(Ingestor):
 
         results = await asyncio.gather(*(one(a) for a in agents))
         return [r for r in results if r is not None]
+
+
+def fm_hn_phrase(name: str | None) -> str | None:
+    """Quoted phrase people actually write for a foundation model.
+
+    FM slugs ("openai-gpt-5-2") almost never appear on HN, so the old
+    slug query read 0 for most flagships, while a one-word name like
+    "Pareto" matched every "Pareto frontier" comment and topped
+    Adoption. Use the display name minus its "Provider: " prefix, as
+    an exact phrase. A single word with no digit is too generic to
+    attribute, so return None and leave the signal unrated.
+    """
+    if not name:
+        return None
+    clean = re.sub(r"^[^:]+:\s*", "", name)
+    clean = re.sub(r"[()]", " ", clean)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    if not clean:
+        return None
+    if " " not in clean and not any(c.isdigit() for c in clean):
+        return None
+    return f'"{clean}"'

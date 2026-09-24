@@ -111,9 +111,17 @@ async def main(args: argparse.Namespace) -> None:
     await run_phase(
         "signals (non-benchmark, > N days)",
         """
-        DELETE FROM signals
-        WHERE captured_at < :cutoff
-          AND source::text != 'benchmark_score'
+        DELETE FROM signals s
+        WHERE s.captured_at < :cutoff
+          AND s.source::text != 'benchmark_score'
+          -- Keep the latest reading per (agent, source): ingestors
+          -- write on change only, so it can be old and still current.
+          AND EXISTS (
+              SELECT 1 FROM signals newer
+              WHERE newer.agent_id = s.agent_id
+                AND newer.source = s.source
+                AND newer.captured_at > s.captured_at
+          )
         """,
         {"cutoff": sig_cutoff},
     )
@@ -153,18 +161,18 @@ async def main(args: argparse.Namespace) -> None:
 
     # --- discovery_candidates.raw_payload -------------------------------
     # Keep the candidate row (audit trail) but drop the heavy JSONB
-    # once the candidate has resolved one way or the other and the
-    # row is older than the cutoff. promoted_to_agent_id IS NOT NULL
-    # means admitted, rejection_reason IS NOT NULL means rejected,
-    # found_at is the original timestamp.
+    # once the candidate was rejected and the row is older than the
+    # cutoff. Promoted candidates keep their payload — it is the
+    # agent's facts store (openrouter_id, modality, pricing, ...).
     await run_phase(
-        "discovery_candidates.raw_payload (resolved + > N days)",
+        "discovery_candidates.raw_payload (rejected + > N days)",
         """
         UPDATE discovery_candidates
         SET raw_payload = NULL
         WHERE raw_payload IS NOT NULL
           AND found_at < :cutoff
-          AND (promoted_to_agent_id IS NOT NULL OR rejection_reason IS NOT NULL)
+          AND promoted_to_agent_id IS NULL
+          AND rejection_reason IS NOT NULL
         """,
         {"cutoff": dc_cutoff},
     )

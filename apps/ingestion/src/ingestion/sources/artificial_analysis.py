@@ -31,9 +31,9 @@ Output split:
   ``aa-intelligence-index`` so Quality picks it up alongside other
   benchmarks. Doesn't replace lmarena / swe-bench — joins them.
 
-- **Cost** → ``OPENROUTER_PRICE_BLENDED`` signal (mean of
-  input+output $/M). Naming reflects future plan to source from
-  OpenRouter directly; AA is the current pragmatic source.
+- **Cost** is no longer written here: ``OPENROUTER_PRICE_BLENDED``
+  now comes from OpenRouter directly (``openrouter_pricing.py``),
+  which covers every listed model.
 
 - **Speed** → ``OUTPUT_TOKENS_PER_SECOND`` signal.
 
@@ -151,6 +151,15 @@ class ArtificialAnalysisIngestor(Ingestor):
 
         captured = datetime.now(UTC)
         bench_ids: dict[str, UUID] = {}
+        # Dedupe against priors loaded in two queries up front. The
+        # old path ran a SELECT per (model, benchmark) — ~17 fields ×
+        # hundreds of models — inside one transaction; on Neon from
+        # the VPS that took ~20 min and the run died before commit,
+        # so no AA data had landed since June.
+        prior_results = await _latest_results(session)
+        prior_speed = await _latest_signals(
+            session, SignalSource.OUTPUT_TOKENS_PER_SECOND
+        )
         results_written = 0
         signals_written = 0
         matched = 0
@@ -215,44 +224,33 @@ class ArtificialAnalysisIngestor(Ingestor):
                         category=category,
                         max_score=100.0,
                     )
-                if await _upsert_result(
-                    session, aid, bench_ids[bench_slug], captured, score
-                ):
-                    results_written += 1
+                bid = bench_ids[bench_slug]
+                if prior_results.get((aid, bid)) == score:
+                    continue
+                await _insert_result(session, aid, bid, captured, score)
+                prior_results[(aid, bid)] = score
+                results_written += 1
 
-            # Efficiency signals — price (blended) + speed.
-            in_price = _dig(m, "pricing.price_1m_input_tokens")
-            out_price = _dig(m, "pricing.price_1m_output_tokens")
-            if in_price is not None and out_price is not None:
-                try:
-                    blended = (float(in_price) + float(out_price)) / 2.0
-                    if blended > 0:
-                        if await _write_signal(
-                            session,
-                            aid,
-                            SignalSource.OPENROUTER_PRICE_BLENDED,
-                            blended,
-                            captured,
-                        ):
-                            signals_written += 1
-                except (ValueError, TypeError):
-                    pass
-
+            # Efficiency: speed only. Price comes from
+            # OpenRouterPricingIngestor, which covers every OpenRouter
+            # model rather than just the AA-matched ones; writing it
+            # here too would make the two sources overwrite each other.
             speed = _dig(m, "median_output_tokens_per_second")
             if speed is not None:
                 try:
                     speed_f = float(speed)
-                    if speed_f > 0:
-                        if await _write_signal(
-                            session,
-                            aid,
-                            SignalSource.OUTPUT_TOKENS_PER_SECOND,
-                            speed_f,
-                            captured,
-                        ):
-                            signals_written += 1
                 except (ValueError, TypeError):
-                    pass
+                    speed_f = 0.0
+                if speed_f > 0 and prior_speed.get(aid) != speed_f:
+                    await _insert_signal(
+                        session,
+                        aid,
+                        SignalSource.OUTPUT_TOKENS_PER_SECOND,
+                        speed_f,
+                        captured,
+                    )
+                    prior_speed[aid] = speed_f
+                    signals_written += 1
 
         await session.commit()
         log.info(
@@ -317,28 +315,48 @@ async def _ensure_benchmark(
     return r.scalar_one()
 
 
-async def _upsert_result(
+async def _latest_results(
+    session: AsyncSession,
+) -> dict[tuple[UUID, UUID], float]:
+    """Latest score per (agent, benchmark), in one query."""
+    r = await session.execute(
+        text(
+            """
+            SELECT DISTINCT ON (agent_id, benchmark_id)
+                agent_id, benchmark_id, score
+            FROM benchmark_results
+            ORDER BY agent_id, benchmark_id, captured_at DESC
+            """
+        )
+    )
+    return {(row[0], row[1]): float(row[2]) for row in r}
+
+
+async def _latest_signals(
+    session: AsyncSession, source: SignalSource
+) -> dict[UUID, float]:
+    """Latest value per agent for one signal source, in one query."""
+    r = await session.execute(
+        text(
+            """
+            SELECT DISTINCT ON (agent_id) agent_id, value
+            FROM signals
+            WHERE source = CAST(:src AS signal_source)
+            ORDER BY agent_id, captured_at DESC
+            """
+        ),
+        {"src": source.value},
+    )
+    return {row[0]: float(row[1]) for row in r}
+
+
+async def _insert_result(
     session: AsyncSession,
     agent_id: UUID,
     benchmark_id: UUID,
     captured_at: datetime,
     score: float,
-) -> bool:
-    """Insert-on-change. Returns True if a row was written."""
-    r = await session.execute(
-        text(
-            """
-            SELECT score FROM benchmark_results
-            WHERE agent_id = :aid AND benchmark_id = :bid
-            ORDER BY captured_at DESC LIMIT 1
-            """
-        ),
-        {"aid": agent_id, "bid": benchmark_id},
-    )
-    row = r.first()
-    if row is not None and float(row[0]) == score:
-        return False
-
+) -> None:
     await session.execute(
         text(
             """
@@ -350,31 +368,15 @@ async def _upsert_result(
         ),
         {"aid": agent_id, "bid": benchmark_id, "ts": captured_at, "s": score},
     )
-    return True
 
 
-async def _write_signal(
+async def _insert_signal(
     session: AsyncSession,
     agent_id: UUID,
     source: SignalSource,
     value: float,
     captured_at: datetime,
-) -> bool:
-    """Insert-on-change signal write. Returns True if written."""
-    r = await session.execute(
-        text(
-            """
-            SELECT value FROM signals
-            WHERE agent_id = :aid AND source = CAST(:src AS signal_source)
-            ORDER BY captured_at DESC LIMIT 1
-            """
-        ),
-        {"aid": agent_id, "src": source.value},
-    )
-    row = r.first()
-    if row is not None and float(row[0]) == value:
-        return False
-
+) -> None:
     await session.execute(
         text(
             """
@@ -384,4 +386,3 @@ async def _write_signal(
         ),
         {"ts": captured_at, "aid": agent_id, "src": source.value, "val": value},
     )
-    return True

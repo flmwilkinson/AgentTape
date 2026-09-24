@@ -84,14 +84,16 @@ async def _retention_cleanup_job() -> None:
 
     Rules:
       • signals — drop rows older than SIGNALS_DAYS, except
-        ``benchmark_score`` (Quality history matters, low volume).
+        ``benchmark_score`` (Quality history matters, low volume) and
+        the latest row per (agent, source), which is the current value.
       • scores — downsample older than SCORES_DAYS to one row per
         agent per day, so the "all" window on the score chart still
         carries a long-term trend line.
       • events — drop rows older than EVENTS_DAYS.
-      • discovery_candidates.raw_payload — null out for resolved
-        candidates (admitted or rejected) older than CANDIDATES_DAYS,
-        keeping the row for audit but dropping the bulky JSONB.
+      • discovery_candidates.raw_payload — null out for rejected
+        candidates older than CANDIDATES_DAYS, keeping the row for
+        audit but dropping the bulky JSONB. Promoted candidates keep
+        theirs: it is the agent's facts store.
 
     After the deletes, VACUUM ANALYZE each affected table so Postgres
     actually reclaims the space rather than leaving dead tuples.
@@ -110,9 +112,22 @@ async def _retention_cleanup_job() -> None:
                 (
                     "signals",
                     """
-                    DELETE FROM signals
-                    WHERE captured_at < :cutoff
-                      AND source::text != 'benchmark_score'
+                    DELETE FROM signals s
+                    WHERE s.captured_at < :cutoff
+                      AND s.source::text != 'benchmark_score'
+                      -- Never delete the latest reading for an
+                      -- (agent, source). Ingestors write on change
+                      -- only, so a stable signal's newest row can be
+                      -- months old and still be the current value.
+                      -- Deleting it made the pillar read Unrated, and
+                      -- an ingestion outage longer than SIGNALS_DAYS
+                      -- wiped every model's scoring inputs at once.
+                      AND EXISTS (
+                          SELECT 1 FROM signals newer
+                          WHERE newer.agent_id = s.agent_id
+                            AND newer.source = s.source
+                            AND newer.captured_at > s.captured_at
+                      )
                     """,
                     {"cutoff": sig_cutoff},
                 ),
@@ -148,10 +163,15 @@ async def _retention_cleanup_job() -> None:
                     SET raw_payload = NULL
                     WHERE raw_payload IS NOT NULL
                       AND found_at < :cutoff
-                      AND (
-                        promoted_to_agent_id IS NOT NULL
-                        OR rejection_reason IS NOT NULL
-                      )
+                      -- Rejected candidates only. A promoted
+                      -- candidate's raw_payload IS the agent's facts
+                      -- store (openrouter_id, modality, pricing, ...)
+                      -- that ingestion and the API read via
+                      -- load_admitted_agents / _extract_facts.
+                      -- Nulling it silently disabled every
+                      -- facts-keyed signal two weeks after admission.
+                      AND promoted_to_agent_id IS NULL
+                      AND rejection_reason IS NOT NULL
                     """,
                     {"cutoff": dc_cutoff},
                 ),

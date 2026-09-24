@@ -28,6 +28,7 @@ from ingestion.sources.github_response_time import (
     GithubFirstResponseHours30dIngestor,
 )
 from ingestion.sources.google_trends import GoogleTrendsScoreIngestor
+from ingestion.sources.openrouter_pricing import OpenRouterPricingIngestor
 from ingestion.sources.openrouter_usage import (
     OpenRouterTokenVolume30dIngestor,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "MCPRegistryListedIngestor",
     "NewsMentionsIngestor",
     "NPMWeeklyIngestor",
+    "OpenRouterPricingIngestor",
     "OpenRouterTokenVolume30dIngestor",
     "ProductHuntUpvotesIngestor",
     "PyPIMonthlyIngestor",
