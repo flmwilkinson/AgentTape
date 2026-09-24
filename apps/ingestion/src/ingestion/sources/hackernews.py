@@ -74,8 +74,9 @@ def fm_hn_phrase(name: str | None) -> str | None:
     slug query read 0 for most flagships, while a one-word name like
     "Pareto" matched every "Pareto frontier" comment and topped
     Adoption. Use the display name minus its "Provider: " prefix, as
-    an exact phrase. A single word with no digit is too generic to
-    attribute, so return None and leave the signal unrated.
+    an exact phrase. A single plain word ("Pareto", "Sonar") is too
+    generic to attribute, so return None and leave the signal unrated;
+    joined brand names like "Qwen-Max" are distinctive and kept.
     """
     if not name:
         return None
@@ -84,6 +85,6 @@ def fm_hn_phrase(name: str | None) -> str | None:
     clean = re.sub(r"\s+", " ", clean).strip()
     if not clean:
         return None
-    if " " not in clean and not any(c.isdigit() for c in clean):
+    if re.fullmatch(r"[A-Za-z]+", clean):
         return None
     return f'"{clean}"'
