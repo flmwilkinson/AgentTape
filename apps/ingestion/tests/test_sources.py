@@ -651,8 +651,8 @@ def test_aa_benchmark_field_map_covers_intelligence_index():
     # Spot-check a few that the methodology mentions explicitly.
     assert "evaluations.gpqa" in BENCHMARK_FIELD_MAP
     assert "evaluations.mmlu_pro" in BENCHMARK_FIELD_MAP
-    assert "evaluations.terminal_bench_hard" in BENCHMARK_FIELD_MAP
-    assert "evaluations.humanitys_last_exam" in BENCHMARK_FIELD_MAP
+    assert "evaluations.terminalbench_hard" in BENCHMARK_FIELD_MAP
+    assert "evaluations.hle" in BENCHMARK_FIELD_MAP
     assert "evaluations.aime" in BENCHMARK_FIELD_MAP
     # The composite itself is also a benchmark.
     assert "evaluations.artificial_analysis_intelligence_index" in BENCHMARK_FIELD_MAP
@@ -662,7 +662,7 @@ def test_aa_benchmark_field_map_covers_intelligence_index():
 
 
 async def test_semantic_scholar_sums_citations():
-    settings = Settings()
+    settings = Settings(openalex_mailto=None, semantic_scholar_api_key="k")
     a = _agent(arxiv_ids=["2604.01234", "2605.99999"])
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -759,3 +759,118 @@ async def test_openrouter_pricing_blends_and_matches_by_id_or_slug():
     got = {r.agent_id: r.value for r in readings}
     assert got == {by_id.id: 5.0, by_slug.id: 45.0}
     assert all(r.source == SignalSource.OPENROUTER_PRICE_BLENDED for r in readings)
+
+
+# ------------------------------------------------ artificial_analysis match
+
+
+def _aa(creator: str, slug: str, **evals: float) -> dict[str, Any]:
+    return {"model_creator": {"slug": creator}, "slug": slug, "evaluations": evals}
+
+
+def test_aa_match_models_aliases_preview_and_effort():
+    from ingestion.sources.artificial_analysis import match_models
+
+    ids = {s: uuid.uuid4() for s in (
+        "anthropic-claude-opus-5",
+        "z-ai-glm-5-3",
+        "google-gemini-3-1-pro-preview",
+        "openai-gpt-6-astra",
+        "spacexai-grok-4-7",
+    )}
+    plain = _aa("anthropic", "claude-opus-5", gpqa=0.9)
+    models = [
+        _aa("anthropic", "claude-opus-5-xhigh", gpqa=0.1),  # plain exists: ignored
+        plain,
+        _aa("zai", "glm-5-3"),
+        _aa("google", "gemini-3-1-pro"),
+        _aa("openai", "gpt-6-astra-medium", gpqa=0.5),
+        _aa("openai", "gpt-6-astra-xhigh", gpqa=0.8),  # strongest effort wins
+        _aa("xai", "grok-4-7"),
+        _aa("unknown", "model"),
+    ]
+    got = match_models(models, ids)
+    assert got[ids["anthropic-claude-opus-5"]] is plain
+    assert got[ids["openai-gpt-6-astra"]]["slug"] == "gpt-6-astra-xhigh"
+    assert set(got) == set(ids.values())
+
+
+def test_aa_to_percent_uses_explicit_scale():
+    from ingestion.sources.artificial_analysis import _to_percent
+
+    idx = "evaluations.artificial_analysis_coding_index"
+    assert _to_percent(idx, 1.0) == 1.0  # index stays on 0-100
+    assert _to_percent("evaluations.gpqa", 0.963) == 96.3
+    assert _to_percent("evaluations.aime", 1.25) == 100.0
+    assert _to_percent("evaluations.hle", 0) is None  # not yet evaluated
+    assert _to_percent("evaluations.hle", None) is None
+
+
+# ------------------------------------------------------------ bluesky auth
+
+
+async def test_bluesky_auth_refreshes_instead_of_relogging():
+    from ingestion.sources.bluesky import _BskyAuth
+
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        n = len(calls)
+        return httpx.Response(
+            200, json={"accessJwt": f"a{n}", "refreshJwt": f"r{n}"}
+        )
+
+    auth = _BskyAuth()
+    async with _client(handler) as http:
+        assert await auth.get(http, "h", "p") == "a1"
+        auth.expires_at = 0  # access token expired
+        assert await auth.get(http, "h", "p") == "a2"
+    assert calls == [
+        "/xrpc/com.atproto.server.createSession",
+        "/xrpc/com.atproto.server.refreshSession",
+    ]
+
+
+async def test_bluesky_login_429_honours_reset_header():
+    import time
+
+    from ingestion.sources.bluesky import _BskyAuth
+
+    reset = time.time() + 3 * 3600
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, headers={"ratelimit-reset": str(int(reset))})
+
+    auth = _BskyAuth()
+    async with _client(handler) as http:
+        assert await auth.get(http, "h", "p") is None
+    assert abs(auth.retry_after - int(reset)) < 2
+
+
+def test_bluesky_query_for_fm_uses_display_name():
+    from ingestion.sources.bluesky import _query_for
+
+    fm = _agent(name="OpenAI: GPT-5.2", slug="openai-gpt-5-2",
+                github_repo=None, entity_kind="foundation_model")
+    assert _query_for(fm) == '"GPT-5.2"'
+    assert _query_for(_agent()) == "agent"
+
+
+async def test_openalex_sums_citations():
+    settings = Settings(openalex_mailto="ops@example.com")
+    a = _agent(arxiv_ids=["2604.01234", "2605.99999"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        counts = {"2604.01234": 10, "2605.99999": 7}
+        for arxiv_id, n in counts.items():
+            if arxiv_id in request.url.path:
+                return httpx.Response(200, json={"cited_by_count": n})
+        return httpx.Response(404)
+
+    ing = ArxivCitationsIngestor(settings, http=_client(handler))
+    try:
+        readings = await ing.fetch([a])
+    finally:
+        await ing.aclose()
+    assert readings and readings[0].value == 17.0

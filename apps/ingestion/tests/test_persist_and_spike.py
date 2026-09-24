@@ -104,7 +104,9 @@ async def test_first_reading_writes_signal_no_spike(
     finally:
         await ing.aclose()
 
-    assert stats == {"fetched": 1, "written": 1, "spiked": 0, "changed": 0}
+    assert stats == {
+        "fetched": 1, "written": 1, "spiked": 0, "changed": 0, "deduped": 0,
+    }
     assert await _signals(session, aid, SignalSource.GITHUB_STARS) == [100.0]
     assert await _events(session, aid, "signal_spike") == 0
     # Publish recorded as initial on the global event channel.

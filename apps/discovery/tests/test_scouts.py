@@ -239,7 +239,9 @@ async def test_hn_firehose_extracts_github_repos_and_requires_agent_keywords():
 # --------------------------------------------------------------- arxiv
 
 
-async def test_arxiv_scout_emits_paper_and_referenced_repos():
+async def test_arxiv_scout_emits_referenced_repos_not_papers():
+    """Papers aren't runnable artifacts, so only the linked repo is a
+    candidate (the promoter rejects artifact-less candidates too)."""
     settings = Settings()
 
     atom = """<?xml version="1.0" encoding="UTF-8"?>
@@ -262,7 +264,7 @@ async def test_arxiv_scout_emits_paper_and_referenced_repos():
     await scout.aclose()
 
     sids = {c.source_id for c in cands}
-    assert "2604.01234" in sids
+    assert "2604.01234" not in sids
     assert "example/toolformer" in sids
 
 

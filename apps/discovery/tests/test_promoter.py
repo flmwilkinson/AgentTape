@@ -150,6 +150,7 @@ async def test_promoter_is_idempotent(session, settings_with_db):
     """Re-running on the same candidate must not duplicate the agent."""
     payload = {
         "name": "agent-foo",
+        "full_name": "x/agent-foo",  # deployable artifact, required to admit
         "description": "Autonomous agent that uses anthropic tool-use to plan steps.",
         "stargazers_count": 200,
         "pushed_at": "2099-01-01T00:00:00Z",
@@ -171,6 +172,11 @@ async def test_promoter_is_idempotent(session, settings_with_db):
 async def test_pending_candidates_left_alone_when_in_grey_zone(
     session, settings_with_db
 ):
+    # Production sets both thresholds to 0.5 (no grey zone); widen them
+    # here to exercise the pending-review branch that remains in code.
+    settings = settings_with_db.model_copy(
+        update={"auto_admit_threshold": 0.6, "auto_reject_threshold": 0.4}
+    )
     # Score lands between 0.4 and 0.6: agent vocab + popularity floor only,
     # no LLM dep marker, not maintained, not packaged.
     cid = await _insert_candidate(
@@ -179,11 +185,12 @@ async def test_pending_candidates_left_alone_when_in_grey_zone(
         "x/grey-zone",
         {
             "name": "grey-zone",
+            "full_name": "x/grey-zone",
             "description": "An agent for fun",
             "stargazers_count": 100,
         },
     )
-    result = await run_promoter(session, settings_with_db)
+    result = await run_promoter(session, settings)
     assert result["pending_review"] >= 1
 
     payload = (

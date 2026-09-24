@@ -188,8 +188,14 @@ async def test_agent_detail_envelope_shape(client, seed):
         "quality",
         "momentum",
         "community",
+        "efficiency",
         "manipulation_resistance",
         "computed_at",
+        "score_24h_ago",
+        "delta_24h",
+        "rank_now",
+        "rank_24h_ago",
+        "rank_delta_24h",
     }
     assert set(score.keys()) == expected_keys
     assert score["agent_score"] == 80.0

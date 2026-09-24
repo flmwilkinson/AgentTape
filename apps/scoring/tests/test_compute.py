@@ -111,10 +111,12 @@ async def test_quality_set_when_benchmark_present(
         aid = await make_agent(session, slug=f"a-{i:02d}")
         aids.append(aid)
         await add_signal(session, aid, "github_stars", 100.0 * i)
-    # Half on the benchmark, half not.
+    # Half on benchmarks, half not. Three each to clear
+    # MIN_BENCHMARK_COVERAGE.
     for i, aid in enumerate(aids):
         if i % 2 == 0:
-            await add_benchmark_result(session, aid, "synthbench-v1", 50.0 + i)
+            for b in ("synthbench-v1", "synthbench-v2", "synthbench-v3"):
+                await add_benchmark_result(session, aid, b, 50.0 + i)
     await session.commit()
 
     await recompute_agents(session, aids, redis_client, settings_with_db)

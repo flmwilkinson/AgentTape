@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 from uuid import UUID
@@ -60,12 +61,16 @@ log = logging.getLogger(__name__)
 AA_API = "https://artificialanalysis.ai/api/v2/data/llms/models"
 
 
-# AA response field → our ``benchmarks.name`` slug. When the slug
-# already exists (e.g. gpqa-diamond, mmlu-pro), AA's value overwrites
-# on the next tick — fine, AA's coverage is generally more
+# AA response field → (our ``benchmarks.name`` slug, category). When
+# the slug already exists (e.g. gpqa-diamond, mmlu-pro), AA's value
+# overwrites on the next tick — AA's coverage is generally more
 # comprehensive than what we scrape directly.
+#
+# Field names track the live v2 payload. AA renamed several of them
+# (humanitys_last_exam → hle, terminal_bench_hard → terminalbench_hard,
+# tau2_bench_telecom → tau2, aa_lcr → lcr), and the stale names read
+# None silently — HLE alone is reported for ~630 models.
 BENCHMARK_FIELD_MAP: dict[str, tuple[str, str]] = {
-    # AA field name, (our benchmark slug, category)
     "evaluations.artificial_analysis_intelligence_index": (
         "aa-intelligence-index", "reasoning",
     ),
@@ -78,18 +83,113 @@ BENCHMARK_FIELD_MAP: dict[str, tuple[str, str]] = {
     "evaluations.mmlu_pro": ("mmlu-pro", "reasoning"),
     "evaluations.gpqa": ("gpqa-diamond", "reasoning"),
     "evaluations.math_500": ("math-500", "math"),
-    "evaluations.aime": ("aime-2025", "math"),
+    "evaluations.aime": ("aime-2024", "math"),
+    "evaluations.aime_25": ("aime-2025", "math"),
     "evaluations.livecodebench": ("livecodebench", "coding"),
     "evaluations.scicode": ("scicode", "reasoning"),
-    "evaluations.humanitys_last_exam": ("hle", "reasoning"),
-    "evaluations.terminal_bench_hard": ("terminal-bench-hard", "agentic"),
-    "evaluations.tau2_bench_telecom": ("tau2-bench-telecom", "agentic"),
+    "evaluations.hle": ("hle", "reasoning"),
+    "evaluations.terminalbench_hard": ("terminal-bench-hard", "agentic"),
+    "evaluations.terminalbench_v2_1": ("terminal-bench-2-1", "agentic"),
+    "evaluations.tau2": ("tau2-bench-telecom", "agentic"),
+    "evaluations.tau_banking": ("tau-banking", "agentic"),
     "evaluations.ifbench": ("ifbench", "reasoning"),
-    "evaluations.critpt": ("critpt", "coding"),
-    "evaluations.aa_lcr": ("aa-lcr", "reasoning"),
-    "evaluations.aa_omniscience": ("aa-omniscience", "reasoning"),
-    "evaluations.gdpval_aa": ("gdpval-aa", "reasoning"),
+    "evaluations.lcr": ("aa-lcr", "reasoning"),
 }
+
+# Composite indices are published on 0–100; every other evaluation is
+# a 0–1 fraction. Explicit per field — the old "≤ 1.5 means fraction"
+# guess turned a low index score (e.g. coding index 1.0) into 100.
+_PERCENT_SCALE_FIELDS = {
+    "evaluations.artificial_analysis_intelligence_index",
+    "evaluations.artificial_analysis_coding_index",
+    "evaluations.artificial_analysis_math_index",
+}
+
+
+def _to_percent(field: str, value: Any) -> float | None:
+    """Normalise one AA evaluation to 0–100, or None to skip it.
+
+    Zero is skipped: AA reports 0 for evaluations it hasn't run on a
+    model yet, and writing it would rank the model last.
+    """
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if score <= 0:
+        return None
+    if field not in _PERCENT_SCALE_FIELDS:
+        # Cap at 100: pass@k style fields can exceed 1.0.
+        score = min(score * 100.0, 100.0)
+    if score > 100.0:
+        return None
+    # Columns are numeric(20, 6); round so the dedupe comparison
+    # against the stored prior sees 96.3, not 96.30000000000001.
+    return round(score, 6)
+
+
+# AA creator slug → our agent-slug prefix(es). Our FM slugs come from
+# OpenRouter display names ("Z.ai: GLM 5" → z-ai-glm-5), which name
+# several creators differently from AA.
+_CREATOR_ALIASES: dict[str, tuple[str, ...]] = {
+    "alibaba": ("qwen",),
+    "zai": ("z-ai",),
+    "kimi": ("moonshotai",),
+    "aws": ("amazon",),
+    "nous-research": ("nous",),
+    "ai2": ("allenai",),
+    "bytedance_seed": ("bytedance-seed",),
+    "xai": ("xai", "spacexai"),
+    "mistral": ("mistral", "mistralai"),
+}
+
+# AA lists reasoning-effort variants as separate models ("-xhigh",
+# "-high", ...). Strongest first: when AA has no un-suffixed entry for
+# a model, the strongest effort stands in for it.
+_EFFORTS = ("max", "xhigh", "high", "medium", "low", "minimal")
+_EFFORT_SUFFIX = re.compile(r"-(" + "|".join(_EFFORTS) + r")$")
+
+
+def match_models(
+    models: list[dict[str, Any]], agent_slugs: dict[str, UUID]
+) -> dict[UUID, dict[str, Any]]:
+    """Map each matchable agent to the AA model record that describes it.
+
+    Tries ``{creator}-{slug}`` with creator aliases, then the same with
+    ``-preview`` appended (OpenRouter keeps "Preview" in names AA drops).
+    An effort-suffixed AA entry is used only when AA has no plain entry
+    for that model, and the strongest effort wins.
+    """
+    plain_keys = {
+        f"{(m.get('model_creator') or {}).get('slug')}-{m.get('slug')}".lower()
+        for m in models
+        if isinstance(m, dict)
+    }
+    best: dict[UUID, tuple[int, dict[str, Any]]] = {}
+    for m in models:
+        if not isinstance(m, dict):
+            continue
+        creator = ((m.get("model_creator") or {}).get("slug") or "").lower()
+        model_slug = (m.get("slug") or "").lower()
+        if not (creator and model_slug):
+            continue
+        rank = -1  # exact entries beat any effort variant
+        effort = _EFFORT_SUFFIX.search(model_slug)
+        if effort:
+            base = model_slug[: effort.start()]
+            if f"{creator}-{base}" in plain_keys:
+                continue  # AA has the plain model; ignore its variants
+            model_slug = base
+            rank = _EFFORTS.index(effort.group(1))
+        for prefix in _CREATOR_ALIASES.get(creator, (creator,)):
+            for key in (f"{prefix}-{model_slug}", f"{prefix}-{model_slug}-preview"):
+                aid = agent_slugs.get(key)
+                if aid is None:
+                    continue
+                if aid not in best or rank < best[aid][0]:
+                    best[aid] = (rank, m)
+                break
+    return {aid: m for aid, (_, m) in best.items()}
 
 
 class ArtificialAnalysisIngestor(Ingestor):
@@ -120,12 +220,6 @@ class ArtificialAnalysisIngestor(Ingestor):
         if not api_key:
             log.info("artificial_analysis: no ARTIFICIAL_ANALYSIS_API_KEY, skipping")
             return {"fetched": 0, "written": 0, "spiked": 0, "changed": 0}
-
-        # Build slug → agent map. AA returns ``model_creator.slug`` +
-        # ``slug``; we combine into ``{creator}-{model}`` which lines
-        # up with our agent slugs. Exact key — no fuzzy matching, no
-        # name-variant whack-a-mole.
-        slug_to_agent: dict[str, UUID] = {a.slug.lower(): a.id for a in agents}
 
         try:
             r = await self._http.get(
@@ -162,59 +256,20 @@ class ArtificialAnalysisIngestor(Ingestor):
         )
         results_written = 0
         signals_written = 0
-        matched = 0
 
-        for m in models:
-            if not isinstance(m, dict):
-                continue
-            creator = (m.get("model_creator") or {}).get("slug")
-            model_slug = m.get("slug")
-            if not (creator and model_slug):
-                continue
-            key = f"{creator}-{model_slug}".lower()
-            aid = slug_to_agent.get(key)
-            if aid is None:
-                # Also try AA's plain ``id`` field as a fallback —
-                # some models on AA don't have the same slug shape.
-                fallback = (m.get("id") or "").lower()
-                aid = slug_to_agent.get(fallback)
-            if aid is None:
-                continue
-            matched += 1
+        slug_to_agent = {
+            a.slug.lower(): a.id
+            for a in agents
+            if a.entity_kind == "foundation_model"
+        }
+        by_agent = match_models(models, slug_to_agent)
+        matched = len(by_agent)
 
+        for aid, m in by_agent.items():
             # Benchmark fan-out.
             for aa_field, (bench_slug, category) in BENCHMARK_FIELD_MAP.items():
-                value = _dig(m, aa_field)
-                if value is None:
-                    continue
-                try:
-                    score = float(value)
-                except (ValueError, TypeError):
-                    continue
-                # AA inconsistently reports per-benchmark scores —
-                # composite indices (intelligence_index, coding_index)
-                # come on a 0-100 percentage scale, but individual
-                # evaluations (gpqa, mmlu_pro, math_500, terminal_bench_hard)
-                # often come as 0-1 fractions. Detect by magnitude:
-                # anything <= 1.5 is a fraction, multiply by 100. Real
-                # benchmark scores cluster 30-95 on the percentage scale,
-                # so nothing legitimate lives in (1.5, 30) on either
-                # scale — the threshold is safe.
-                # Verified in prod: pre-fix, Claude Opus 4.7 had Quality
-                # 31.5 instead of ~87 because GPQA / MMLU-Pro / SWE-bench
-                # all wrote as 0.94 / 0.89 / 0.87 unchanged.
-                if 0.0 <= score <= 1.5:
-                    # Fraction → percentage. Cap at 100 because some
-                    # AA fields exceed 1.0 (pass@K scoring on
-                    # competition benchmarks like AIME, where 1.25
-                    # = 125% relative-to-baseline). 1.25 * 100 = 125
-                    # is meaningless on the 0-100 scale and inflates
-                    # Quality averages. Verified in prod: GPT-5.1
-                    # had AIME=125 and MMMU=125, pulling its
-                    # Quality up to 81 when capped values would
-                    # have given ~70.
-                    score = min(score * 100.0, 100.0)
-                elif not (0.0 <= score <= 100.0):
+                score = _to_percent(aa_field, _dig(m, aa_field))
+                if score is None:
                     continue
                 if bench_slug not in bench_ids:
                     bench_ids[bench_slug] = await _ensure_benchmark(
@@ -238,7 +293,7 @@ class ArtificialAnalysisIngestor(Ingestor):
             speed = _dig(m, "median_output_tokens_per_second")
             if speed is not None:
                 try:
-                    speed_f = float(speed)
+                    speed_f = round(float(speed), 6)
                 except (ValueError, TypeError):
                     speed_f = 0.0
                 if speed_f > 0 and prior_speed.get(aid) != speed_f:

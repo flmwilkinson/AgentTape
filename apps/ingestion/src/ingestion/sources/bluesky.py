@@ -7,7 +7,7 @@ and set both ``BLUESKY_HANDLE`` and ``BLUESKY_APP_PASSWORD`` in .env.
 Without those, the ingestor soft-skips.
 
 The session token issued by Bluesky lasts ~2 hours; we cache it in
-process and refresh on 401.
+process, renew it via refreshSession, and drop it on 401.
 """
 from __future__ import annotations
 
@@ -19,12 +19,14 @@ from typing import Any, ClassVar
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
+from ingestion.sources.hackernews import fm_hn_phrase
 
 log = logging.getLogger(__name__)
 
 PDS_BASE = "https://bsky.social"
 SEARCH_PATH = "/xrpc/app.bsky.feed.searchPosts"
 LOGIN_PATH = "/xrpc/com.atproto.server.createSession"
+REFRESH_PATH = "/xrpc/com.atproto.server.refreshSession"
 
 
 class _BskyAuth:
@@ -40,6 +42,10 @@ class _BskyAuth:
 
     def __init__(self) -> None:
         self.access_jwt: str | None = None
+        # Long-lived (~2 months). Renewing through refreshSession keeps
+        # createSession — the tightly rate-limited call (30 / 5 min,
+        # 300 / day per account) — to one call per process lifetime.
+        self.refresh_jwt: str | None = None
         self.expires_at: float = 0.0
         # Earliest unix-time we're allowed to attempt another login.
         # Bumped on 429 / network failure / non-200.
@@ -51,6 +57,8 @@ class _BskyAuth:
             return self.access_jwt
         if now < self.retry_after:
             return None
+        if self.refresh_jwt and await self._refresh(http, now):
+            return self.access_jwt
         try:
             r = await http.post(
                 f"{PDS_BASE}{LOGIN_PATH}",
@@ -61,12 +69,13 @@ class _BskyAuth:
             self.retry_after = now + 5 * 60
             return None
         if r.status_code == 429:
-            # Hammered the rate limit. Wait an hour before trying
-            # again — without this the fast-tier scheduler retries
-            # every 5 min and keeps the limit window open forever.
-            self.retry_after = now + 60 * 60
+            # Wait for the window the server names. A flat 1h back-off
+            # equalled the fast-tier interval, so every tick re-tried
+            # login and the account never left the daily limit.
+            self.retry_after = _rate_limit_reset(r, now)
             log.warning(
-                "bluesky login rate-limited; backing off for 1h. body=%s",
+                "bluesky login rate-limited; backing off for %.0f min. body=%s",
+                (self.retry_after - now) / 60,
                 r.text[:200],
             )
             return None
@@ -81,9 +90,42 @@ class _BskyAuth:
         except ValueError:
             self.retry_after = now + 15 * 60
             return None
-        self.access_jwt = data.get("accessJwt")
-        self.expires_at = now + 90 * 60
+        self._store(data, now)
         return self.access_jwt
+
+    async def _refresh(self, http, now: float) -> bool:
+        try:
+            r = await http.post(
+                f"{PDS_BASE}{REFRESH_PATH}",
+                headers={"Authorization": f"Bearer {self.refresh_jwt}"},
+            )
+            data = r.json() if r.status_code == 200 else None
+        except Exception:  # noqa: BLE001
+            data = None
+        if not data or not data.get("accessJwt"):
+            # Expired or revoked — fall through to a full login.
+            self.refresh_jwt = None
+            return False
+        self._store(data, now)
+        return True
+
+    def _store(self, data: dict[str, Any], now: float) -> None:
+        self.access_jwt = data.get("accessJwt")
+        self.refresh_jwt = data.get("refreshJwt") or self.refresh_jwt
+        self.expires_at = now + 90 * 60
+
+
+def _rate_limit_reset(r: Any, now: float) -> float:
+    """Unix time the login limit resets, from ``ratelimit-reset``.
+
+    Falls back to 6 h (longer than the hourly tick) when the header is
+    missing, and caps at 24 h so a bad header can't disable the source.
+    """
+    try:
+        reset = float(r.headers.get("ratelimit-reset"))
+    except (TypeError, ValueError):
+        return now + 6 * 60 * 60
+    return min(max(reset, now + 5 * 60), now + 24 * 60 * 60)
 
 
 _AUTH = _BskyAuth()
@@ -131,6 +173,9 @@ class BlueskyMentions7dIngestor(Ingestor):
 
 def _query_for(a: AgentRow) -> str | None:
     """Pick the most-distinctive search term for the agent."""
+    if a.entity_kind == "foundation_model":
+        # Slugs like "openai-gpt-5-2" never appear in posts.
+        return fm_hn_phrase(a.name)
     name = a.github_repo or a.slug
     if not name:
         return None
