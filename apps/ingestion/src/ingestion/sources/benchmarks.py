@@ -53,14 +53,16 @@ obscuring the real failures.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 from uuid import UUID
 
-from bs4 import BeautifulSoup
+import httpx
+from bs4 import BeautifulSoup, Tag
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -191,19 +193,28 @@ class BenchmarksIngestor(Ingestor):
 
     async def fetch(self, agents: list[AgentRow]) -> list[SignalReading]:
         # One HTML fetch per site, cached implicitly by today's tick.
-        pages: dict[str, tuple[BenchmarkSite, str]] = {}
+        htmls: list[tuple[BenchmarkSite, str]] = []
         for site in SITES:
             html = await _fetch_html(self._http, site.url)
             if html is not None:
-                pages[site.slug] = (site, html)
+                htmls.append((site, html))
+        # CPU-bound from here on: keep it off the event loop so the
+        # other slow-tier ingestors' DB connections stay serviced.
+        return await asyncio.to_thread(self._match, agents, htmls)
 
+    def _match(
+        self,
+        agents: list[AgentRow],
+        htmls: list[tuple[BenchmarkSite, str]],
+    ) -> list[SignalReading]:
+        pages = [(site, _page_rows(html)) for site, html in htmls]
         captured = datetime.now(UTC)
         self._per_benchmark = []
         out: list[SignalReading] = []
         for a in agents:
             per_agent: list[tuple[BenchmarkSite, float]] = []
-            for site, html in pages.values():
-                score = _score_for_agent_on_page(a, html)
+            for site, rows in pages:
+                score = _score_for_agent_in_rows(a, rows)
                 if score is None:
                     continue
                 self._per_benchmark.append(
@@ -231,7 +242,7 @@ class BenchmarksIngestor(Ingestor):
         return out
 
     async def run(
-        self, session: AsyncSession, agents: list[AgentRow], redis_client
+        self, session: AsyncSession, agents: list[AgentRow], redis_client: Any
     ) -> dict[str, int]:
         # Standard path first — writes BENCHMARK_SCORE signals,
         # dedupes, spike-detects, publishes. ``fetch`` (called from
@@ -292,7 +303,7 @@ class BenchmarksIngestor(Ingestor):
         return result
 
 
-async def _fetch_html(http, url: str) -> str | None:
+async def _fetch_html(http: httpx.AsyncClient, url: str) -> str | None:
     try:
         r = await http.get(url)
     except Exception as e:  # noqa: BLE001
@@ -332,12 +343,38 @@ def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
         characters (so ``r1`` in ``deepseek-r1`` doesn't get
         confused for a score).
     """
+    return _score_for_agent_in_rows(a, _page_rows(html))
+
+
+def _score_for_agent_in_rows(
+    a: AgentRow, rows: list[tuple[str, float]]
+) -> float | None:
+    """Best score among pre-parsed ``(row_text, row_score)`` rows that
+    mention the agent at a word boundary."""
     tokens = _identifying_tokens(a)
     if not tokens:
         return None
     pattern = word_boundary_regex(tokens)
-    soup = BeautifulSoup(html, "html.parser")
     best: float | None = None
+    for full_text, score in rows:
+        if pattern.search(full_text):
+            best = score if best is None else max(best, score)
+    return best
+
+
+def _page_rows(html: str) -> list[tuple[str, float]]:
+    """Parse a leaderboard page once into ``(row_text, row_score)``.
+
+    Parsing used to happen inside the per-agent loop — ~1,900 agents ×
+    every site, each a full BeautifulSoup parse. That was ~20 min of
+    synchronous CPU on the event loop, which starved every other
+    slow-tier ingestor until their DB connections dropped (the AA and
+    fm_leaderboards "another operation is in progress" / "connection
+    is closed" failures). Rows without a score-shaped cell are dropped
+    here since they could never contribute.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    out: list[tuple[str, float]] = []
     # Only scan ``<tr>`` rows. ``<li>`` was previously included as a
     # safety net for sites that render leaderboards as flat lists, but
     # in practice every benchmark page we ingest uses a real table —
@@ -349,17 +386,14 @@ def _score_for_agent_on_page(a: AgentRow, html: str) -> float | None:
     # name. Verified in prod: Opus 4.5 had 6 llm-stats rows all at
     # score=4.50 traced to this single ``<li>`` per page.
     for row in soup.find_all("tr"):
-        full_text = row.get_text(" ", strip=True)
-        if not pattern.search(full_text):
-            continue
         score = _extract_row_score(row)
         if score is None:
             continue
-        best = score if best is None else max(best, score)
-    return best
+        out.append((row.get_text(" ", strip=True), score))
+    return out
 
 
-def _extract_row_score(row) -> float | None:
+def _extract_row_score(row: Tag) -> float | None:
     """Pull a score-shaped number out of a leaderboard ``<tr>`` row.
 
     Walks cells right-to-left and returns the first cell that parses
@@ -535,7 +569,7 @@ async def _upsert_benchmark(
             "m": site.max_score,
         },
     )
-    return r.scalar_one()
+    return cast(UUID, r.scalar_one())
 
 
 async def _last_benchmark_score(
