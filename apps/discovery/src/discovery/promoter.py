@@ -27,7 +27,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import redis.asyncio as redis_async
@@ -443,7 +443,9 @@ async def _admit(
         existing = await session.execute(
             text("SELECT id FROM agents WHERE slug = :slug"), {"slug": slug}
         )
-        agent_id = existing.scalar_one()
+        # SQLAlchemy 2.1 leaves scalar_one() on a text() result as an
+        # unresolved TypeVar; the column is the uuid primary key.
+        agent_id = cast(UUID, existing.scalar_one())
     else:
         agent_id = row[0]
 
@@ -554,7 +556,7 @@ async def _attach_tag(
         ),
         {"kind": kind, "value": value},
     )
-    tag_id = res.scalar_one()
+    tag_id = cast(UUID, res.scalar_one())
     await session.execute(
         text(
             """

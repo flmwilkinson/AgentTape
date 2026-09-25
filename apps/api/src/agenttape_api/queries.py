@@ -6,7 +6,7 @@ plain dicts — Pydantic models live in ``schemas.py``.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -230,9 +230,11 @@ async def list_agents(
         {join}
         WHERE {' AND '.join(where)}
     """
-    total = (await session.execute(text(total_sql), params)).scalar_one()
+    # SQLAlchemy 2.1 types scalar_one() on a text() result as an unresolved
+    # TypeVar, which mypy refuses to infer; count(*) is always an int.
+    total = cast(int, (await session.execute(text(total_sql), params)).scalar_one())
 
-    return [_row_to_agent_summary(r) for r in rows], int(total)
+    return [_row_to_agent_summary(r) for r in rows], total
 
 
 # -------------------------------------------------------------- agent detail
@@ -1164,10 +1166,11 @@ async def list_events(
         }
         for r in rows
     ]
-    total = (
-        await session.execute(text(f"SELECT count(*) FROM events {where}"), params)
-    ).scalar_one()
-    return items, int(total)
+    total = cast(
+        int,
+        (await session.execute(text(f"SELECT count(*) FROM events {where}"), params)).scalar_one(),
+    )
+    return items, total
 
 
 async def recent_admissions(
