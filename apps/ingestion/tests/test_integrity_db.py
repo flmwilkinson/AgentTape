@@ -7,9 +7,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
-
 from ingestion.integrity import run_integrity_checks
+from sqlalchemy import text
 
 pytestmark = pytest.mark.asyncio
 
