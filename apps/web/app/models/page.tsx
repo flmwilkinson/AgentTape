@@ -463,7 +463,9 @@ export default function ModelsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-right hidden md:table-cell">
-                      {m.score?.adoption?.toFixed(1) ?? "—"}
+                      {m.score?.adoption === null
+                        ? "Unrated"
+                        : m.score?.adoption?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground hidden md:table-cell">
                       {m.score?.quality === null
@@ -476,7 +478,9 @@ export default function ModelsPage() {
                         : m.score?.efficiency?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right hidden lg:table-cell">
-                      {m.score?.momentum?.toFixed(1) ?? "—"}
+                      {m.score?.momentum === null
+                        ? "Unrated"
+                        : m.score?.momentum?.toFixed(1) ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <CompareTrayToggle slug={m.slug} />

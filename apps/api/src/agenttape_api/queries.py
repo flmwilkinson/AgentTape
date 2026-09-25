@@ -100,16 +100,24 @@ def _row_to_agent_summary(row: Any) -> dict[str, Any]:
             continue
         kind, value = pair.split(":", 1)
         tags_summary.append({"kind": kind, "value": value})
+    entity_kind = getattr(row, "entity_kind", "application")
+    discovered_via = row.discovered_via
+    if entity_kind == "foundation_model" and discovered_via == "hf_trending":
+        # The OpenRouter scout files its candidates under the nearest
+        # existing discovery_source enum value (huggingface), so every
+        # model page read "discovered via hf trending". Label the real
+        # provenance here rather than migrate the enum for a label.
+        discovered_via = "openrouter_catalogue"
     return {
         "id": row.id,
         "slug": row.slug,
         "name": row.name,
         "description": row.description,
-        "discovered_via": row.discovered_via,
+        "discovered_via": discovered_via,
         "discovered_at": row.discovered_at,
         "homepage_url": row.homepage_url,
         "github_repo": row.github_repo,
-        "entity_kind": getattr(row, "entity_kind", "application"),
+        "entity_kind": entity_kind,
         "facts": facts,
         "tags": tags_summary,
         "score": {

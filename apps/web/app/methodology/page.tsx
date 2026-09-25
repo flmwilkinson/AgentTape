@@ -49,7 +49,7 @@ const PILLARS: PillarStory[] = [
     pillar: "Adoption",
     question: "Is anyone actually using this?",
     app_intro:
-      "Installs, registry presence, real-world distribution. Includes the FM-style breadth signals — GitHub mentions across repos and Wikipedia views — for tools that have become household names.",
+      "Installs, registry presence, real-world distribution. Includes the FM-style breadth signals — GitHub mentions across repos and tech-news coverage — for tools that have become household names.",
     app_signals: [
       "Crates.io downloads (90d)",
       "Docker pulls (30d)",
@@ -62,7 +62,6 @@ const PILLARS: PillarStory[] = [
       "PyPI monthly",
       "Stack Overflow questions (7d)",
       "Tech-news mentions (30d)",
-      "Wikipedia views (30d)",
     ],
     fm_intro:
       "Production traffic and where the model's name shows up across the developer ecosystem. OpenRouter token volume is the closest public proxy for real billable usage.",
@@ -73,11 +72,8 @@ const PILLARS: PillarStory[] = [
       "GitHub stars",
       "HF downloads (30d)",
       "HN mentions (7d)",
-      "Mastodon mentions (7d)",
       "OpenRouter token volume (30d)",
-      "Reddit mentions (7d)",
       "Tech-news mentions (30d)",
-      "Wikipedia views (30d)",
     ],
   },
   {
@@ -110,23 +106,18 @@ const PILLARS: PillarStory[] = [
       "Google Trends",
       "HF downloads (7-day ROC)",
       "HN mentions (7-day ROC)",
-      "Mastodon mentions (7-day ROC)",
       "npm weekly (7-day ROC)",
       "PyPI monthly (7-day ROC)",
-      "Reddit mentions (7-day ROC)",
     ],
     fm_intro:
-      "Same rate-of-change treatment applied to FM-shaped signals. arXiv citation velocity lives here too (academic mindshare is an interest signal, not a capability one).",
+      "Same rate-of-change treatment applied to FM-shaped signals, with OpenRouter token volume as the production-traffic rate.",
     fm_signals: [
-      "arXiv citations (7-day ROC)",
       "Bluesky mentions (7-day ROC)",
       "GitHub mentions (7-day ROC)",
       "Google Trends",
       "HF downloads (7-day ROC)",
       "HN mentions (7-day ROC)",
-      "Mastodon mentions (7-day ROC)",
       "OpenRouter tokens (7-day ROC)",
-      "Reddit mentions (7-day ROC)",
     ],
   },
   {
@@ -141,15 +132,12 @@ const PILLARS: PillarStory[] = [
       "GitHub forks",
       "HF likes",
       "HN points (7d)",
-      "Mastodon mentions (7d)",
-      "Reddit points (7d)",
     ],
     fm_intro:
       "Genuinely sparse for foundation models, especially closed-weight ones. We keep the pillar but Unrated is the honest answer for most Anthropic and OpenAI flagships — they don't have contributor lists or forks because there's nothing to fork.",
     fm_signals: [
       "GitHub contributors (open-weight FMs only)",
       "HF likes",
-      "Reddit points (7d)",
     ],
   },
   {
@@ -159,7 +147,7 @@ const PILLARS: PillarStory[] = [
       "Not used for applications — apps run on the user's hardware and their cost/speed depends on the model they're configured with, not the tool itself.",
     app_signals: ["— (Application entity kind has no Efficiency pillar)"],
     fm_intro:
-      "Cost and speed via the Artificial Analysis API. Blended $/M tokens (input + output, inverse-anchored so cheaper scores higher) and median output tokens/sec. Lets a buyer see that, say, Claude Opus 4.7 and GPT-5.1 are at similar capability but very different price points.",
+      "Cost from the OpenRouter catalogue, speed via the Artificial Analysis API. Blended $/M tokens (input + output, inverse-anchored so cheaper scores higher) and median output tokens/sec. Lets a buyer see that, say, Claude Opus 4.7 and GPT-5.1 are at similar capability but very different price points.",
     fm_signals: [
       "Blended price (input + output $/M tokens, lower is better)",
       "Median output tokens/sec",
@@ -274,12 +262,11 @@ export default function MethodologyPage() {
                 <td className="px-3 py-2 font-medium">Fast</td>
                 <td className="px-3 py-2 text-muted-foreground">~1 hour</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  arXiv citations · Bluesky / HN / Mastodon / Reddit
+                  arXiv citations · Bluesky / HN
                   mentions · Crates.io downloads · Docker pulls · GitHub
                   stars, forks, contributors, commits, mentions · HF
                   downloads, likes, trending rank · MCP registry · npm
-                  weekly · Product Hunt · PyPI monthly · Stack Overflow
-                  questions. Drives the live ticker; inserts are
+                  weekly · Product Hunt · PyPI monthly · Stack Overflow questions · OpenRouter prices. Drives the live ticker; inserts are
                   deduped per signal so only changed values write.
                 </td>
               </tr>
@@ -292,8 +279,7 @@ export default function MethodologyPage() {
                   MMLU-Pro, Open LLM) · llm-stats per-benchmark pages ·
                   Discord members · GitHub releases (90d) · GitHub
                   issue close-rate · GitHub first-response hours ·
-                  GitHub repos using model · Google Trends · Tech-news
-                  mentions (GDELT) · Wikipedia views.
+                  GitHub repos using model · Google Trends · OpenRouter token volume (per-model pages) · Tech-news mentions (GDELT).
                 </td>
               </tr>
             </tbody>

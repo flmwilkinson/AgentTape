@@ -128,7 +128,7 @@ export function PillarBar({ score, variant = "full", className }: PillarBarProps
 
       {variant === "full" && usedWeight < 1 && (
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Quality unrated · weight redistributed
+          Unrated pillars contribute zero
         </div>
       )}
     </div>

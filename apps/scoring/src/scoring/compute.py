@@ -213,6 +213,19 @@ def scaled_roc(now: float, then: float) -> float:
 
 # ----------------------------------------------------------- pillar maps
 
+# Sources that are not collected today are deliberately absent from
+# every list below, even though the ingestors and anchors exist. A
+# listed-but-never-read source changes no score (a missing reading
+# contributes nothing) but the methodology page renders these lists as
+# "the signals that drive it", and agent pages promised each one on
+# "the next tick". Re-add when the input exists:
+#   REDDIT_MENTIONS_7D / REDDIT_POINTS_7D — need REDDIT_CLIENT_ID/SECRET.
+#   MASTODON_MENTIONS_7D — anonymous instance search returns nothing;
+#     needs an instance token, and re-scheduling in ingestion.tiers.
+#   WIKIPEDIA_VIEWS_30D — no scout sets facts["wikipedia_title"].
+#   ARXIV_CITATIONS for foundation models — no FM has arxiv_ids
+#     (applications keep it; the arXiv scout sets theirs).
+
 PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
     "adoption": [
         SignalSource.CRATES_DOWNLOADS_90D,
@@ -233,10 +246,6 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.PRODUCTHUNT_UPVOTES,
         SignalSource.PYPI_MONTHLY,
         SignalSource.STACKOVERFLOW_QUESTIONS_7D,
-        # Apps with a Wikipedia page are household-name level —
-        # Cursor, Claude Code, ChatGPT, AutoGPT. Useful for the
-        # household-name signal the social channels miss.
-        SignalSource.WIKIPEDIA_VIEWS_30D,
     ],
     "quality": [
         SignalSource.BENCHMARK_SCORE,
@@ -256,13 +265,8 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.GOOGLE_TRENDS_SCORE,
         SignalSource.HF_DOWNLOADS_30D,
         SignalSource.HN_MENTIONS_7D,
-        # Mastodon mirrors Bluesky on the federated side — both
-        # appear in adoption (level) and momentum (rate), neither in
-        # community (would triple-count the same conversation).
-        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.NPM_WEEKLY,
         SignalSource.PYPI_MONTHLY,
-        SignalSource.REDDIT_MENTIONS_7D,
     ],
     "community": [
         SignalSource.BLUESKY_MENTIONS_7D,
@@ -271,10 +275,6 @@ PILLAR_SOURCES_APPLICATION: dict[str, list[SignalSource]] = {
         SignalSource.GITHUB_FORKS,
         SignalSource.HF_LIKES,
         SignalSource.HN_POINTS_7D,
-        # Mastodon mirrors Bluesky's pattern — community for apps
-        # captures contributor + commentator engagement together.
-        SignalSource.MASTODON_MENTIONS_7D,
-        SignalSource.REDDIT_POINTS_7D,
     ],
     # Applications don't have a meaningful Efficiency signal — they
     # run on the user's hardware and don't carry per-token pricing
@@ -297,7 +297,6 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.GITHUB_STARS,
         SignalSource.HF_DOWNLOADS_30D,
         SignalSource.HN_MENTIONS_7D,
-        SignalSource.MASTODON_MENTIONS_7D,
         # Tech-press coverage. The household-name signal the GPT/
         # Claude/Gemini flagships would otherwise undercount on
         # Hacker News alone.
@@ -306,8 +305,6 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         # production traffic" on FMs. Routinely diverges from
         # benchmark and HF download rankings.
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
-        SignalSource.REDDIT_MENTIONS_7D,
-        SignalSource.WIKIPEDIA_VIEWS_30D,
     ],
     "quality": [
         # Quality is now BENCHMARK_SCORE only for foundation models.
@@ -324,20 +321,12 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         SignalSource.BENCHMARK_SCORE,
     ],
     "momentum": [
-        # Academic mentions over time — newer papers citing this
-        # model are a credible "still relevant" signal. The momentum
-        # pillar treats it as a 7-day rate via scaled_roc, so a
-        # model with a flat citation count doesn't get penalised
-        # — only models gaining (or losing) academic mindshare move.
-        SignalSource.ARXIV_CITATIONS,
         SignalSource.BLUESKY_MENTIONS_7D,
         SignalSource.GITHUB_MENTIONS_7D,
         SignalSource.GOOGLE_TRENDS_SCORE,
         SignalSource.HF_DOWNLOADS_30D,
         SignalSource.HN_MENTIONS_7D,
-        SignalSource.MASTODON_MENTIONS_7D,
         SignalSource.OPENROUTER_TOKEN_VOLUME_30D,
-        SignalSource.REDDIT_MENTIONS_7D,
     ],
     "community": [
         # Note: BLUESKY_MENTIONS_7D, MASTODON_MENTIONS_7D and
@@ -347,7 +336,6 @@ PILLAR_SOURCES_FOUNDATION_MODEL: dict[str, list[SignalSource]] = {
         # pillar to keep the mean-of-scaled-signals math clean.
         SignalSource.GITHUB_CONTRIBUTORS,
         SignalSource.HF_LIKES,
-        SignalSource.REDDIT_POINTS_7D,
     ],
     "efficiency": [
         # FM-only fifth pillar. Captures production-fit:
