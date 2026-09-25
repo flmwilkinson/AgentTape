@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ingestion.config import Settings
 from ingestion.integrity import (
+    Flag,
     detect_coordinated_hn_posting,
     detect_hf_surge_without_github,
     detect_star_spike_without_contrib_diversity,
@@ -138,3 +139,51 @@ def test_hn_coordinated_ignores_noise_at_low_baseline():
         settings=_settings(),
     )
     assert flag is None
+
+
+# ------------------------------------------------------------ merge_flags
+
+
+def _flag(rule: str) -> Flag:
+    return Flag(rule=rule, reason="r", details={})
+
+
+def test_merge_flags_expires_after_ttl_and_refreshes_on_refire():
+    from datetime import UTC, datetime, timedelta
+
+    from ingestion.integrity import merge_flags
+
+    now = datetime(2026, 9, 25, tzinfo=UTC)
+    old = (now - timedelta(days=15)).isoformat()
+    fresh = (now - timedelta(days=3)).isoformat()
+    existing = {
+        "hf_surge_no_github": {"reason": "x", "captured_at": old},
+        "star_spike_no_contrib_diversity": {"reason": "y", "captured_at": fresh},
+    }
+    merged, new = merge_flags(existing, [], entity_kind="application", ttl_days=14, now=now)
+    assert set(merged) == {"star_spike_no_contrib_diversity"}
+    assert new == []
+
+    merged, new = merge_flags(
+        existing, [_flag("hf_surge_no_github")], entity_kind="application", ttl_days=14, now=now
+    )
+    assert merged["hf_surge_no_github"]["captured_at"] == now.isoformat()
+    assert new == ["hf_surge_no_github"]  # lapsed, so raising it again is news
+
+
+def test_merge_flags_drops_hn_rule_for_foundation_models():
+    from datetime import UTC, datetime
+
+    from ingestion.integrity import merge_flags
+
+    now = datetime(2026, 9, 25, tzinfo=UTC)
+    existing = {"coordinated_hn_posting": {"reason": "launch week", "captured_at": now.isoformat()}}
+    merged, new = merge_flags(
+        existing, [_flag("coordinated_hn_posting")], entity_kind="foundation_model",
+        ttl_days=14, now=now,
+    )
+    assert merged == {} and new == []
+    merged, new = merge_flags(
+        None, [_flag("coordinated_hn_posting")], entity_kind="application", ttl_days=14, now=now
+    )
+    assert set(merged) == {"coordinated_hn_posting"} and new == ["coordinated_hn_posting"]

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
@@ -22,6 +23,7 @@ import httpx
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 from ingestion.sources.hackernews import fm_hn_phrase
+from ingestion.sources.name_tokens import fm_search_tokens, word_boundary_regex
 
 log = logging.getLogger(__name__)
 
@@ -158,8 +160,16 @@ class BlueskyMentions7dIngestor(Ingestor):
             term = _query_for(a)
             if not term:
                 return None
+            # FMs: the phrase query over-matches sibling versions
+            # ("GPT-5" also returns GPT-5.6 posts), so count only
+            # posts whose text has the model name at a word boundary.
+            pattern = (
+                word_boundary_regex(fm_search_tokens(a))
+                if a.entity_kind == "foundation_model"
+                else None
+            )
             async with sem:
-                count = await _count(self._http, headers, term, since)
+                count = await _count(self._http, headers, term, since, pattern)
             if count is None:
                 return None
             return SignalReading(
@@ -187,22 +197,51 @@ def _query_for(a: AgentRow) -> str | None:
     return f'"{name}"' if " " in name else name
 
 
-async def _count(http: httpx.AsyncClient, headers: dict[str, str], query: str, since: str) -> int | None:
-    """Return total hits for the query in the past week, or None."""
-    params: dict[str, Any] = {"q": query, "limit": 100, "since": since}
-    try:
-        r = await http.get(f"{PDS_BASE}{SEARCH_PATH}", headers=headers, params=params)
-    except Exception:  # noqa: BLE001
-        return None
-    if r.status_code == 401:
-        # Token expired between fetch and now — drop the cached one.
-        _AUTH.access_jwt = None
-        return None
-    if r.status_code != 200:
-        return None
-    try:
-        data = r.json() or {}
-    except ValueError:
-        return None
-    posts = data.get("posts") or []
-    return len(posts)
+# searchPosts pages are 100 posts; five pages bounds the per-agent
+# cost while covering anything short of a viral launch week.
+MAX_PAGES = 5
+
+
+async def _count(
+    http: httpx.AsyncClient,
+    headers: dict[str, str],
+    query: str,
+    since: str,
+    pattern: re.Pattern[str] | None = None,
+) -> int | None:
+    """Posts matching the query in the past week, or None on failure.
+
+    With ``pattern`` only posts whose text matches it are counted.
+    """
+    count = 0
+    cursor: str | None = None
+    for _ in range(MAX_PAGES):
+        params: dict[str, Any] = {"q": query, "limit": 100, "since": since}
+        if cursor:
+            params["cursor"] = cursor
+        try:
+            r = await http.get(f"{PDS_BASE}{SEARCH_PATH}", headers=headers, params=params)
+        except Exception:  # noqa: BLE001
+            return None
+        if r.status_code == 401:
+            # Token expired between fetch and now — drop the cached one.
+            _AUTH.access_jwt = None
+            return None
+        if r.status_code != 200:
+            return None
+        try:
+            data = r.json() or {}
+        except ValueError:
+            return None
+        posts = data.get("posts") or []
+        if pattern is None:
+            count += len(posts)
+        else:
+            for p in posts:
+                text = ((p.get("record") or {}).get("text")) or ""
+                if pattern.search(text):
+                    count += 1
+        cursor = data.get("cursor")
+        if not cursor or len(posts) < 100:
+            break
+    return count

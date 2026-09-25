@@ -57,6 +57,7 @@ log = logging.getLogger(__name__)
 
 GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GDELT_MAX = 250  # the API caps records returned per query at 250
+GDELT_INTERVAL = 5.2  # seconds between requests; GDELT asks for one per 5 s
 
 # RSS feeds for the fallback path. Same set we used before GDELT was
 # wired in — generalist tech press that captures the household-name
@@ -89,7 +90,6 @@ class NewsMentionsIngestor(Ingestor):
         # for the entire batch rather than per-agent — one error
         # signal usually means the whole API is unhappy.
         gdelt_ok = True
-        sem = asyncio.Semaphore(4)  # ~4 concurrent ≈ 4 q/s, just under GDELT's soft limit
 
         async def gdelt_count(term: str) -> int | None:
             params = {
@@ -100,29 +100,35 @@ class NewsMentionsIngestor(Ingestor):
                 "timespan": "30d",
                 "sort": "hybridrel",
             }
-            try:
-                async with sem:
+            for attempt in range(2):
+                try:
                     r = await self._http.get(
-                        GDELT_DOC_URL, params=params, timeout=8.0
+                        GDELT_DOC_URL, params=params, timeout=15.0
                     )
-            except Exception as e:  # noqa: BLE001
-                log.debug("gdelt fetch failed: %s", e)
-                return None
-            if r.status_code != 200:
-                return None
-            try:
-                data = r.json()
-            except Exception:  # noqa: BLE001
-                return None
-            articles = data.get("articles")
-            if articles is None:
-                # Empty result is reported as missing key, not [].
-                return 0
-            return len(articles)
+                except Exception as e:  # noqa: BLE001
+                    log.debug("gdelt fetch failed: %s", e)
+                    return None
+                if r.status_code == 429 and attempt == 0:
+                    # "Please limit requests to one every 5 seconds."
+                    await asyncio.sleep(30)
+                    continue
+                if r.status_code != 200:
+                    return None
+                try:
+                    data = r.json()
+                except Exception:  # noqa: BLE001
+                    return None
+                articles = data.get("articles")
+                if articles is None:
+                    # Empty result is reported as missing key, not [].
+                    return 0
+                return len(articles)
+            return None
 
         # Build queries up-front so the fallback path can re-use the
         # same token list without re-deriving.
         per_agent_terms: dict[str, str] = {}
+        kind_by_id: dict[str, str] = {}
         for a in agents:
             tokens = search_tokens(a)
             if not tokens:
@@ -131,35 +137,36 @@ class NewsMentionsIngestor(Ingestor):
             # to avoid query-length issues.
             ored = " OR ".join(f'"{t}"' for t in tokens[:3])
             per_agent_terms[str(a.id)] = ored
+            kind_by_id[str(a.id)] = a.entity_kind
 
-        # GDELT primary pass.
+        # GDELT primary pass. GDELT's stated limit is one request per
+        # 5 seconds per IP; firing them concurrently got every call a
+        # 429 and the whole batch fell through to RSS with nothing.
+        # Serial and paced, ~1,900 agents is a few hours — fine for
+        # the daily one-shot. Foundation models first: the closed-
+        # model Adoption pillar has the fewest other inputs, so it is
+        # served even if the run is cut short.
         primary: dict[str, int] = {}
         if per_agent_terms:
+            ordered = sorted(
+                per_agent_terms,
+                key=lambda aid: kind_by_id[aid] != "foundation_model",
+            )
             try:
-                results = await asyncio.gather(
-                    *(gdelt_count(term) for term in per_agent_terms.values()),
-                    return_exceptions=True,
-                )
-                # If every call failed (all None or all exceptions),
-                # treat GDELT as down and fall back.
-                got_any = any(
-                    isinstance(r, int) for r in results
-                )
-                if not got_any:
-                    gdelt_ok = False
-                    log.warning(
-                        "news_mentions: GDELT returned nothing for %d agents — falling back to RSS",
-                        len(per_agent_terms),
-                    )
-                else:
-                    for (aid, _term), result in zip(
-                        per_agent_terms.items(), results, strict=True
-                    ):
-                        if isinstance(result, int):
-                            primary[aid] = result
+                for aid in ordered:
+                    result = await gdelt_count(per_agent_terms[aid])
+                    await asyncio.sleep(GDELT_INTERVAL)
+                    if isinstance(result, int):
+                        primary[aid] = result
             except Exception as e:  # noqa: BLE001
-                gdelt_ok = False
                 log.warning("news_mentions: GDELT batch errored: %s", e)
+            if not primary:
+                # If every call failed, treat GDELT as down and fall back.
+                gdelt_ok = False
+                log.warning(
+                    "news_mentions: GDELT returned nothing for %d agents — falling back to RSS",
+                    len(per_agent_terms),
+                )
 
         # RSS fallback for agents GDELT didn't answer.
         rss_corpus: list[str] | None = None

@@ -9,14 +9,15 @@ Two flavours of "GitHub stars" matter and they're not the same:
        ingestor measures.
 
 Implementation uses the Code Search API for the count (we only need
-total_count, not the hits themselves). Rate-limited at 30 req/min for
-authenticated calls and 10 req/min unauthenticated, so we stay on the
-MEDIUM tier (one pass per hour).
+total_count, not the hits themselves). Code Search allows 10 req/min
+authenticated, so each hourly MEDIUM tick covers a 1/24th slice of
+the population (see ``fetch``).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import zlib
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -28,6 +29,8 @@ from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 log = logging.getLogger(__name__)
 
 CODE_SEARCH = "https://api.github.com/search/code"
+# Code Search allowance is 10 requests / minute authenticated.
+REQUEST_INTERVAL = 6.1
 
 # Match a slug-shaped token. We strip provider prefixes from foundation
 # model slugs ("openai-gpt-5-3-codex" -> "gpt-5-3-codex") so the search
@@ -53,7 +56,15 @@ class GithubMentions7dIngestor(Ingestor):
             # null results — soft-skip the whole source instead.
             return []
 
-        sem = asyncio.Semaphore(1)  # serialize to respect rate limit
+        # Code Search allows 10 requests / minute, so one hourly pass
+        # over every agent can't fit. Each tick takes the 1/24th of the
+        # population whose slug hashes to this hour and paces at the
+        # limit — every agent is refreshed daily, plenty for a 7-day
+        # window. Before this, gather() fired all ~1,900 at once: ~50
+        # were answered and the rest hit the secondary limit, so most
+        # models never got a reading.
+        hour = datetime.now(UTC).hour
+        due = [a for a in agents if zlib.crc32(a.slug.encode()) % 24 == hour]
         since = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
         headers = {
             "Authorization": f"token {token}",
@@ -61,23 +72,24 @@ class GithubMentions7dIngestor(Ingestor):
             "User-Agent": self.settings.user_agent,
         }
 
-        async def one(a: AgentRow) -> SignalReading | None:
+        out: list[SignalReading] = []
+        for a in due:
             term = _query_term(a)
             if not term:
-                return None
-            async with sem:
-                count = await _count(self._http, headers, term, since)
+                continue
+            count = await _count(self._http, headers, term, since)
+            await asyncio.sleep(REQUEST_INTERVAL)
             if count is None:
-                return None
-            return SignalReading(
-                agent_id=a.id,
-                source=SignalSource.GITHUB_MENTIONS_7D,
-                value=float(count),
-                captured_at=datetime.now(UTC),
+                continue
+            out.append(
+                SignalReading(
+                    agent_id=a.id,
+                    source=SignalSource.GITHUB_MENTIONS_7D,
+                    value=float(count),
+                    captured_at=datetime.now(UTC),
+                )
             )
-
-        results = await asyncio.gather(*(one(a) for a in agents))
-        return [r for r in results if r is not None]
+        return out
 
 
 def _query_term(a: AgentRow) -> str | None:

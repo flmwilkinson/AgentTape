@@ -183,7 +183,7 @@ export default function ModelsPage() {
     },
   });
 
-  const all = data?.items ?? [];
+  const all = useMemo(() => data?.items ?? [], [data]);
 
   const filtered = useMemo(() => {
     let out: AgentSummary[] = all;

@@ -2,23 +2,36 @@
 
 One Algolia call per agent isn't free but the count is small (one batch
 per fast tier tick) and the API is generous. Applications search by
-github_repo full name, falling back to slug; foundation models search
-by their display name as an exact phrase (see ``fm_hn_phrase``).
+github_repo full name, falling back to slug, and take Algolia's hit
+count. Foundation models search by their display name as an exact
+phrase (see ``fm_hn_phrase``) and then count only the hits whose text
+actually contains the model name at a word boundary — Algolia's phrase
+match tokenises on punctuation, so ``"GPT-5"`` also returns every
+GPT-5.2 / GPT-5.6 post (90 hits of which 3 were about GPT-5 when this
+was checked) and every base version was credited with its successors'
+conversation.
 """
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from ingestion.enums import SignalSource
 from ingestion.sources.base import AgentRow, Ingestor, SignalReading
+from ingestion.sources.name_tokens import fm_search_tokens, word_boundary_regex
 
 log = logging.getLogger(__name__)
 
 ALGOLIA = "https://hn.algolia.com/api/v1/search"
+# Algolia's page-size ceiling. Models with more weekly mentions than
+# this are extrapolated from the sampled ratio (see ``_exact_count``).
+HITS_PAGE = 1000
+
+_TAG = re.compile(r"<[^>]+>")
 
 
 class HNMentions7dIngestor(Ingestor):
@@ -37,10 +50,14 @@ class HNMentions7dIngestor(Ingestor):
                 "numericFilters": f"created_at_i>{since}",
                 "hitsPerPage": 0,
             }
-            if a.entity_kind == "foundation_model":
+            is_fm = a.entity_kind == "foundation_model"
+            if is_fm:
                 term = fm_hn_phrase(a.name)
-                # Honour the quoted phrase.
+                # Honour the quoted phrase, and pull the text so we can
+                # count exact mentions rather than trust nbHits.
                 params["advancedSyntax"] = "true"
+                params["hitsPerPage"] = HITS_PAGE
+                params["attributesToRetrieve"] = "title,comment_text,story_text"
             else:
                 term = a.github_repo or a.slug
             if not term:
@@ -53,9 +70,14 @@ class HNMentions7dIngestor(Ingestor):
                     return None
             if r.status_code != 200:
                 return None
-            count = (r.json() or {}).get("nbHits")
-            if count is None:
+            data = r.json() or {}
+            nb_hits = data.get("nbHits")
+            if nb_hits is None:
                 return None
+            if is_fm:
+                count = _exact_count(a, data.get("hits") or [], int(nb_hits))
+            else:
+                count = int(nb_hits)
             return SignalReading(
                 agent_id=a.id,
                 source=SignalSource.HN_MENTIONS_7D,
@@ -88,3 +110,24 @@ def fm_hn_phrase(name: str | None) -> str | None:
     if re.fullmatch(r"[A-Za-z]+", clean):
         return None
     return f'"{clean}"'
+
+
+def _hit_text(hit: dict[str, Any]) -> str:
+    parts = (hit.get("title"), hit.get("comment_text"), hit.get("story_text"))
+    raw = " ".join(p for p in parts if isinstance(p, str))
+    return html.unescape(_TAG.sub(" ", raw))
+
+
+def _exact_count(a: AgentRow, hits: list[dict[str, Any]], nb_hits: int) -> int:
+    """Hits that mention the model itself, not a sibling version.
+
+    When Algolia had more hits than it returned, scale the sampled
+    exact-match ratio up to ``nb_hits`` rather than under-report.
+    """
+    if not hits:
+        return 0
+    pattern = word_boundary_regex(fm_search_tokens(a))
+    matched = sum(1 for h in hits if pattern.search(_hit_text(h)))
+    if nb_hits > len(hits):
+        return round(matched * nb_hits / len(hits))
+    return matched

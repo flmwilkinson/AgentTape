@@ -457,7 +457,9 @@ scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
           0% growth → 50, +100% → 100, −50% → 0. A signal first seen
           inside the 7-day window (no "then" reading) gets a 60 — a
           small "newly arrived" bias, not the punitive 0 a missing
-          baseline would otherwise imply.
+          baseline would otherwise imply. A reading of zero contributes
+          nothing: there is no momentum in no activity, and counting it
+          used to hand every silent model a synthetic floor score.
         </p>
         <H3>Special cases</H3>
         <p>
@@ -492,8 +494,10 @@ scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
         <H2 id="manipulation">7. Manipulation resistance</H2>
         <p>
           Three patterns trigger automatic flags. Flagged signals are
-          excluded from that day's score; the agent's record carries
-          the reason. The{" "}
+          excluded from the score while the flag is live; the agent's
+          record carries the reason. A flag is evidence for review, not
+          a verdict: one that stops re-firing expires 14 days after it
+          was last raised. The{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
             manipulation_resistance
           </code>{" "}
@@ -515,6 +519,9 @@ scaled_roc = clamp(50 + 50 × roc_7d, 0, 100)`}
             <strong>coordinated_hn_posting</strong> — a burst of HN
             mentions with low account-age diversity. Excludes{" "}
             <code>hn_mentions_7d</code> and <code>hn_points_7d</code>.
+            Not applied to foundation models: a model launch has
+            exactly this shape, and the rule was written for small
+            app repos.
           </li>
         </ul>
 

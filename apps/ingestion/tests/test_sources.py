@@ -715,7 +715,11 @@ async def test_hn_mentions_fm_uses_quoted_name_phrase():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.update(request.url.params)
-        return httpx.Response(200, json={"nbHits": 3})
+        return httpx.Response(200, json={"nbHits": 3, "hits": [
+            {"title": "GPT-5.2 is out"},
+            {"comment_text": "I prefer <b>gpt-5.2</b> to gpt-5.6"},
+            {"title": "GPT-5.6 review"},  # sibling version, not counted
+        ]})
 
     ing = HNMentions7dIngestor(settings, http=_client(handler))
     try:
@@ -725,6 +729,7 @@ async def test_hn_mentions_fm_uses_quoted_name_phrase():
     assert [r.agent_id for r in readings] == [a.id]
     assert seen["query"] == '"GPT-5.2"'
     assert seen["advancedSyntax"] == "true"
+    assert readings[0].value == 2.0
 
 
 # ------------------------------------------------------ openrouter pricing
@@ -877,3 +882,103 @@ async def test_openalex_sums_citations():
     finally:
         await ing.aclose()
     assert readings and readings[0].value == 17.0
+
+
+# ------------------------------------------------------- word boundaries
+
+
+def test_word_boundary_regex_rejects_sibling_versions():
+    from ingestion.sources.name_tokens import word_boundary_regex
+
+    p = word_boundary_regex(["GPT-5", "Claude Opus 5"])
+    assert p.search("I tried GPT-5 yesterday.")
+    assert p.search("openai/gpt-5, and it was fine")
+    assert p.search("Claude Opus 5 (the big one)")
+    assert not p.search("GPT-5.6 review")
+    assert not p.search("gpt-5-mini is cheap")
+    assert not p.search("Claude Opus 5.5 launched")
+    assert not p.search("xgpt-5")
+
+
+def test_hn_exact_count_extrapolates_past_page_limit():
+    from ingestion.sources.hackernews import _exact_count
+
+    a = _agent(name="OpenAI: GPT-5", slug="openai-gpt-5", entity_kind="foundation_model")
+    hits = [{"title": "GPT-5"}] * 3 + [{"title": "GPT-5.6"}] * 7
+    assert _exact_count(a, hits, nb_hits=10) == 3
+    # 30 exact of 100 sampled, 1000 reported -> 300.
+    assert _exact_count(a, hits * 10, nb_hits=1000) == 300
+    assert _exact_count(a, [], nb_hits=50) == 0
+
+
+async def test_bluesky_counts_exact_mentions_across_pages():
+    from ingestion.sources.bluesky import _count
+    from ingestion.sources.name_tokens import word_boundary_regex
+
+    pages = {
+        None: {"posts": [{"record": {"text": "GPT-5 rocks"}}] * 99
+               + [{"record": {"text": "GPT-5.6 rocks"}}], "cursor": "p2"},
+        "p2": {"posts": [{"record": {"text": "gpt-5 again"}}]},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=pages[request.url.params.get("cursor")])
+
+    async with _client(handler) as http:
+        n = await _count(http, {}, '"GPT-5"', "2026-01-01T00:00:00Z",
+                         word_boundary_regex(["GPT-5"]))
+    assert n == 100
+
+
+# ------------------------------------------------ github repos using model
+
+
+def test_repos_using_model_query_uses_bare_model_id():
+    from ingestion.sources.github_repos_using_model import _query_term, model_id
+
+    a = _agent(slug="anthropic-claude-opus-5-5", entity_kind="foundation_model",
+               facts={"openrouter_id": "anthropic/claude-opus-5.5"})
+    assert model_id(a) == "claude-opus-5.5"
+    assert _query_term(a) == '"claude-opus-5.5" in:name,description,readme'
+    # No facts: slug minus provider prefix.
+    b = _agent(slug="z-ai-glm-5-3", entity_kind="foundation_model")
+    assert _query_term(b) == '"glm-5-3" in:name,description,readme'
+    # Billing variants are the same model; skipped.
+    c = _agent(slug="z-ai-glm-4-5-air-free", entity_kind="foundation_model",
+               facts={"openrouter_id": "z-ai/glm-4.5-air:free"})
+    assert _query_term(c) is None
+    # A plain word matches every README that uses the word.
+    d = _agent(slug="pareto", entity_kind="foundation_model",
+               facts={"openrouter_id": "openrouter/pareto"})
+    assert _query_term(d) is None
+
+
+# ------------------------------------------------------- openrouter usage
+
+
+def test_openrouter_tokens_in_window_plain_and_escaped():
+    from datetime import date
+
+    from ingestion.sources.openrouter_usage import tokens_in_window
+
+    rows = ('[{"date":"2026-09-24 00:00:00","total_prompt_tokens":100,'
+            '"total_completion_tokens":10,"variant":"standard"},'
+            '{"date":"2026-08-01 00:00:00","total_prompt_tokens":999,'
+            '"total_completion_tokens":1}]')
+    plain = 'junk"top_apps":[{"x":[1]}],"top_apps_chart":' + rows + ',"more":1'
+    escaped = 'self.__next_f.push("' + plain.replace('"', '\\"') + '")'
+    cutoff = date(2026, 9, 1)
+    assert tokens_in_window(plain, cutoff) == 110
+    assert tokens_in_window(escaped, cutoff) == 110
+    assert tokens_in_window("<html>no chart</html>", cutoff) is None
+
+
+def test_openrouter_usage_resolves_id_from_facts_or_catalogue():
+    from ingestion.sources.openrouter_usage import resolve_model_id
+
+    by_slug = {"openai-gpt-5-2": "openai/gpt-5.2"}
+    with_facts = _agent(slug="whatever", entity_kind="foundation_model",
+                        facts={"openrouter_id": "anthropic/claude-opus-5.5"})
+    assert resolve_model_id(with_facts, by_slug) == "anthropic/claude-opus-5.5"
+    assert resolve_model_id(_agent(slug="openai-gpt-5-2"), by_slug) == "openai/gpt-5.2"
+    assert resolve_model_id(_agent(slug="unknown"), by_slug) is None

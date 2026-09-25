@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # Optional Claude for rebalance narratives.
     anthropic_api_key: str | None = None
 
+    # Manipulation flags older than this no longer exclude signals.
+    # Same value as ingestion.config; ingestion also drops them from
+    # the agent row, this is the scorer's own check against stale rows.
+    manipulation_flag_ttl_days: int = 14
+
     # Debounce — each agent recomputes at most once every N seconds even if
     # 50 signals change in that window.
     recompute_debounce_seconds: int = 60

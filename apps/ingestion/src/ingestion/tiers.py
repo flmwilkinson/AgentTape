@@ -84,10 +84,6 @@ MEDIUM: list[type[Ingestor]] = [
     GithubReleases90dIngestor,
     GithubIssueCloseRate30dIngestor,
     DiscordMembersIngestor,
-    # OpenRouter token volume polled hourly — the rankings page
-    # itself only updates every few hours but a stable cadence
-    # gives the chart a clean tick.
-    OpenRouterTokenVolume30dIngestor,
     # Blended $/M price for every OpenRouter model — the Efficiency
     # pillar's cost input. One public request per tick.
     OpenRouterPricingIngestor,
@@ -119,6 +115,10 @@ SLOW: list[type[Ingestor]] = [
     # and the GitHub Code Search API is the slowest of our github
     # endpoints (30 req/min authenticated).
     GithubReposUsingModelIngestor,
+    # OpenRouter token volume is read off each model's public page
+    # (1–2 MB each, ~550 models) — daily is the right cadence for
+    # that much HTML, and the chart it carries is daily anyway.
+    OpenRouterTokenVolume30dIngestor,
     # News mentions across a curated set of tech-news RSS feeds.
     # Slow because the feeds only refresh ~daily and the signal
     # ("is this in the news") doesn't move minute-to-minute.

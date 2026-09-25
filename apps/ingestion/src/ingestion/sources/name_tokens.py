@@ -198,7 +198,13 @@ def word_boundary_regex(tokens: Iterable[str]) -> re.Pattern[str]:
         # No tokens = nothing to match. Return a regex that never matches.
         return re.compile(r"(?!.)")
     parts = [re.escape(t) for t in tokens]
+    # A version separator glued to more alphanumerics is not a boundary
+    # either: "GPT-5" must not match inside "GPT-5.6" or "gpt-5-mini",
+    # and "opus-5" must not match inside "opus-5.5". Trailing
+    # punctuation ("GPT-5.", "GPT-5,") still matches.
     return re.compile(
-        r"(?<![A-Za-z0-9])(?:" + "|".join(parts) + r")(?![A-Za-z0-9])",
+        r"(?<![A-Za-z0-9])(?<![A-Za-z0-9][.\-_])(?:"
+        + "|".join(parts)
+        + r")(?![A-Za-z0-9])(?![.\-_][A-Za-z0-9])",
         re.IGNORECASE,
     )

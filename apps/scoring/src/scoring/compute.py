@@ -114,18 +114,22 @@ ANCHORS: dict[SignalSource, float] = {
     # at 30 so a sustained mid-interest term (~30) reads as 50.
     SignalSource.GOOGLE_TRENDS_SCORE: 30,
     # Migration 0008.
-    # OpenRouter monthly token volume. The traffic distribution is
-    # extremely fat-tailed — top models clear hundreds of billions.
-    # 1B tokens is "real production usage but not a flagship" = 50.
-    SignalSource.OPENROUTER_TOKEN_VOLUME_30D: 1_000_000_000,
+    # OpenRouter 30-day token volume, read off each model's public
+    # page. The distribution spans ~1e6 (nobody) to ~2e13 (the busiest
+    # open model): 100M = 50 is "real but niche traffic"; 10T lands in
+    # the 80s. The old 1B anchor put 100 at 1e18 tokens and squeezed a
+    # 6,000x range (3.5B .. 22T) into 53..74.
+    SignalSource.OPENROUTER_TOKEN_VOLUME_30D: 100_000_000,
     # github_first_response_hours_30d uses an INVERSE special case in
     # scaled() — anchor here is the value-where-the-score-is-50.
     # 24h ↔ 50 means "a one-day median response is the par baseline".
     SignalSource.GITHUB_FIRST_RESPONSE_HOURS_30D: 24,
-    # Cumulative repos calling a foundation model. 100 distinct repos
-    # = score 50 — that's "real ecosystem traction, not a one-off".
-    # Top FMs (Claude, GPT) clear several thousand and so peg at 100.
-    SignalSource.GITHUB_REPOS_USING_MODEL: 100,
+    # Repositories naming a foundation model in their name, description
+    # or README (GitHub repo search). 1,000 repos = 50 — real ecosystem
+    # traction. A new flagship reads ~1,800 (54) a few days in; family
+    # base names run to ~160k (87). The old 100 anchor pegged anything
+    # over ~10k at 100 and the whole top of the board tied.
+    SignalSource.GITHUB_REPOS_USING_MODEL: 1_000,
     # Tech-news mentions in the last 30 days. Producer is GDELT
     # (~150k outlets) with the curated RSS list as a fallback.
     # Anchor at 30 because the GDELT corpus is much wider than the
@@ -582,6 +586,36 @@ async def _agent_flags(session: AsyncSession, agent_id: UUID) -> dict[str, Any] 
     return row[0] if row and row[0] else None
 
 
+def _active_flags(
+    manipulation_flags: dict[str, Any] | None, ttl_days: int
+) -> dict[str, Any]:
+    """Flags still inside their review window.
+
+    A flag is evidence for review, not a permanent verdict. Ingestion
+    expires them the same way; re-checking here means a stale row can
+    never keep excluding a signal. Entries without a parseable
+    timestamp count as active.
+    """
+    if not manipulation_flags:
+        return {}
+    now = datetime.now(UTC)
+    out: dict[str, Any] = {}
+    for rule, entry in manipulation_flags.items():
+        ts = entry.get("captured_at") if isinstance(entry, dict) else None
+        if isinstance(ts, str):
+            try:
+                raised = datetime.fromisoformat(ts)
+            except ValueError:
+                raised = None
+            if raised is not None:
+                if raised.tzinfo is None:
+                    raised = raised.replace(tzinfo=UTC)
+                if now - raised > timedelta(days=ttl_days):
+                    continue
+        out[rule] = entry
+    return out
+
+
 def _excluded_sources(manipulation_flags: dict[str, Any] | None) -> set[SignalSource]:
     if not manipulation_flags:
         return set()
@@ -666,6 +700,13 @@ async def _pillar_value(
             if now is None:
                 inputs[src.value] = {"status": "no_data"}
                 continue
+            if now <= 0:
+                # Nothing to have momentum in. Treating a zero reading
+                # as "newly arrived" (60) or "unchanged" (50) handed
+                # every model with no activity at all a synthetic 5–6
+                # point headline and ranked it above Unrated.
+                inputs[src.value] = {"now": now, "status": "zero"}
+                continue
             then = await _value_at(session, agent_id, src, days_ago=7)
             if then is None:
                 # Signal arrived in the last 7 days. Small positive bias.
@@ -732,7 +773,9 @@ async def compute_for_agent(
     a full window-function query per agent.
     """
     settings = settings or get_settings()
-    flags = await _agent_flags(session, agent_id)
+    flags = _active_flags(
+        await _agent_flags(session, agent_id), settings.manipulation_flag_ttl_days
+    )
     excluded = _excluded_sources(flags)
     resistance = _manipulation_resistance(flags)
     kind = await _agent_kind(session, agent_id)

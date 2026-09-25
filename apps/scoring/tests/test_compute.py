@@ -79,8 +79,10 @@ async def test_pillars_in_range_and_persisted(
     ).all()
     assert len(rows) == 50
     for _, headline, adoption, momentum, community, mr in rows:
-        for v in (headline, adoption, momentum, community):
+        for v in (headline, adoption, community):
             assert 0.0 <= float(v) <= 100.0
+        # Agent 0 has only zero readings: no activity, no momentum.
+        assert momentum is None or 0.0 <= float(momentum) <= 100.0
         assert 0.0 <= float(mr) <= 1.0
 
 
@@ -226,3 +228,42 @@ async def _rank_of(session, agent_id: uuid.UUID) -> int:
         if aid == agent_id:
             return i
     return 10**9
+
+
+# ------------------------------------------------------ flags + momentum
+
+
+def test_active_flags_drops_entries_past_ttl():
+    from datetime import UTC, datetime, timedelta
+
+    from scoring.compute import _active_flags, _excluded_sources
+    from scoring.enums import SignalSource
+
+    now = datetime.now(UTC)
+    flags = {
+        "coordinated_hn_posting": {"captured_at": (now - timedelta(days=20)).isoformat()},
+        "hf_surge_no_github": {"captured_at": (now - timedelta(days=2)).isoformat()},
+        "star_spike_no_contrib_diversity": {"reason": "legacy, no timestamp"},
+    }
+    active = _active_flags(flags, ttl_days=14)
+    assert set(active) == {"hf_surge_no_github", "star_spike_no_contrib_diversity"}
+    assert SignalSource.HN_MENTIONS_7D not in _excluded_sources(active)
+    assert _active_flags(None, ttl_days=14) == {}
+
+
+async def test_momentum_ignores_zero_readings(session, settings_with_db, redis_client):
+    """No momentum in no activity: a model whose only readings are 0
+    stays Unrated on Momentum instead of collecting the 60-point
+    'newly arrived' bias."""
+    from tests.conftest import add_signal, make_agent  # type: ignore
+
+    silent = await make_agent(session, slug="silent-agent")
+    await add_signal(session, silent, "github_stars", 0.0)
+    await add_signal(session, silent, "hn_mentions_7d", 0.0)
+    fresh = await make_agent(session, slug="fresh-agent")
+    await add_signal(session, fresh, "github_stars", 100.0)
+    await session.commit()
+
+    pop = await population_stats(session)
+    assert (await compute_for_agent(session, silent, pop, settings_with_db)).momentum is None
+    assert (await compute_for_agent(session, fresh, pop, settings_with_db)).momentum == 60.0

@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # Manipulation thresholds.
     star_spike_24h_multiplier: float = 10.0
     min_contributors_for_organic_spike: int = 5
+    # A flag that stops re-firing expires this many days after it was
+    # last raised. Mirrored in scoring.config so the scorer never
+    # excludes a signal on a flag ingestion has already let lapse.
+    manipulation_flag_ttl_days: int = 14
 
     user_agent: str = "AgentTape-Ingestion/0.0 (+https://github.com/flmwilkinson/AgentTape)"
 

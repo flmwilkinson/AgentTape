@@ -170,24 +170,107 @@ async def run_integrity_checks(
     settings = settings or Settings()
     rows = (
         await session.execute(
-            text("SELECT id FROM agents WHERE eligibility_status = 'admitted'")
+            text(
+                """
+                SELECT id, entity_kind, manipulation_flags FROM agents
+                WHERE eligibility_status = 'admitted'
+                """
+            )
         )
     ).all()
 
+    now = datetime.now(UTC)
     flagged = 0
-    for (agent_id,) in rows:
-        flags = await _evaluate_for_agent(session, agent_id, settings)
-        if flags:
-            await _persist_flags(session, redis_client, agent_id, flags)
+    for agent_id, entity_kind, existing in rows:
+        kind = entity_kind or "application"
+        flags = await _evaluate_for_agent(session, agent_id, settings, entity_kind=kind)
+        merged, new_rules = merge_flags(
+            existing,
+            flags,
+            entity_kind=kind,
+            ttl_days=settings.manipulation_flag_ttl_days,
+            now=now,
+        )
+        if merged:
             flagged += 1
+        if merged != (existing or {}):
+            await _persist_flags(session, redis_client, agent_id, merged, new_rules)
     await session.commit()
     log.info("integrity: %d agents flagged of %d admitted", flagged, len(rows))
     return {"agents_checked": len(rows), "flagged": flagged}
 
 
+# Rules that don't apply to an entity kind. A foundation-model launch
+# is exactly the "sharp HN jump" shape the HN rule looks for, and with
+# no per-poster identity nothing distinguishes it from astroturfing;
+# the rule was written for small app repos. Claude Opus 5 and 5.5 were
+# both flagged on release, which zeroed their Adoption for as long as
+# the flag lived (forever, before the TTL in ``merge_flags``).
+EXEMPT_RULES: dict[str, frozenset[str]] = {
+    "foundation_model": frozenset({"coordinated_hn_posting"}),
+}
+
+
+def merge_flags(
+    existing: dict[str, Any] | None,
+    flags: list[Flag],
+    *,
+    entity_kind: str,
+    ttl_days: int,
+    now: datetime,
+) -> tuple[dict[str, Any], list[str]]:
+    """Next flag set for an agent, plus the rules newly raised in it.
+
+    Flags are evidence for review, not a permanent verdict: a flag
+    that stops re-firing expires ``ttl_days`` after it was last
+    raised, and rules the agent's kind is exempt from are dropped. A
+    rule that fires again refreshes its timestamp.
+    """
+    exempt = EXEMPT_RULES.get(entity_kind, frozenset())
+    kept: dict[str, Any] = {}
+    for rule, entry in (existing or {}).items():
+        if rule in exempt or not isinstance(entry, dict):
+            continue
+        if _age_days(entry.get("captured_at"), now) > ttl_days:
+            continue
+        kept[rule] = entry
+    active_before = set(kept)
+    new_rules: list[str] = []
+    for f in flags:
+        if f.rule in exempt:
+            continue
+        if f.rule not in active_before:
+            new_rules.append(f.rule)
+        kept[f.rule] = {
+            "reason": f.reason,
+            "captured_at": now.isoformat(),
+            "details": f.details,
+        }
+    return kept, new_rules
+
+
+def _age_days(captured_at: Any, now: datetime) -> float:
+    """Days since the flag was raised. Entries without a parseable
+    timestamp count as fresh so a malformed row can't drop a flag."""
+    if not isinstance(captured_at, str):
+        return 0.0
+    try:
+        ts = datetime.fromisoformat(captured_at)
+    except ValueError:
+        return 0.0
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return (now - ts).total_seconds() / 86400
+
+
 async def _evaluate_for_agent(
-    session: AsyncSession, agent_id: UUID, settings: Settings
+    session: AsyncSession,
+    agent_id: UUID,
+    settings: Settings,
+    *,
+    entity_kind: str = "application",
 ) -> list[Flag]:
+    exempt = EXEMPT_RULES.get(entity_kind, frozenset())
     stars_now = await _latest(session, agent_id, SignalSource.GITHUB_STARS)
     stars_24h_ago = await _value_at(
         session, agent_id, SignalSource.GITHUB_STARS, hours=24
@@ -198,10 +281,13 @@ async def _evaluate_for_agent(
     hf_24h_ago = await _value_at(
         session, agent_id, SignalSource.HF_DOWNLOADS_30D, hours=24
     )
-    hn_now = await _latest(session, agent_id, SignalSource.HN_MENTIONS_7D)
-    hn_recent = await _recent_values(
-        session, agent_id, SignalSource.HN_MENTIONS_7D, limit=10
-    )
+    hn_now: float | None = None
+    hn_recent: list[float] = []
+    if "coordinated_hn_posting" not in exempt:
+        hn_now = await _latest(session, agent_id, SignalSource.HN_MENTIONS_7D)
+        hn_recent = await _recent_values(
+            session, agent_id, SignalSource.HN_MENTIONS_7D, limit=10
+        )
 
     flags: list[Flag] = []
     if stars_now is not None:
@@ -306,27 +392,24 @@ async def _persist_flags(
     session: AsyncSession,
     redis_client: Any,
     agent_id: UUID,
-    flags: list[Flag],
+    flag_obj: dict[str, Any],
+    new_rules: list[str],
 ) -> None:
-    flag_obj: dict[str, Any] = {
-        f.rule: {
-            "reason": f.reason,
-            "captured_at": datetime.now(UTC).isoformat(),
-            "details": f.details,
-        }
-        for f in flags
-    }
+    """Store the merged flag set (the whole set, so expired and exempt
+    entries actually disappear) and announce newly raised rules."""
     await session.execute(
         text(
             """
             UPDATE agents
-            SET manipulation_flags = COALESCE(manipulation_flags, CAST('{}' AS jsonb))
-                                     || CAST(:flags AS jsonb)
+            SET manipulation_flags = CASE
+                WHEN :empty THEN NULL ELSE CAST(:flags AS jsonb) END
             WHERE id = :id
             """
         ),
-        {"id": agent_id, "flags": json.dumps(flag_obj)},
+        {"id": agent_id, "flags": json.dumps(flag_obj), "empty": not flag_obj},
     )
+    if not new_rules:
+        return
     # Look up the agent slug so we can address events.agent.<slug>.
     slug_row = await session.execute(
         text("SELECT slug FROM agents WHERE id = :id"), {"id": agent_id}
@@ -337,7 +420,7 @@ async def _persist_flags(
         "kind": "agent_flagged",
         "agent_id": str(agent_id),
         "agent_slug": slug,
-        "flags": flag_obj,
+        "flags": {rule: flag_obj[rule] for rule in new_rules},
     }
     await session.execute(
         text(

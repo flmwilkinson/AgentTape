@@ -1,26 +1,33 @@
-"""github_repos_using_model — total GitHub repos referencing a
-foundation model's name in their code or README.
+"""github_repos_using_model — GitHub repositories that name a foundation
+model in their name, description or README.
 
 Difference from ``github_mentions_7d``: no time window. We measure
-the *cumulative* count of repos that have ever depended on / called /
-named-checked the model. That's the public signal that a model has
-ecosystem traction, which is what FM Community is about.
+the *cumulative* count of repos that have ever built on / documented /
+name-checked the model. That's the public signal that a model has
+ecosystem traction.
 
 Why this signal exists:
     Closed-weight flagship models (Claude, GPT, Gemini) don't have a
     GitHub repo of their own and don't have a Hugging Face page, so
-    the standard FM Community signals (HF likes, contributors) come
-    back null and the pillar is Unrated. But every coding agent on
-    earth depends on one of these models. Counting how many distinct
-    repos call the model gives Community a real number to anchor on.
+    the standard signals (stars, HF downloads) come back null. But
+    every coding agent on earth depends on one of these models, and
+    the repos say so in their READMEs.
 
 Implementation:
-    Same Code Search endpoint as github_mentions_7d, with the
-    ``pushed:>`` qualifier removed. We only care about ``total_count``
-    so we ask for a single result page. Limited to foundation models
-    — application agents have github_contributors / github_forks for
-    Community already, and broadening to apps would noisily double
-    count repos that include those agents as dependencies.
+    Repository Search (``/search/repositories``) with
+    ``in:name,description,readme``. Not Code Search: that counts
+    *files*, so one repo vendoring a model list contributed hundreds
+    of hits, Gemini 3.1 Flash Lite read 43,392 and every model pegged
+    the 100-repo anchor. Repo search read 1,754 for claude-opus-5.5
+    and 1 for hy3-preview — a spread the log curve can rank. Repo
+    search also allows 30 requests/min authenticated (Code Search:
+    10), so all ~550 models fit one paced daily pass; before, the
+    unpaced burst hit the secondary limit after ~25 models.
+
+    The search term is the model's own id, not the provider-qualified
+    OpenRouter id: ``"anthropic/claude-opus-5.5"`` finds 0 repos because
+    nobody writes the slash form in a README. ``:free`` and other
+    billing variants are skipped — they are the same model.
 
 Schedule: SLOW tier. The number doesn't move minute-to-minute;
 once-a-day is more than enough.
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 from typing import ClassVar
 
@@ -39,10 +47,12 @@ from ingestion.sources.base import AgentRow, Ingestor, SignalReading
 
 log = logging.getLogger(__name__)
 
-CODE_SEARCH = "https://api.github.com/search/code"
+REPO_SEARCH = "https://api.github.com/search/repositories"
+# Authenticated search allowance is 30 requests / minute.
+REQUEST_INTERVAL = 2.1
 
 # Strip provider prefixes from foundation model slugs so the search
-# isn't dominated by the provider's name appearing in random code.
+# isn't dominated by the provider's name appearing in random repos.
 _PROVIDER_PREFIXES = (
     "openai-", "anthropic-", "google-", "meta-", "mistral-", "qwen-",
     "deepseek-", "xai-", "nvidia-", "amazon-", "perplexity-", "minimax-",
@@ -60,98 +70,109 @@ class GithubReposUsingModelIngestor(Ingestor):
     async def fetch(self, agents: list[AgentRow]) -> list[SignalReading]:
         token = self.settings.github_token
         if not token:
-            # Code search requires authentication. Without a token
-            # we'd burn the anonymous 10 req/min on probably-null
-            # results — soft-skip the whole source instead.
+            # Search is far more generous authenticated; without a
+            # token we'd burn the anonymous 10 req/min on probably-
+            # null results — soft-skip the whole source instead.
             return []
 
-        # Foundation models only. Apps already have richer Community
-        # signals (contributors, forks); searching the entire app
-        # corpus this way would multiply the GitHub Code Search
-        # quota cost by ~5x for very little additional information.
+        # Foundation models only. Apps already have richer signals
+        # (stars, contributors, forks) on their own repos.
         fms = [a for a in agents if a.entity_kind == "foundation_model"]
         if not fms:
             return []
 
-        sem = asyncio.Semaphore(1)  # serialize to respect rate limit
         headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": self.settings.user_agent,
         }
-
-        async def one(a: AgentRow) -> SignalReading | None:
+        out: list[SignalReading] = []
+        for a in fms:
             term = _query_term(a)
             if not term:
-                return None
-            async with sem:
-                count = await _count(self._http, headers, term)
+                continue
+            count = await _count(self._http, headers, term)
+            await asyncio.sleep(REQUEST_INTERVAL)
             if count is None:
-                return None
-            return SignalReading(
-                agent_id=a.id,
-                source=SignalSource.GITHUB_REPOS_USING_MODEL,
-                value=float(count),
-                captured_at=datetime.now(UTC),
+                continue
+            out.append(
+                SignalReading(
+                    agent_id=a.id,
+                    source=SignalSource.GITHUB_REPOS_USING_MODEL,
+                    value=float(count),
+                    captured_at=datetime.now(UTC),
+                )
             )
-
-        results = await asyncio.gather(*(one(a) for a in fms))
-        return [r for r in results if r is not None]
+        return out
 
 
-def _query_term(a: AgentRow) -> str | None:
-    """Pick the most-distinctive token to search code for.
-
-    For OpenRouter-sourced models the ``openrouter_id`` is in the
-    facts payload (e.g. ``anthropic/claude-opus-4-7``). The slash
-    form is essentially a unique sentinel — code that uses this
-    model nearly always passes that exact string as the model id,
-    which means GitHub Code Search's 422 "vague query" rejection
-    almost never fires. Use it whenever it's available.
-
-    Without an openrouter_id we fall back to the slug minus the
-    provider prefix. That can trigger 422 for very short/common
-    tokens (e.g. ``gpt-5``), in which case ``_count`` returns None
-    and we silently skip the agent — better than emitting noise.
-    """
+def model_id(a: AgentRow) -> str | None:
+    """The model's own id as people write it: the OpenRouter id minus
+    its provider (``anthropic/claude-opus-5.5`` -> ``claude-opus-5.5``),
+    else the slug minus its provider prefix. None for billing variants
+    (``:free``, ``:thinking``)."""
     if a.facts:
         oid = a.facts.get("openrouter_id")
-        if isinstance(oid, str) and len(oid) >= 4:
-            return f'"{oid}"'
-
-    name = a.slug or ""
-    if not name:
-        return None
+        if isinstance(oid, str) and oid.strip():
+            oid = oid.strip().lower()
+            if ":" in oid:
+                return None
+            return oid.split("/", 1)[-1]
+    name = (a.slug or "").lower()
     for p in _PROVIDER_PREFIXES:
         if name.startswith(p):
             name = name[len(p):]
             break
-    name = name.lower().strip()
-    if len(name) < 4 or name in _NOISE_WORDS:
-        return None
-    return f'"{name}"'
+    return name or None
 
 
-async def _count(http: httpx.AsyncClient, headers: dict[str, str], term: str) -> int | None:
-    """Return total repo count for the search term across all of
-    GitHub, or None on any API failure.
+def _query_term(a: AgentRow) -> str | None:
+    """Search term, or None when the id can't be attributed.
 
-    GitHub Code Search caps total_count at 1000 even when more matches
-    exist; that's fine — our anchor is 100, so anything that would
-    saturate at 1000 also pegs the 100 ceiling on scaled().
+    A single plain word ("pareto", "sonar") matches every README that
+    uses the word — "pareto" read 52,323 repos — so those stay Unrated
+    here. Known limitation: GitHub's tokeniser makes a base version a
+    superset of its point releases ("gpt-5" also counts gpt-5.2 and
+    gpt-5-mini READMEs), so families are credited to their base name.
     """
+    mid = model_id(a)
+    if not mid or len(mid) < 4 or mid in _NOISE_WORDS:
+        return None
+    if mid.isalpha():
+        return None
+    return f'"{mid}" in:name,description,readme'
+
+
+async def _count(
+    http: httpx.AsyncClient, headers: dict[str, str], term: str
+) -> int | None:
+    """Repositories matching the term, or None on any API failure."""
     params: dict[str, str | int] = {"q": term, "per_page": 1}
-    try:
-        r = await http.get(CODE_SEARCH, headers=headers, params=params)
-    except Exception:  # noqa: BLE001
-        return None
-    if r.status_code == 422:
-        # GitHub rejects queries it deems too vague (single common
-        # word, etc.). Skip rather than retry.
-        return None
-    if r.status_code != 200:
-        return None
-    try:
-        return int((r.json() or {}).get("total_count") or 0)
-    except (ValueError, TypeError):
-        return None
+    for attempt in range(2):
+        try:
+            r = await http.get(REPO_SEARCH, headers=headers, params=params)
+        except Exception:  # noqa: BLE001
+            return None
+        if r.status_code in (403, 429) and attempt == 0:
+            # Secondary rate limit: wait it out once, then give up on
+            # this term rather than stall the tier.
+            await asyncio.sleep(_retry_delay(r))
+            continue
+        if r.status_code != 200:
+            # 422 = query GitHub deems too vague; skip rather than retry.
+            return None
+        try:
+            return int((r.json() or {}).get("total_count") or 0)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _retry_delay(r: httpx.Response) -> float:
+    retry_after = r.headers.get("retry-after")
+    if retry_after and retry_after.isdigit():
+        return min(float(retry_after), 120.0)
+    reset = r.headers.get("x-ratelimit-reset")
+    if reset and reset.isdigit():
+        return min(max(float(reset) - time.time(), 5.0), 120.0)
+    return 60.0
