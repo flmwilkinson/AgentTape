@@ -364,6 +364,11 @@ async def rebalance_index(
         {"iid": index_id, "now": now, "v": composite, "c": json.dumps(snapshot)},
     )
 
+    # Name the agents in the diff. Both the Claude prompt and the
+    # fallback only had ids to work with, so reports read "agent_id
+    # 651c3db6" / "36 new entrants (e.g. e9c6e698…)".
+    await _attach_names(session, diff.additions + diff.removals)
+
     narrative = await generate_rebalance_narrative(
         settings, definition, diff, candidates
     )
@@ -431,6 +436,22 @@ async def rebalance_index(
         "weight_changes": len(diff.weight_changes),
         "composite_value": composite,
     }
+
+
+async def _attach_names(session: AsyncSession, entries: list[dict[str, Any]]) -> None:
+    """Add a ``name`` to each diff entry in place, keyed by ``agent_id``."""
+    ids = [e["agent_id"] for e in entries if e.get("agent_id")]
+    if not ids:
+        return
+    rows = await session.execute(
+        text("SELECT id::text, name FROM agents WHERE id::text = ANY(:ids)"),
+        {"ids": ids},
+    )
+    names = {r[0]: r[1] for r in rows}
+    for e in entries:
+        name = names.get(e.get("agent_id", ""))
+        if name:
+            e["name"] = name
 
 
 def _composite_value(candidates: list[tuple[UUID, float]]) -> float:

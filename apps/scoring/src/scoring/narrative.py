@@ -78,17 +78,23 @@ async def generate_rebalance_narrative(
         return _fallback(definition, diff, candidates)
 
 
+def _sample(entries: list[dict[str, Any]], n: int = 3) -> str:
+    """Up to ``n`` agent names (``_attach_names`` sets them), falling
+    back to a short id for any entry without one."""
+    return ", ".join(e.get("name") or e["agent_id"][:8] for e in entries[:n])
+
+
 def _fallback(definition: Any, diff: Any, candidates: list[tuple[UUID, float]]) -> str:
     """A small deterministic narrative when Claude isn't available."""
     n = len(candidates)
     parts = [f"### {definition.name} rebalance"]
     parts.append(f"{n} constituents this week.")
     if diff.additions:
-        sample = ", ".join(a["agent_id"][:8] for a in diff.additions[:3])
-        parts.append(f"{len(diff.additions)} new entrants (e.g. {sample}…).")
+        parts.append(
+            f"{len(diff.additions)} new entrants, including {_sample(diff.additions)}."
+        )
     if diff.removals:
-        sample = ", ".join(r["agent_id"][:8] for r in diff.removals[:3])
-        parts.append(f"{len(diff.removals)} dropped (e.g. {sample}…).")
+        parts.append(f"{len(diff.removals)} dropped, including {_sample(diff.removals)}.")
     if not diff.additions and not diff.removals:
         parts.append("Membership unchanged from the prior period.")
     if diff.weight_changes:

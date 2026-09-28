@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 from typing import ClassVar
 
@@ -58,6 +59,8 @@ log = logging.getLogger(__name__)
 GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GDELT_MAX = 250  # the API caps records returned per query at 250
 GDELT_INTERVAL = 5.2  # seconds between requests; GDELT asks for one per 5 s
+GDELT_BUDGET_SECONDS = 90 * 60
+GDELT_MAX_CONSECUTIVE_FAILURES = 15
 
 # RSS feeds for the fallback path. Same set we used before GDELT was
 # wired in — generalist tech press that captures the household-name
@@ -146,20 +149,47 @@ class NewsMentionsIngestor(Ingestor):
         # the daily one-shot. Foundation models first: the closed-
         # model Adoption pillar has the fewest other inputs, so it is
         # served even if the run is cut short.
+        #
+        # Bounded two ways, because GDELT still refuses a large share
+        # of requests from this IP and each refusal costs a 30 s retry
+        # wait: the pass stops at GDELT_BUDGET_SECONDS, and after
+        # GDELT_MAX_CONSECUTIVE_FAILURES failures in a row. Unbounded,
+        # it ran ~26 h a night and pushed the whole slow tier past its
+        # next start. Agents not reached keep their last reading.
         primary: dict[str, int] = {}
         if per_agent_terms:
             ordered = sorted(
                 per_agent_terms,
                 key=lambda aid: kind_by_id[aid] != "foundation_model",
             )
+            deadline = time.monotonic() + GDELT_BUDGET_SECONDS
+            failures = 0
+            tried = 0
             try:
                 for aid in ordered:
+                    if time.monotonic() > deadline:
+                        log.info("news_mentions: GDELT time budget reached")
+                        break
+                    tried += 1
                     result = await gdelt_count(per_agent_terms[aid])
                     await asyncio.sleep(GDELT_INTERVAL)
                     if isinstance(result, int):
                         primary[aid] = result
+                        failures = 0
+                        continue
+                    failures += 1
+                    if failures >= GDELT_MAX_CONSECUTIVE_FAILURES:
+                        log.warning(
+                            "news_mentions: %d GDELT failures in a row; stopping",
+                            failures,
+                        )
+                        break
             except Exception as e:  # noqa: BLE001
                 log.warning("news_mentions: GDELT batch errored: %s", e)
+            log.info(
+                "news_mentions: GDELT answered %d of %d tried (%d agents)",
+                len(primary), tried, len(ordered),
+            )
             if not primary:
                 # If every call failed, treat GDELT as down and fall back.
                 gdelt_ok = False

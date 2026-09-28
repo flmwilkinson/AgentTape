@@ -982,3 +982,32 @@ def test_openrouter_usage_resolves_id_from_facts_or_catalogue():
     assert resolve_model_id(with_facts, by_slug) == "anthropic/claude-opus-5.5"
     assert resolve_model_id(_agent(slug="openai-gpt-5-2"), by_slug) == "openai/gpt-5.2"
     assert resolve_model_id(_agent(slug="unknown"), by_slug) is None
+
+
+# ------------------------------------------------------------ news / gdelt
+
+
+async def test_news_gdelt_stops_after_consecutive_failures(monkeypatch):
+    import ingestion.sources.news_mentions as nm
+
+    async def no_sleep(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(nm.asyncio, "sleep", no_sleep)
+    calls = {"gdelt": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "gdeltproject" in request.url.host:
+            calls["gdelt"] += 1
+            return httpx.Response(429, text="Please limit requests")
+        return httpx.Response(404)
+
+    agents = [_agent(slug=f"agent-{i:03d}", name=f"Agent {i:03d}") for i in range(60)]
+    ing = nm.NewsMentionsIngestor(Settings(), http=_client(handler))
+    try:
+        readings = await ing.fetch(agents)
+    finally:
+        await ing.aclose()
+    assert readings == []
+    # 15 agents x (first try + one retry), then the breaker trips.
+    assert calls["gdelt"] == nm.GDELT_MAX_CONSECUTIVE_FAILURES * 2

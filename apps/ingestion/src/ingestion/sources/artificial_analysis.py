@@ -244,7 +244,18 @@ class ArtificialAnalysisIngestor(Ingestor):
             return {"fetched": 0, "written": 0, "spiked": 0, "changed": 0}
 
         captured = datetime.now(UTC)
+        # Upsert every benchmark row first, in a fixed order, and commit
+        # straight away. Creating them lazily inside the long results
+        # transaction held row locks on benchmarks that the benchmarks /
+        # fm_leaderboards ingestors (running concurrently in the slow
+        # tier) upsert in a different order — Postgres killed AA with
+        # "deadlock detected" every night.
         bench_ids: dict[str, UUID] = {}
+        for bench_slug, category in sorted(set(BENCHMARK_FIELD_MAP.values())):
+            bench_ids[bench_slug] = await _ensure_benchmark(
+                session, bench_slug, AA_API, category=category, max_score=100.0
+            )
+        await session.commit()
         # Dedupe against priors loaded in two queries up front. The
         # old path ran a SELECT per (model, benchmark) — ~17 fields ×
         # hundreds of models — inside one transaction; on Neon from
@@ -267,18 +278,10 @@ class ArtificialAnalysisIngestor(Ingestor):
 
         for aid, m in by_agent.items():
             # Benchmark fan-out.
-            for aa_field, (bench_slug, category) in BENCHMARK_FIELD_MAP.items():
+            for aa_field, (bench_slug, _category) in BENCHMARK_FIELD_MAP.items():
                 score = _to_percent(aa_field, _dig(m, aa_field))
                 if score is None:
                     continue
-                if bench_slug not in bench_ids:
-                    bench_ids[bench_slug] = await _ensure_benchmark(
-                        session,
-                        bench_slug,
-                        AA_API,
-                        category=category,
-                        max_score=100.0,
-                    )
                 bid = bench_ids[bench_slug]
                 if prior_results.get((aid, bid)) == score:
                     continue
