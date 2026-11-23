@@ -8,6 +8,10 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com";
 // agent + every index. Capped at 50K URLs by spec; we're nowhere near
 // that.
 
+// Without this the sitemap would be built once at deploy and never
+// pick up newly admitted agents until the next deploy.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 

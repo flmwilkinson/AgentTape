@@ -10,7 +10,7 @@ import { Sparkline } from "@/components/sparkline";
 
 // /articles/this-week — the auto-generated weekly recap.
 //
-// Rebuilt every visit (5-minute revalidate) against live data so it
+// Rebuilt at most every 5 minutes (ISR) against live data so it
 // always reflects the actual past 7 days. Heading reads "Week of
 // <most recent Monday UTC>".
 //
@@ -20,7 +20,6 @@ import { Sparkline } from "@/components/sparkline";
 // an upstream call fails or returns empty, the whole section is
 // dropped rather than rendering a half-empty placeholder.
 
-export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 export const metadata: Metadata = {

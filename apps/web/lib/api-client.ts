@@ -57,7 +57,7 @@ export async function apiFetch<T>(
     timeoutMs?: number;
   } = {},
 ): Promise<T> {
-  const { searchParams, timeoutMs = defaultTimeout(), ...rest } = init;
+  const { searchParams, timeoutMs = defaultTimeout(), cache, ...rest } = init;
   let url = `${API_BASE}${path}`;
   if (searchParams) {
     const qs = new URLSearchParams();
@@ -79,8 +79,16 @@ export async function apiFetch<T>(
     ? AbortSignal.any([rest.signal, timeoutSignal])
     : timeoutSignal;
 
+  // `cache` only applies in the browser. On the server, a no-store
+  // fetch silently opts the whole route out of ISR: Next renders it
+  // on every request and ignores the page's `export const revalidate`.
+  // That's what had every agent/index/home page SSR'ing per hit and
+  // burning Vercel CPU. Dropping it server-side lets each route's
+  // `revalidate` export decide freshness, which is what the pages
+  // were written to expect.
   const res = await fetch(url, {
     ...rest,
+    ...(typeof window === "undefined" ? {} : { cache }),
     signal,
     headers: {
       Accept: "application/json",

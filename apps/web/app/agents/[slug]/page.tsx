@@ -17,19 +17,15 @@ import { TickerCard } from "@/components/ticker-card";
 // outage when Hetzner blips.
 export const revalidate = 300;
 
-// Pre-render the top 50 agents at deploy time so the most common
-// navigations (Floor → highest-scoring ticker, Trending → top mover)
-// land on a fully built page instead of triggering a cold SSR. Lower-
-// ranked agents still SSR on first hit, then ISR caches them for 5
-// minutes. The build budget is small: 50 × ~3 fetches each = 150
-// extra calls during deploy.
+// Render every agent on first visit, then ISR-cache it for 5 minutes.
+// Deliberately NOT pre-rendering the top 50 at build: that fires
+// ~250 API calls at once from the build workers, the API times out
+// under the burst, and the page throws (by design, so ISR keeps the
+// last good copy), which fails the whole deploy. Deploys shouldn't
+// depend on the API being up. The empty array (rather than no
+// generateStaticParams at all) is what keeps the route ISR-cacheable.
 export async function generateStaticParams() {
-  try {
-    const page = await api.listAgents({ sort: "score", limit: 50 });
-    return page.items.map((a) => ({ slug: a.slug }));
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function generateMetadata(
