@@ -33,7 +33,7 @@ const SECTORS: SectorDef[] = [
   {
     slug: "coding-agents",
     index_slug: "code-25",
-    title: "Top Coding AI Agents — Ranked Live | AgentTape",
+    title: "Top Coding AI Agents — Ranked Live",
     h1: "The 25 best AI agents for coding.",
     description:
       "The top AI agents for software engineering, ranked by AgentScore. Compare AutoGPT, crewAI, Cursor and more. Updated continuously, free to read.",
@@ -57,7 +57,7 @@ const SECTORS: SectorDef[] = [
   {
     slug: "browser-agents",
     index_slug: "web-25",
-    title: "Top Browser AI Agents — Ranked Live | AgentTape",
+    title: "Top Browser AI Agents — Ranked Live",
     h1: "The 25 best AI browser agents.",
     description:
       "AI agents that browse the web and operate browsers — browser-use, MultiOn, Steel WebVoyager and more. Ranked by AgentScore. Compare any two side-by-side.",
@@ -77,7 +77,7 @@ const SECTORS: SectorDef[] = [
   {
     slug: "foundation-models",
     index_slug: "fm-50",
-    title: "Top Foundation Models — Ranked Live | AgentTape",
+    title: "Top Foundation Models — Ranked Live",
     h1: "The 50 best foundation models.",
     description:
       "Claude, GPT, Llama, Gemini, Mistral, DeepSeek and 45+ more — the live ranking of foundation models. Compare context, pricing and quality scores side-by-side.",
@@ -97,7 +97,7 @@ const SECTORS: SectorDef[] = [
   {
     slug: "open-source-ai-agents",
     index_slug: "oss-50",
-    title: "Top Open-Source AI Agents — Ranked Live | AgentTape",
+    title: "Top Open-Source AI Agents — Ranked Live",
     h1: "The 50 best open-source AI agents.",
     description:
       "AI agents released under MIT, Apache, BSD or other OSI-approved licenses. Self-host, fork, and deploy without a vendor in the loop. Live AgentScore ranking.",
@@ -117,7 +117,7 @@ const SECTORS: SectorDef[] = [
   {
     slug: "mcp-servers",
     index_slug: "mcp-25",
-    title: "Top MCP Servers — Ranked Live | AgentTape",
+    title: "Top MCP Servers — Ranked Live",
     h1: "The 25 best MCP servers.",
     description:
       "Model Context Protocol servers ranked by adoption. The tools every agent should have access to — file system, GitHub, Postgres, search, browser and more.",

@@ -17,6 +17,8 @@ import { TickerCard } from "@/components/ticker-card";
 // outage when Hetzner blips.
 export const revalidate = 300;
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com";
+
 // Render every agent on first visit, then ISR-cache it for 5 minutes.
 // Deliberately NOT pre-rendering the top 50 at build: that fires
 // ~250 API calls at once from the build workers, the API times out
@@ -50,8 +52,25 @@ export async function generateMetadata(
       ]
         .filter(Boolean)
         .join(" ") + ". Live ranking, score breakdown and benchmarks.";
-    const description = a.description ?? fallback;
-    const title = `${a.name}: AgentScore, benchmarks and signals`;
+    // Search Console shows most visitors arrive searching for a repo by
+    // name, often with "github", "repo" or the owner attached ("couch tv
+    // github", "seagey couch tv"). Putting owner/repo and "GitHub" in
+    // the title and snippet matches those queries and tells the
+    // searcher this page is about the repo they want.
+    const repo = a.github_repo;
+    const title = repo
+      ? `${a.name} (${repo}): GitHub stats and AgentScore`
+      : `${a.name}: AgentScore, benchmarks and signals`;
+    const factParts = [
+      repo ? `GitHub: ${repo}` : null,
+      score ? `AgentScore ${score}/100` : null,
+    ].filter(Boolean);
+    const facts = factParts.length ? `${factParts.join(" · ")}.` : "";
+    // Keep at least 60 chars of the agent's own blurb even when the
+    // repo name is long; Google trims overly long snippets itself.
+    const description = a.description
+      ? `${truncate(a.description, Math.max(60, 155 - facts.length))} ${facts}`.trim()
+      : `${fallback}${repo ? ` GitHub: ${repo}.` : ""}`;
     return {
       title,
       description,
@@ -107,7 +126,8 @@ export default async function AgentPage({
     name: agent.name,
     description: agent.description ?? undefined,
     identifier: agent.slug,
-    url: `/agents/${agent.slug}`,
+    // schema.org URLs must be absolute; relative ones are ignored.
+    url: `${SITE}/agents/${agent.slug}`,
     keywords: agent.tags.map((t) => t.value).join(", "),
     distribution: agent.github_repo
       ? [
@@ -271,6 +291,16 @@ export default async function AgentPage({
       </div>
     </article>
   );
+}
+
+// Cut a blurb at a word boundary so the meta description doesn't end
+// mid-word. Google shows roughly 155 characters of snippet.
+function truncate(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, " ").trim().replace(/[.\s]+$/, "");
+  if (clean.length <= max) return `${clean}.`;
+  const cut = clean.slice(0, Math.max(0, max - 1));
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[,;:\s]+$/, "")}…`;
 }
 
 function SectionHead({ label, hint }: { label: string; hint?: string }) {

@@ -14,6 +14,11 @@ import { TickerCard } from "@/components/ticker-card";
 import { TickerTape } from "@/components/ticker-tape";
 import { WelcomeBanner } from "@/components/welcome-banner";
 import { CAPABILITIES } from "@/lib/taxonomy";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 // The Floor — overview page.
 //

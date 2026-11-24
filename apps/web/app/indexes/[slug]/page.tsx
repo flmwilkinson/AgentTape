@@ -41,7 +41,8 @@ export async function generateMetadata({
     const i = await api.getIndex(slug);
     return {
       title: i.name,
-      description: `${i.name} — ${i.members_count} constituents.`,
+      description: `${i.name}: live index of ${i.members_count} AI agents, with constituents, weights and 30-day history. Updated from public signals.`,
+      alternates: { canonical: `/indexes/${i.slug}` },
       openGraph: {
         title: `${i.name} — AgentTape`,
         images: [{ url: `/api/og/index/${i.slug}` }],

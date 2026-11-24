@@ -20,7 +20,11 @@ interface PageParams {
 
 export async function generateMetadata({ params }: PageParams) {
   const { year, week } = await params;
-  return { title: `Week ${week}, ${year}` };
+  return {
+    title: `AI agent report: week ${week}, ${year}`,
+    description: `Biggest AI agent movers, sector verdicts and new listings on AgentTape for week ${week} of ${year}.`,
+    alternates: { canonical: `/report/${year}/${week}` },
+  };
 }
 
 export default async function WeeklyReport({ params }: PageParams) {

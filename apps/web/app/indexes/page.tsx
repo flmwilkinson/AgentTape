@@ -3,7 +3,12 @@ import { IndexCard } from "@/components/index-card";
 
 // 5-minute ISR so cached HTML survives backend outages.
 export const revalidate = 300;
-export const metadata = { title: "Indexes" };
+export const metadata = {
+  title: "AI Agent Indexes",
+  description:
+    "Stock-index-style baskets of AI agents and foundation models: composite values, constituents and 30-day history, updated live from public signals.",
+  alternates: { canonical: "/indexes" },
+};
 
 export default async function IndexesPage() {
   const indexes = await api.listIndexes().catch(() => []);

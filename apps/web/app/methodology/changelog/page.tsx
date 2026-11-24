@@ -3,7 +3,8 @@ import path from "node:path";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Methodology changelog — AgentTape",
+  title: "Methodology changelog",
+  alternates: { canonical: "/methodology/changelog" },
   description:
     "Every change to how AgentScore is computed, indexes are rebalanced, and signals are weighted. Sourced from git history.",
 };

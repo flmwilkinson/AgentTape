@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { api } from "@/lib/api-client";
+import { api, type AgentSummary } from "@/lib/api-client";
 import { ARTICLES } from "@/lib/articles";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://agenttape.com";
@@ -54,19 +54,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // API unavailable at build time — ship the sitemap without index pages.
   }
 
-  // Agents — every admitted agent gets its own URL. We pull a wide page
-  // because the API caps at 100; for >100 agents we'd want to paginate.
+  // Agents — every admitted agent gets its own URL. The API caps a page
+  // at 100, so page through the rest in small batches: Search Console
+  // shows agent pages are where nearly all search traffic lands, and
+  // agents outside the top 100 were only discoverable via internal
+  // links. Batches of 5 keep the burst off the API; a failed page is
+  // skipped rather than failing the whole sitemap.
+  const PAGE = 100;
+  const MAX_PAGES = 50; // 5,000 agents; the sitemap spec allows 50K URLs.
+  const toUrl = (a: AgentSummary): MetadataRoute.Sitemap[number] => ({
+    url: `${SITE}/agents/${a.slug}`,
+    lastModified: a.score?.computed_at ? new Date(a.score.computed_at) : now,
+    changeFrequency: "daily",
+    priority: 0.6,
+  });
   let agentUrls: MetadataRoute.Sitemap = [];
   try {
-    const agents = await api.listAgents({ limit: 100, sort: "score" });
-    agentUrls = agents.items.map((a) => ({
-      url: `${SITE}/agents/${a.slug}`,
-      lastModified: a.score?.computed_at
-        ? new Date(a.score.computed_at)
-        : now,
-      changeFrequency: "daily",
-      priority: 0.6,
-    }));
+    const first = await api.listAgents({ limit: PAGE, sort: "score" });
+    agentUrls = first.items.map(toUrl);
+    const pages = Math.min(Math.ceil(first.total / PAGE), MAX_PAGES);
+    for (let start = 1; start < pages; start += 5) {
+      const batch = await Promise.all(
+        Array.from({ length: Math.min(5, pages - start) }, (_, i) =>
+          api
+            .listAgents({ limit: PAGE, offset: (start + i) * PAGE, sort: "score" })
+            .then((r) => r.items)
+            .catch(() => [] as AgentSummary[]),
+        ),
+      );
+      agentUrls.push(...batch.flat().map(toUrl));
+    }
   } catch {
     // Same fallback — sitemap stays valid even when API is unreachable.
   }
@@ -79,6 +96,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: "monthly",
     priority: 0.7,
   }));
+
+  // Scores can move between page fetches, shifting an agent across a
+  // page boundary; drop any duplicate URLs that produces.
+  const seen = new Set<string>();
+  agentUrls = agentUrls.filter((u) => !seen.has(u.url) && !!seen.add(u.url));
 
   return [...staticPaths, ...indexUrls, ...agentUrls, ...articleUrls];
 }

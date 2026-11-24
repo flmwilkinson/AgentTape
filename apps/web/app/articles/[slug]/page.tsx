@@ -20,7 +20,7 @@ export async function generateMetadata({
   const a = ARTICLE_BY_SLUG[slug];
   if (!a) return { title: "Not found" };
   return {
-    title: `${a.title} — AgentTape`,
+    title: a.title,
     description: a.description,
     keywords: a.keywords,
     alternates: { canonical: `/articles/${a.slug}` },

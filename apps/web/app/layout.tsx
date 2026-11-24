@@ -61,7 +61,10 @@ export const metadata: Metadata = {
     "best browser AI agent",
     "MCP servers",
   ],
-  alternates: { canonical: "/" },
+  // No site-wide canonical here: a canonical set in the root layout is
+  // inherited by every page that doesn't override it, which told Google
+  // that /new, /trending, /models etc. were duplicates of the homepage.
+  // Each page sets its own (the homepage's lives in app/page.tsx).
   openGraph: {
     type: "website",
     siteName: "AgentTape",
