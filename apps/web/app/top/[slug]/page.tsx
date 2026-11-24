@@ -27,15 +27,21 @@ import { RankArrow } from "@/components/rank-arrow";
 // /methodology (pillar weights, hourly/daily refresh, Monday
 // rebalance); update both together.
 //
-// `{year}` in title/h1 is replaced at render time. FAQ answers can be
-// functions of the live leaders so "what's the best X right now" names
-// real agents instead of pointing at the table.
+// The ranking is live, so answers never carry a date or a hard-coded
+// winner: anything the data can answer ("best right now", "which are
+// open source", "what's gaining") is computed from the live index on
+// each render; anything it can't points at the live charts and score
+// breakdowns. `{year}` in title/h1 is replaced at render time.
 
 interface Leaders {
-  // Top entries by AgentScore, best first. May be empty before the
-  // first rebalance.
+  // Pulled from the live index on every render (5-minute ISR), best
+  // first. Empty before the first rebalance.
   top: { name: string; score: string }[];
-  asOf: string;
+  // Biggest positive 24h AgentScore move in this ranking, if any.
+  mover: { name: string; delta: string } | null;
+  // Members carrying an OSI-approved license tag.
+  open: { count: number; total: number; names: string[] };
+  indexPath: string;
 }
 
 interface SectorDef {
@@ -57,18 +63,46 @@ const APP_SCORING =
 const CADENCE =
   "Most signals (GitHub, package downloads, Hacker News and Bluesky mentions) refresh hourly; benchmarks and slower sources refresh daily. The index membership rebalances every Monday at 03:00 UTC.";
 
+const OSI_LICENSES = new Set(["mit", "apache-2.0", "bsd", "mpl", "gpl", "agpl"]);
+
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 function bestNow(noun: string) {
   return (l: Leaders) => {
-    const [a, b, c] = l.top;
+    const [a, ...rest] = l.top;
     if (!a) {
-      return `The ranking fills in after the next Monday rebalance. Until then, see the full list of ${noun} on the search page.`;
+      return `This ranking is still filling in. The live chart at ${l.indexPath} shows current members as they're admitted.`;
     }
-    const rest = [b, c].filter(Boolean).map((x) => `${x!.name} (${x!.score})`);
-    return `As of ${l.asOf}, the highest-ranked ${noun} on AgentTape is ${a.name}, with an AgentScore of ${a.score}${
-      rest.length ? `, followed by ${rest.join(" and ")}` : ""
-    }. "Best" depends on your task, so shortlist two or three from the table and put them side by side on the Compare page.`;
+    const followers = rest.map((x) => `${x.name} (${x.score})`);
+    return `Right now it's ${a.name}, with an AgentScore of ${a.score}${
+      followers.length ? `, followed by ${listNames(followers)}` : ""
+    }. This changes as new signals arrive: the table above is live, and each agent's page charts its score over time. The best ${noun} for you depends on your task, so shortlist two or three and put them side by side on the Compare page.`;
   };
 }
+
+function openSourceNow(noun: string) {
+  return (l: Leaders) => {
+    if (!l.open.total) {
+      return "Each agent's page shows its license once the ranking fills in. /top/open-source-ai-agents ranks open-source agents only.";
+    }
+    const led = l.open.names.length ? `, led by ${listNames(l.open.names)}` : "";
+    return `Right now ${l.open.count} of the ${l.open.total} ${noun} in this ranking carry an OSI-approved license (MIT, Apache 2.0, BSD, MPL, GPL or AGPL)${led}. Each agent's page shows its license, and /top/open-source-ai-agents ranks open-source agents only. Open-source agents still need a model, through an API key or a local model.`;
+  };
+}
+
+function gainingNow(l: Leaders): string {
+  const tail =
+    "/trending shows every mover over 24 hours, 7 days or 30 days, and each agent's page breaks the move down by signal.";
+  return l.mover
+    ? `Right now the biggest 24-hour gain in this ranking is ${l.mover.name}, up ${l.mover.delta} points. ${tail}`
+    : `Nothing in this ranking has gained in the last 24 hours. ${tail}`;
+}
+
+const SEE_THE_DATA =
+  " Open any agent to see its score chart and a per-pillar breakdown down to each raw signal; /methodology has the full formula.";
 
 const SECTORS: SectorDef[] = [
   {
@@ -87,15 +121,13 @@ const SECTORS: SectorDef[] = [
         q: "What's the difference between an AI coding agent and code autocomplete?",
         a: "Autocomplete suggests the next few lines as you type. A coding agent takes a goal (\"add pagination to this endpoint\", \"fix the failing test\"), works out the steps, edits multiple files, runs your build or tests, and tries again when something fails. You review the result instead of writing every line.",
       },
-      {
-        q: "Are there free or open-source AI coding agents?",
-        a: "Yes. Many agents in this ranking are open source; the license is shown on each agent's page, and the open-source-only ranking is at /top/open-source-ai-agents. Open-source agents are free to run, but most still call a paid model API unless you point them at a local model.",
-      },
+      { q: "Which AI coding agents are open source?", a: openSourceNow("coding agents") },
+      { q: "Which AI coding agents are gaining fastest right now?", a: gainingNow },
       {
         q: "How do I choose between coding agents?",
-        a: "Start with the top of this table, then check three things on each agent's page: momentum (is it still improving?), community (are issues answered and releases shipping?) and whether it supports the model and editor you already use. The Compare page puts two agents side by side on every pillar.",
+        a: "Start with the top of this table, then open each candidate's page: its score chart shows whether it's still climbing, and the pillar breakdown shows whether that's driven by real adoption, an active community or benchmark results. Check it supports the model and editor you already use, then put two side by side on the Compare page.",
       },
-      { q: "How is this ranking calculated?", a: APP_SCORING },
+      { q: "How is this ranking calculated?", a: APP_SCORING + SEE_THE_DATA },
       { q: "How often is it updated?", a: CADENCE },
     ],
   },
@@ -127,11 +159,9 @@ const SECTORS: SectorDef[] = [
         q: "Are AI browser agents safe to use?",
         a: "Treat a browser agent like handing someone your keyboard. Web pages can contain hidden instructions (prompt injection) that try to redirect the agent. Use a separate browser profile, avoid running it on email or banking sessions, require confirmation before purchases or form submissions, and read the source of open-source agents before trusting them.",
       },
-      {
-        q: "Which AI browser agents are open source?",
-        a: "Many of them. The license is shown on each agent's page, and /top/open-source-ai-agents ranks open-source agents only. Open-source browser agents still need a model, either through an API key or a local model.",
-      },
-      { q: "How is this ranking calculated?", a: APP_SCORING },
+      { q: "Which AI browser agents are open source?", a: openSourceNow("browser agents") },
+      { q: "Which AI browser agents are gaining fastest right now?", a: gainingNow },
+      { q: "How is this ranking calculated?", a: APP_SCORING + SEE_THE_DATA },
     ],
   },
   {
@@ -154,13 +184,14 @@ const SECTORS: SectorDef[] = [
         q: "Should I use Claude, GPT or Gemini?",
         a: "It depends on the task, budget and latency you need. Put the specific versions you're considering into the Compare page to see their quality, efficiency, adoption and momentum side by side, then test the top two on your own prompts.",
       },
+      { q: "Which models are gaining fastest right now?", a: gainingNow },
       {
         q: "Are open-weights models included?",
         a: "Yes. Llama, Mistral, Qwen, DeepSeek and other open-weights models are ranked alongside proprietary ones; anything in the OpenRouter catalogue is eligible.",
       },
       {
         q: "How is this ranking calculated?",
-        a: "Foundation models use five pillars: quality (35%, from benchmarks), adoption (25%), efficiency (20%, cost and speed), momentum (10%) and community (10%). A pillar with no data counts as zero, so only fully rated models can reach 100.",
+        a: "Foundation models use five pillars: quality (35%, from benchmarks), adoption (25%), efficiency (20%, cost and speed), momentum (10%) and community (10%). A pillar with no data counts as zero, so only fully rated models can reach 100." + SEE_THE_DATA,
       },
     ],
   },
@@ -176,6 +207,7 @@ const SECTORS: SectorDef[] = [
       "Every agent here has an OSI-approved license (MIT, Apache 2.0, BSD, MPL, GPL or AGPL), so you can read the code, self-host it and fork it. This is the live ranking of the open-source agents with the strongest adoption, community, quality and momentum signals.",
     faqs: [
       { q: "What is the best open-source AI agent right now?", a: bestNow("open-source AI agent") },
+      { q: "Which open-source AI agents are gaining fastest right now?", a: gainingNow },
       {
         q: "Why choose an open-source AI agent?",
         a: "The three reasons people cite most: no vendor lock-in, the ability to audit the code before it touches your data, and self-hosting so data stays on your own infrastructure.",
@@ -188,7 +220,7 @@ const SECTORS: SectorDef[] = [
         q: "What are good open-source alternatives to Devin, Cursor or Claude Code?",
         a: "See the guide at /articles/open-source-alternatives-devin-cursor-claude-code, and the live coding ranking at /top/coding-agents, where the license on each agent's page shows which are open source.",
       },
-      { q: "How is this ranking calculated?", a: APP_SCORING },
+      { q: "How is this ranking calculated?", a: APP_SCORING + SEE_THE_DATA },
     ],
   },
   {
@@ -203,6 +235,7 @@ const SECTORS: SectorDef[] = [
       "Model Context Protocol (MCP) is an open standard, introduced by Anthropic, for connecting AI assistants and agents to tools and data: files, GitHub, databases, browsers, search and more. These are the MCP servers with the strongest public adoption right now, ready to add to Claude Desktop, Claude Code, Cursor, VS Code or any other MCP client.",
     faqs: [
       { q: "What are the best MCP servers right now?", a: bestNow("MCP server") },
+      { q: "Which MCP servers are gaining fastest right now?", a: gainingNow },
       {
         q: "What is an MCP server?",
         a: "An MCP server is a small program that exposes tools or data to an AI client over the Model Context Protocol. The client (for example Claude Desktop or Cursor) discovers the server's tools and the model can call them, such as reading a file, querying a database or opening a pull request. The specification is at modelcontextprotocol.io.",
@@ -215,7 +248,7 @@ const SECTORS: SectorDef[] = [
         q: "Are MCP servers safe?",
         a: "AgentTape doesn't audit MCP servers. A server can run code and see whatever data you send it, and tool results can carry prompt-injection text. Read the source, prefer servers with active maintenance, and grant only the permissions a task needs.",
       },
-      { q: "How is this ranking calculated?", a: APP_SCORING },
+      { q: "How is this ranking calculated?", a: APP_SCORING + SEE_THE_DATA },
     ],
   },
 ];
@@ -226,7 +259,7 @@ const BY_SLUG = Object.fromEntries(SECTORS.map((s) => [s.slug, s]));
 // "the Compare page") into links. The JSON-LD keeps the plain text.
 function linkify(text: string): ReactNode[] {
   return text
-    .split(/(\/(?:top|articles|compare|methodology)(?:\/[\w-]+)?|the Compare page|the search page)/)
+    .split(/(\/(?:top|articles|compare|methodology|indexes|trending)(?:\/[\w-]+)?|the Compare page|the search page)/)
     .map((part, i) => {
       if (i % 2 === 0) return part;
       const href =
@@ -299,17 +332,26 @@ export default async function SectorLandingPage({
     (x, y) => (y.agent.score?.agent_score ?? -1) - (x.agent.score?.agent_score ?? -1),
   );
   const now = new Date();
+  const moverRow = ranked
+    .filter((c) => (c.agent.score?.delta_24h ?? 0) > 0)
+    .sort((x, y) => (y.agent.score?.delta_24h ?? 0) - (x.agent.score?.delta_24h ?? 0))[0];
+  const openRows = ranked.filter((c) =>
+    c.agent.tags.some((t) => t.kind === "license" && OSI_LICENSES.has(t.value)),
+  );
   const leaders: Leaders = {
     top: ranked.slice(0, 3).map((c) => ({
       name: c.agent.name,
       score: formatScore(c.agent.score?.agent_score ?? null),
     })),
-    asOf: now.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      timeZone: "UTC",
-    }),
+    mover: moverRow
+      ? { name: moverRow.agent.name, delta: (moverRow.agent.score?.delta_24h ?? 0).toFixed(1) }
+      : null,
+    open: {
+      count: openRows.length,
+      total: ranked.length,
+      names: openRows.slice(0, 3).map((c) => c.agent.name),
+    },
+    indexPath: `/indexes/${def.index_slug}`,
   };
   const faqs = def.faqs.map((f) => ({
     q: f.q,
@@ -363,12 +405,12 @@ export default async function SectorLandingPage({
         <h1 className="editorial mt-3 text-4xl font-semibold leading-tight md:text-6xl md:leading-[1.05]">
           {h1}
         </h1>
-        {/* One dated, self-contained sentence naming the leaders: the
-            line search snippets and AI assistants can quote directly. */}
+        {/* Live, self-contained answer naming the current leaders,
+            recomputed on every ISR refresh. No date: the page is the
+            live source, not a snapshot. */}
         {first && (
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-foreground md:text-lg">
-            As of <time dateTime={now.toISOString()}>{leaders.asOf}</time>, the
-            top-ranked {def.noun} on AgentTape are{" "}
+            Right now, the top-ranked {def.noun} on AgentTape are{" "}
             <strong className="font-semibold">{first.name}</strong> (AgentScore{" "}
             {first.score})
             {second && (
@@ -383,6 +425,13 @@ export default async function SectorLandingPage({
               </>
             )}
             .
+            {leaders.mover && (
+              <>
+                {" "}Biggest 24-hour gain:{" "}
+                <strong className="font-semibold">{leaders.mover.name}</strong>, up{" "}
+                {leaders.mover.delta} points.
+              </>
+            )}
           </p>
         )}
         <p className="editorial mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
