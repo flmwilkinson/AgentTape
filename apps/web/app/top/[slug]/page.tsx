@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api, ApiError } from "@/lib/api-client";
@@ -19,124 +20,228 @@ import { RankArrow } from "@/components/rank-arrow";
 // different URL + metadata + h1 + intro paragraph optimised for search
 // queries the keyword tools say people actually type.
 
+// Copy is written to answer the questions people actually ask search
+// engines and AI assistants ("what's the best X", "X vs Y", "is X
+// safe"). Each answer leads with a direct, self-contained sentence so
+// it can be quoted on its own. Facts about scoring must match
+// /methodology (pillar weights, hourly/daily refresh, Monday
+// rebalance); update both together.
+//
+// `{year}` in title/h1 is replaced at render time. FAQ answers can be
+// functions of the live leaders so "what's the best X right now" names
+// real agents instead of pointing at the table.
+
+interface Leaders {
+  // Top entries by AgentScore, best first. May be empty before the
+  // first rebalance.
+  top: { name: string; score: string }[];
+  asOf: string;
+}
+
 interface SectorDef {
   slug: string;
   index_slug: string;
   title: string;
   h1: string;
+  // Plural noun used in the generated quick answer: "the top-ranked
+  // {noun} on AgentTape are…"
+  noun: string;
   description: string;
   intro: string;
-  faqs: { q: string; a: string }[];
+  faqs: { q: string; a: string | ((l: Leaders) => string) }[];
+}
+
+const APP_SCORING =
+  "AgentScore is a 0–100 composite of four pillars: adoption (40%), community (30%), quality (20%, from benchmarks where they exist) and momentum (10%). GitHub stars are one adoption signal among many, alongside package downloads, mentions, contributors and release activity. A pillar with no data counts as zero rather than being re-weighted, so thinly documented projects can't score high by accident.";
+
+const CADENCE =
+  "Most signals (GitHub, package downloads, Hacker News and Bluesky mentions) refresh hourly; benchmarks and slower sources refresh daily. The index membership rebalances every Monday at 03:00 UTC.";
+
+function bestNow(noun: string) {
+  return (l: Leaders) => {
+    const [a, b, c] = l.top;
+    if (!a) {
+      return `The ranking fills in after the next Monday rebalance. Until then, see the full list of ${noun} on the search page.`;
+    }
+    const rest = [b, c].filter(Boolean).map((x) => `${x!.name} (${x!.score})`);
+    return `As of ${l.asOf}, the highest-ranked ${noun} on AgentTape is ${a.name}, with an AgentScore of ${a.score}${
+      rest.length ? `, followed by ${rest.join(" and ")}` : ""
+    }. "Best" depends on your task, so shortlist two or three from the table and put them side by side on the Compare page.`;
+  };
 }
 
 const SECTORS: SectorDef[] = [
   {
     slug: "coding-agents",
     index_slug: "code-25",
-    title: "Top Coding AI Agents — Ranked Live",
-    h1: "The 25 best AI agents for coding.",
+    title: "Best AI Coding Agents ({year}): Live Ranking",
+    h1: "The 25 best AI coding agents, ranked live.",
+    noun: "AI coding agents",
     description:
-      "The top AI agents for software engineering, ranked by AgentScore. Compare AutoGPT, crewAI, Cursor and more. Updated continuously, free to read.",
+      "The best AI coding agents right now, ranked by AgentScore from public adoption, community, quality and momentum signals. Open-source and commercial. Updated hourly.",
     intro:
-      "These are the AI agents most-used by software engineers right now. They write code, review PRs, run test suites, and orchestrate multi-step development tasks. Every entry is ranked by AgentScore — a 0–100 composite of adoption, quality, momentum and community signals — and the table shows how each has moved in the last 24 hours.",
+      "AI coding agents go beyond autocomplete: they plan a change, edit several files, run commands and tests, and iterate on failures. This is a live ranking of the coding agents with the strongest public signals, ordered by AgentScore, with each one's 24-hour move.",
     faqs: [
+      { q: "What is the best AI coding agent right now?", a: bestNow("coding agent") },
       {
-        q: "What's the best AI agent for coding right now?",
-        a: "The top of CODE-25 changes weekly. The agent at rank 1 in the table below has the highest AgentScore right now. Use the Compare page to put your top 2–3 candidates head-to-head.",
+        q: "What's the difference between an AI coding agent and code autocomplete?",
+        a: "Autocomplete suggests the next few lines as you type. A coding agent takes a goal (\"add pagination to this endpoint\", \"fix the failing test\"), works out the steps, edits multiple files, runs your build or tests, and tries again when something fails. You review the result instead of writing every line.",
       },
       {
-        q: "Is this just GitHub stars rearranged?",
-        a: "No. AgentScore weights adoption (35%), quality (30%, when benchmark data exists), momentum (20%), and community (15%). GitHub stars are one of several adoption signals.",
+        q: "Are there free or open-source AI coding agents?",
+        a: "Yes. Many agents in this ranking are open source; the license is shown on each agent's page, and the open-source-only ranking is at /top/open-source-ai-agents. Open-source agents are free to run, but most still call a paid model API unless you point them at a local model.",
       },
       {
-        q: "How often does this update?",
-        a: "Adoption signals (stars, mentions) refresh every 5 minutes. Quality (benchmarks) refreshes daily. The CODE-25 index rebalances every Monday at 03:00 UTC.",
+        q: "How do I choose between coding agents?",
+        a: "Start with the top of this table, then check three things on each agent's page: momentum (is it still improving?), community (are issues answered and releases shipping?) and whether it supports the model and editor you already use. The Compare page puts two agents side by side on every pillar.",
       },
+      { q: "How is this ranking calculated?", a: APP_SCORING },
+      { q: "How often is it updated?", a: CADENCE },
     ],
   },
   {
     slug: "browser-agents",
     index_slug: "web-25",
-    title: "Top Browser AI Agents — Ranked Live",
-    h1: "The 25 best AI browser agents.",
+    title: "Best AI Browser Agents ({year}): Live Ranking",
+    h1: "The 25 best AI browser agents, ranked live.",
+    noun: "AI browser agents",
     description:
-      "AI agents that browse the web and operate browsers — browser-use, MultiOn, Steel WebVoyager and more. Ranked by AgentScore. Compare any two side-by-side.",
+      "The best AI browser agents right now: in-browser extensions and headless automation agents that browse, click, fill forms and scrape. Ranked live by AgentScore.",
     intro:
-      "Browser agents drive a real Chromium / Playwright instance to complete tasks for you — search, fill forms, scrape pages, transact. This is the live ranking of the most-used and fastest-moving ones.",
+      "AI browser agents use a language model to operate a web browser for you: they read the page, decide what to click or type, and keep going until the task is done, whether that's research, form filling, scraping or checkout. Some run inside your own browser as an extension; others drive a headless browser through Playwright, Puppeteer or the Chrome DevTools Protocol. This is the live ranking of the ones with the strongest public signals.",
     faqs: [
+      { q: "What is the best AI browser agent right now?", a: bestNow("browser agent") },
       {
-        q: "What's a browser agent?",
-        a: "An AI agent that controls a real browser. Most use Playwright or Puppeteer under the hood. They differ from chat agents in that they can click, type, and navigate websites.",
+        q: "What is an AI browser agent?",
+        a: "An AI browser agent is software that lets a language model control a web browser. It reads the page (as HTML, an accessibility tree or screenshots), chooses an action such as click, type or scroll, observes the result and repeats until the goal is met. Unlike a chatbot, it can actually use websites rather than just describe them.",
       },
       {
-        q: "Open-source or commercial?",
-        a: "Both. The license tag on each entry tells you which. For open-source-only see /top/open-source-ai-agents.",
+        q: "In-browser vs headless: which kind of browser agent do I need?",
+        a: "In-browser agents run as an extension in the browser you already use, so they can work with sites you're logged into; they suit personal tasks. Headless agents run a separate browser on your machine or in the cloud, usually via Playwright or Puppeteer; they suit automation, scraping and running many tasks in parallel. Each agent's page here links to its repo, which says which kind it is.",
       },
+      {
+        q: "How are AI browser agents different from Selenium or Playwright scripts?",
+        a: "A script follows fixed selectors and breaks when a page changes. A browser agent decides each step from what it sees, so it can handle sites it has never seen before. The trade-off is that agents are slower, cost model tokens per step and are less predictable, so many teams use scripts for fixed flows and agents for the long tail.",
+      },
+      {
+        q: "Are AI browser agents safe to use?",
+        a: "Treat a browser agent like handing someone your keyboard. Web pages can contain hidden instructions (prompt injection) that try to redirect the agent. Use a separate browser profile, avoid running it on email or banking sessions, require confirmation before purchases or form submissions, and read the source of open-source agents before trusting them.",
+      },
+      {
+        q: "Which AI browser agents are open source?",
+        a: "Many of them. The license is shown on each agent's page, and /top/open-source-ai-agents ranks open-source agents only. Open-source browser agents still need a model, either through an API key or a local model.",
+      },
+      { q: "How is this ranking calculated?", a: APP_SCORING },
     ],
   },
   {
     slug: "foundation-models",
     index_slug: "fm-50",
-    title: "Top Foundation Models — Ranked Live",
-    h1: "The 50 best foundation models.",
+    title: "Best Foundation Models and LLMs ({year}): Live Ranking",
+    h1: "The 50 best foundation models, ranked live.",
+    noun: "foundation models",
     description:
-      "Claude, GPT, Llama, Gemini, Mistral, DeepSeek and 45+ more — the live ranking of foundation models. Compare context, pricing and quality scores side-by-side.",
+      "The best LLMs and foundation models right now, ranked live by AgentScore from benchmarks, real usage, cost and speed. Open-weights and proprietary, with pricing and context length.",
     intro:
-      "Foundation models are the LLMs that power agents — the raw intelligence layer. FM-50 ranks them with the same AgentScore formula tuned so quality (benchmark performance) carries more weight than for application agents. Sourced from the OpenRouter catalogue, refreshed daily.",
+      "Foundation models are the large language models that power agents. FM-50 ranks them with a version of AgentScore that weights quality (benchmark performance) most heavily and adds an efficiency pillar for cost and speed. The catalogue comes from OpenRouter, with benchmarks from Artificial Analysis, LMArena, SWE-bench and others, refreshed daily.",
     faqs: [
+      { q: "What is the best foundation model right now?", a: bestNow("foundation model") },
       {
-        q: "Should I use Claude or GPT?",
-        a: "Depends on the task. Use the Compare page (/compare) — drop both in and see the overlay chart, pillar bars, and 'best at X' verdict. The fastest way to a justified pick.",
+        q: "Which LLM is best for building AI agents?",
+        a: "For agents, look past headline benchmarks to reliable tool calling, a long enough context window for your task, and cost per token, since agents make many calls per task. Each model's page here shows its quality, efficiency and adoption scores, and the Compare page puts two models side by side.",
       },
       {
-        q: "Are open-weights models in here?",
-        a: "Yes — Llama, Mistral, Qwen, DeepSeek and others. Anything OpenRouter exposes shows up. Filter by license tag to see only open-weights.",
+        q: "Should I use Claude, GPT or Gemini?",
+        a: "It depends on the task, budget and latency you need. Put the specific versions you're considering into the Compare page to see their quality, efficiency, adoption and momentum side by side, then test the top two on your own prompts.",
+      },
+      {
+        q: "Are open-weights models included?",
+        a: "Yes. Llama, Mistral, Qwen, DeepSeek and other open-weights models are ranked alongside proprietary ones; anything in the OpenRouter catalogue is eligible.",
+      },
+      {
+        q: "How is this ranking calculated?",
+        a: "Foundation models use five pillars: quality (35%, from benchmarks), adoption (25%), efficiency (20%, cost and speed), momentum (10%) and community (10%). A pillar with no data counts as zero, so only fully rated models can reach 100.",
       },
     ],
   },
   {
     slug: "open-source-ai-agents",
     index_slug: "oss-50",
-    title: "Top Open-Source AI Agents — Ranked Live",
-    h1: "The 50 best open-source AI agents.",
+    title: "Best Open-Source AI Agents ({year}): Live Ranking",
+    h1: "The 50 best open-source AI agents, ranked live.",
+    noun: "open-source AI agents",
     description:
-      "AI agents released under MIT, Apache, BSD or other OSI-approved licenses. Self-host, fork, and deploy without a vendor in the loop. Live AgentScore ranking.",
+      "The best open-source AI agents right now: MIT, Apache, BSD, GPL and other OSI-licensed agents you can self-host and fork. Ranked live by AgentScore, updated hourly.",
     intro:
-      "Every agent here has an OSI-approved license — MIT, Apache 2.0, BSD, MPL, GPL or AGPL. You can self-host, fork, and run on your own infrastructure with no API key requirement.",
+      "Every agent here has an OSI-approved license (MIT, Apache 2.0, BSD, MPL, GPL or AGPL), so you can read the code, self-host it and fork it. This is the live ranking of the open-source agents with the strongest adoption, community, quality and momentum signals.",
     faqs: [
+      { q: "What is the best open-source AI agent right now?", a: bestNow("open-source AI agent") },
       {
-        q: "Why pick an open-source agent?",
-        a: "Three reasons people most often cite: no vendor lock-in, full code visibility (audit before you ship), and self-hosting (data stays in your VPC).",
+        q: "Why choose an open-source AI agent?",
+        a: "The three reasons people cite most: no vendor lock-in, the ability to audit the code before it touches your data, and self-hosting so data stays on your own infrastructure.",
       },
       {
-        q: "Are these as good as proprietary alternatives?",
-        a: "Some are, some aren't. Use the AgentScore plus the Compare page to evaluate against proprietary alternatives. The methodology page documents how the scores are computed.",
+        q: "Are open-source AI agents free?",
+        a: "The code is free. Running it usually isn't: most agents call a paid model API such as Claude, GPT or Gemini. Many also work with local open-weights models, which removes the API cost if you have suitable hardware.",
       },
+      {
+        q: "What are good open-source alternatives to Devin, Cursor or Claude Code?",
+        a: "See the guide at /articles/open-source-alternatives-devin-cursor-claude-code, and the live coding ranking at /top/coding-agents, where the license on each agent's page shows which are open source.",
+      },
+      { q: "How is this ranking calculated?", a: APP_SCORING },
     ],
   },
   {
     slug: "mcp-servers",
     index_slug: "mcp-25",
-    title: "Top MCP Servers — Ranked Live",
-    h1: "The 25 best MCP servers.",
+    title: "Best MCP Servers ({year}): Live Ranking",
+    h1: "The 25 best MCP servers, ranked live.",
+    noun: "MCP servers",
     description:
-      "Model Context Protocol servers ranked by adoption. The tools every agent should have access to — file system, GitHub, Postgres, search, browser and more.",
+      "The best Model Context Protocol (MCP) servers right now for Claude, Cursor, VS Code and other MCP clients, ranked live by adoption, community and momentum.",
     intro:
-      "Model Context Protocol (MCP) is Anthropic's open standard for letting AI agents call external tools. These are the most-used MCP servers — drop them into Claude Desktop, Cursor, or any MCP-aware client.",
+      "Model Context Protocol (MCP) is an open standard, introduced by Anthropic, for connecting AI assistants and agents to tools and data: files, GitHub, databases, browsers, search and more. These are the MCP servers with the strongest public adoption right now, ready to add to Claude Desktop, Claude Code, Cursor, VS Code or any other MCP client.",
     faqs: [
+      { q: "What are the best MCP servers right now?", a: bestNow("MCP server") },
       {
-        q: "What is MCP?",
-        a: "Model Context Protocol — an open standard from Anthropic that lets AI agents connect to tools (files, GitHub, databases, browsers) over a clean interface. See modelcontextprotocol.io for spec.",
+        q: "What is an MCP server?",
+        a: "An MCP server is a small program that exposes tools or data to an AI client over the Model Context Protocol. The client (for example Claude Desktop or Cursor) discovers the server's tools and the model can call them, such as reading a file, querying a database or opening a pull request. The specification is at modelcontextprotocol.io.",
       },
       {
-        q: "Are these audited?",
-        a: "AgentTape doesn't audit MCP servers. Read the source before connecting any MCP server to a session that has access to data you care about. Most are MIT-licensed and on GitHub.",
+        q: "How do I install an MCP server?",
+        a: "Add the server to your client's MCP configuration: claude_desktop_config.json for Claude Desktop, the MCP settings in Cursor or VS Code, or the claude mcp add command in Claude Code. Each server's README gives the exact command; its AgentTape page links to the repo.",
       },
+      {
+        q: "Are MCP servers safe?",
+        a: "AgentTape doesn't audit MCP servers. A server can run code and see whatever data you send it, and tool results can carry prompt-injection text. Read the source, prefer servers with active maintenance, and grant only the permissions a task needs.",
+      },
+      { q: "How is this ranking calculated?", a: APP_SCORING },
     ],
   },
 ];
 
 const BY_SLUG = Object.fromEntries(SECTORS.map((s) => [s.slug, s]));
+
+// Turn on-site paths mentioned in FAQ copy ("/top/coding-agents",
+// "the Compare page") into links. The JSON-LD keeps the plain text.
+function linkify(text: string): ReactNode[] {
+  return text
+    .split(/(\/(?:top|articles|compare|methodology)(?:\/[\w-]+)?|the Compare page|the search page)/)
+    .map((part, i) => {
+      if (i % 2 === 0) return part;
+      const href =
+        part === "the Compare page" ? "/compare" : part === "the search page" ? "/search" : part;
+      return (
+        <Link key={i} href={href} className="text-primary hover:underline">
+          {part}
+        </Link>
+      );
+    });
+}
+
+function withYear(text: string): string {
+  return text.replace("{year}", String(new Date().getUTCFullYear()));
+}
 
 export function generateStaticParams() {
   return SECTORS.map((s) => ({ slug: s.slug }));
@@ -150,12 +255,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const def = BY_SLUG[slug];
   if (!def) return { title: "Not found" };
+  const title = withYear(def.title);
   return {
-    title: def.title,
+    title,
     description: def.description,
     alternates: { canonical: `/top/${def.slug}` },
     openGraph: {
-      title: def.title,
+      title,
       description: def.description,
       images: [{ url: `/api/og/index/${def.index_slug}` }],
     },
@@ -187,12 +293,49 @@ export default async function SectorLandingPage({
     throw e;
   }
 
+  // Rank by AgentScore so the table, the quick answer and the
+  // structured data always agree on who is #1.
+  const ranked = [...detail.constituents].sort(
+    (x, y) => (y.agent.score?.agent_score ?? -1) - (x.agent.score?.agent_score ?? -1),
+  );
+  const now = new Date();
+  const leaders: Leaders = {
+    top: ranked.slice(0, 3).map((c) => ({
+      name: c.agent.name,
+      score: formatScore(c.agent.score?.agent_score ?? null),
+    })),
+    asOf: now.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }),
+  };
+  const faqs = def.faqs.map((f) => ({
+    q: f.q,
+    a: typeof f.a === "function" ? f.a(leaders) : f.a,
+  }));
+  const h1 = withYear(def.h1);
+  const [first, second, third] = leaders.top;
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: def.h1,
+    name: h1,
     description: def.description,
-    itemListElement: detail.constituents.slice(0, 25).map((c, i) => ({
+    dateModified: now.toISOString(),
+    numberOfItems: Math.min(ranked.length, 25),
+    itemListElement: ranked.slice(0, 25).map((c, i) => ({
       "@type": "ListItem",
       position: i + 1,
       url: `https://agenttape.com/agents/${c.agent.slug}`,
@@ -206,6 +349,10 @@ export default async function SectorLandingPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
 
       <BackLink href="/" label="Floor" className="-mb-2" />
 
@@ -214,9 +361,31 @@ export default async function SectorLandingPage({
           Top · {detail.name}
         </div>
         <h1 className="editorial mt-3 text-4xl font-semibold leading-tight md:text-6xl md:leading-[1.05]">
-          {def.h1}
+          {h1}
         </h1>
-        <p className="editorial mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+        {/* One dated, self-contained sentence naming the leaders: the
+            line search snippets and AI assistants can quote directly. */}
+        {first && (
+          <p className="mt-6 max-w-2xl text-base leading-relaxed text-foreground md:text-lg">
+            As of <time dateTime={now.toISOString()}>{leaders.asOf}</time>, the
+            top-ranked {def.noun} on AgentTape are{" "}
+            <strong className="font-semibold">{first.name}</strong> (AgentScore{" "}
+            {first.score})
+            {second && (
+              <>
+                {third ? ", " : " and "}
+                <strong className="font-semibold">{second.name}</strong> ({second.score})
+              </>
+            )}
+            {third && (
+              <>
+                {" "}and <strong className="font-semibold">{third.name}</strong> ({third.score})
+              </>
+            )}
+            .
+          </p>
+        )}
+        <p className="editorial mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
           {def.intro}
         </p>
         <p className="mt-4 text-xs text-muted-foreground">
@@ -250,7 +419,7 @@ export default async function SectorLandingPage({
             </tr>
           </thead>
           <tbody>
-            {detail.constituents.length === 0 && (
+            {ranked.length === 0 && (
               <tr>
                 <td
                   colSpan={5}
@@ -261,7 +430,7 @@ export default async function SectorLandingPage({
                 </td>
               </tr>
             )}
-            {detail.constituents.slice(0, 25).map((c, i) => (
+            {ranked.slice(0, 25).map((c, i) => (
               <tr
                 key={c.agent.slug}
                 className="border-b border-border last:border-b-0"
@@ -308,21 +477,33 @@ export default async function SectorLandingPage({
         </table>
       </section>
 
-      {/* FAQ — pure SEO play, plain readable prose helps too. */}
+      {/* FAQ: answers the questions people ask search engines and AI
+          assistants. Mirrored in FAQPage JSON-LD above. */}
       <section>
         <h2 className="editorial text-2xl font-semibold leading-tight md:text-3xl">
           Common questions
         </h2>
-        <dl className="mt-4 space-y-5">
-          {def.faqs.map((f, i) => (
-            <div key={i}>
-              <dt className="font-medium text-foreground">{f.q}</dt>
-              <dd className="mt-1 max-w-prose text-sm text-muted-foreground md:text-base">
-                {f.a}
-              </dd>
-            </div>
+        {/* Collapsed by default so the ranking stays the focus; the
+            questions scan quickly and answers open on demand. Search
+            engines still index the collapsed text. */}
+        <div className="mt-4 divide-y divide-border rounded-md border border-border bg-card">
+          {faqs.map((f, i) => (
+            <details key={i} className="group px-4 py-3" open={i === 0}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <span
+                  aria-hidden
+                  className="shrink-0 text-muted-foreground transition-transform group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground md:text-base">
+                {linkify(f.a)}
+              </p>
+            </details>
           ))}
-        </dl>
+        </div>
       </section>
 
       <p className="text-xs text-muted-foreground">
