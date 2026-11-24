@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api, ApiError } from "@/lib/api-client";
@@ -7,6 +6,21 @@ import { formatScore } from "@/lib/format";
 import { BackLink } from "@/components/back-link";
 import { MoverChip } from "@/components/mover-chip";
 import { RankArrow } from "@/components/rank-arrow";
+import { LiveFaq, QuickAnswer } from "@/components/live-answers";
+import {
+  APP_SCORING,
+  CADENCE,
+  FM_SCORING,
+  SEE_THE_DATA,
+  bestNow,
+  computeLeaders,
+  gainingNow,
+  openSourceNow,
+  rankByScore,
+  resolveFaqs,
+  withYear,
+  type Faq,
+} from "@/lib/live-answers";
 
 // SEO landing pages keyed by high-intent search queries.
 //
@@ -20,29 +34,9 @@ import { RankArrow } from "@/components/rank-arrow";
 // different URL + metadata + h1 + intro paragraph optimised for search
 // queries the keyword tools say people actually type.
 
-// Copy is written to answer the questions people actually ask search
-// engines and AI assistants ("what's the best X", "X vs Y", "is X
-// safe"). Each answer leads with a direct, self-contained sentence so
-// it can be quoted on its own. Facts about scoring must match
-// /methodology (pillar weights, hourly/daily refresh, Monday
-// rebalance); update both together.
-//
-// The ranking is live, so answers never carry a date or a hard-coded
-// winner: anything the data can answer ("best right now", "which are
-// open source", "what's gaining") is computed from the live index on
-// each render; anything it can't points at the live charts and score
-// breakdowns. `{year}` in title/h1 is replaced at render time.
-
-interface Leaders {
-  // Pulled from the live index on every render (5-minute ISR), best
-  // first. Empty before the first rebalance.
-  top: { name: string; score: string }[];
-  // Biggest positive 24h AgentScore move in this ranking, if any.
-  mover: { name: string; delta: string } | null;
-  // Members carrying an OSI-approved license tag.
-  open: { count: number; total: number; names: string[] };
-  indexPath: string;
-}
+// Copy answers the questions people ask search engines and AI
+// assistants; live answers come from lib/live-answers.ts. `{year}` in
+// title/h1 is replaced at render time.
 
 interface SectorDef {
   slug: string;
@@ -54,55 +48,8 @@ interface SectorDef {
   noun: string;
   description: string;
   intro: string;
-  faqs: { q: string; a: string | ((l: Leaders) => string) }[];
+  faqs: Faq[];
 }
-
-const APP_SCORING =
-  "AgentScore is a 0–100 composite of four pillars: adoption (40%), community (30%), quality (20%, from benchmarks where they exist) and momentum (10%). GitHub stars are one adoption signal among many, alongside package downloads, mentions, contributors and release activity. A pillar with no data counts as zero rather than being re-weighted, so thinly documented projects can't score high by accident.";
-
-const CADENCE =
-  "Most signals (GitHub, package downloads, Hacker News and Bluesky mentions) refresh hourly; benchmarks and slower sources refresh daily. The index membership rebalances every Monday at 03:00 UTC.";
-
-const OSI_LICENSES = new Set(["mit", "apache-2.0", "bsd", "mpl", "gpl", "agpl"]);
-
-function listNames(names: string[]): string {
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-function bestNow(noun: string) {
-  return (l: Leaders) => {
-    const [a, ...rest] = l.top;
-    if (!a) {
-      return `This ranking is still filling in. The live chart at ${l.indexPath} shows current members as they're admitted.`;
-    }
-    const followers = rest.map((x) => `${x.name} (${x.score})`);
-    return `Right now it's ${a.name}, with an AgentScore of ${a.score}${
-      followers.length ? `, followed by ${listNames(followers)}` : ""
-    }. This changes as new signals arrive: the table above is live, and each agent's page charts its score over time. The best ${noun} for you depends on your task, so shortlist two or three and put them side by side on the Compare page.`;
-  };
-}
-
-function openSourceNow(noun: string) {
-  return (l: Leaders) => {
-    if (!l.open.total) {
-      return "Each agent's page shows its license once the ranking fills in. /top/open-source-ai-agents ranks open-source agents only.";
-    }
-    const led = l.open.names.length ? `, led by ${listNames(l.open.names)}` : "";
-    return `Right now ${l.open.count} of the ${l.open.total} ${noun} in this ranking carry an OSI-approved license (MIT, Apache 2.0, BSD, MPL, GPL or AGPL)${led}. Each agent's page shows its license, and /top/open-source-ai-agents ranks open-source agents only. Open-source agents still need a model, through an API key or a local model.`;
-  };
-}
-
-function gainingNow(l: Leaders): string {
-  const tail =
-    "/trending shows every mover over 24 hours, 7 days or 30 days, and each agent's page breaks the move down by signal.";
-  return l.mover
-    ? `Right now the biggest 24-hour gain in this ranking is ${l.mover.name}, up ${l.mover.delta} points. ${tail}`
-    : `Nothing in this ranking has gained in the last 24 hours. ${tail}`;
-}
-
-const SEE_THE_DATA =
-  " Open any agent to see its score chart and a per-pillar breakdown down to each raw signal; /methodology has the full formula.";
 
 const SECTORS: SectorDef[] = [
   {
@@ -191,7 +138,7 @@ const SECTORS: SectorDef[] = [
       },
       {
         q: "How is this ranking calculated?",
-        a: "Foundation models use five pillars: quality (35%, from benchmarks), adoption (25%), efficiency (20%, cost and speed), momentum (10%) and community (10%). A pillar with no data counts as zero, so only fully rated models can reach 100." + SEE_THE_DATA,
+        a: FM_SCORING + SEE_THE_DATA,
       },
     ],
   },
@@ -255,27 +202,6 @@ const SECTORS: SectorDef[] = [
 
 const BY_SLUG = Object.fromEntries(SECTORS.map((s) => [s.slug, s]));
 
-// Turn on-site paths mentioned in FAQ copy ("/top/coding-agents",
-// "the Compare page") into links. The JSON-LD keeps the plain text.
-function linkify(text: string): ReactNode[] {
-  return text
-    .split(/(\/(?:top|articles|compare|methodology|indexes|trending)(?:\/[\w-]+)?|the Compare page|the search page)/)
-    .map((part, i) => {
-      if (i % 2 === 0) return part;
-      const href =
-        part === "the Compare page" ? "/compare" : part === "the search page" ? "/search" : part;
-      return (
-        <Link key={i} href={href} className="text-primary hover:underline">
-          {part}
-        </Link>
-      );
-    });
-}
-
-function withYear(text: string): string {
-  return text.replace("{year}", String(new Date().getUTCFullYear()));
-}
-
 export function generateStaticParams() {
   return SECTORS.map((s) => ({ slug: s.slug }));
 }
@@ -326,49 +252,16 @@ export default async function SectorLandingPage({
     throw e;
   }
 
-  // Rank by AgentScore so the table, the quick answer and the
-  // structured data always agree on who is #1.
-  const ranked = [...detail.constituents].sort(
-    (x, y) => (y.agent.score?.agent_score ?? -1) - (x.agent.score?.agent_score ?? -1),
+  const ranked = rankByScore(
+    detail.constituents.map((c) => ({ ...c, score: c.agent.score })),
   );
   const now = new Date();
-  const moverRow = ranked
-    .filter((c) => (c.agent.score?.delta_24h ?? 0) > 0)
-    .sort((x, y) => (y.agent.score?.delta_24h ?? 0) - (x.agent.score?.delta_24h ?? 0))[0];
-  const openRows = ranked.filter((c) =>
-    c.agent.tags.some((t) => t.kind === "license" && OSI_LICENSES.has(t.value)),
+  const leaders = computeLeaders(
+    ranked.map((c) => c.agent),
+    `/indexes/${def.index_slug}`,
   );
-  const leaders: Leaders = {
-    top: ranked.slice(0, 3).map((c) => ({
-      name: c.agent.name,
-      score: formatScore(c.agent.score?.agent_score ?? null),
-    })),
-    mover: moverRow
-      ? { name: moverRow.agent.name, delta: (moverRow.agent.score?.delta_24h ?? 0).toFixed(1) }
-      : null,
-    open: {
-      count: openRows.length,
-      total: ranked.length,
-      names: openRows.slice(0, 3).map((c) => c.agent.name),
-    },
-    indexPath: `/indexes/${def.index_slug}`,
-  };
-  const faqs = def.faqs.map((f) => ({
-    q: f.q,
-    a: typeof f.a === "function" ? f.a(leaders) : f.a,
-  }));
+  const faqs = resolveFaqs(def.faqs, leaders);
   const h1 = withYear(def.h1);
-  const [first, second, third] = leaders.top;
-
-  const faqJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map((f) => ({
-      "@type": "Question",
-      name: f.q,
-      acceptedAnswer: { "@type": "Answer", text: f.a },
-    })),
-  };
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -391,10 +284,6 @@ export default async function SectorLandingPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
 
       <BackLink href="/" label="Floor" className="-mb-2" />
 
@@ -405,35 +294,7 @@ export default async function SectorLandingPage({
         <h1 className="editorial mt-3 text-4xl font-semibold leading-tight md:text-6xl md:leading-[1.05]">
           {h1}
         </h1>
-        {/* Live, self-contained answer naming the current leaders,
-            recomputed on every ISR refresh. No date: the page is the
-            live source, not a snapshot. */}
-        {first && (
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-foreground md:text-lg">
-            Right now, the top-ranked {def.noun} on AgentTape are{" "}
-            <strong className="font-semibold">{first.name}</strong> (AgentScore{" "}
-            {first.score})
-            {second && (
-              <>
-                {third ? ", " : " and "}
-                <strong className="font-semibold">{second.name}</strong> ({second.score})
-              </>
-            )}
-            {third && (
-              <>
-                {" "}and <strong className="font-semibold">{third.name}</strong> ({third.score})
-              </>
-            )}
-            .
-            {leaders.mover && (
-              <>
-                {" "}Biggest 24-hour gain:{" "}
-                <strong className="font-semibold">{leaders.mover.name}</strong>, up{" "}
-                {leaders.mover.delta} points.
-              </>
-            )}
-          </p>
-        )}
+        <QuickAnswer noun={def.noun} leaders={leaders} />
         <p className="editorial mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
           {def.intro}
         </p>
@@ -526,34 +387,7 @@ export default async function SectorLandingPage({
         </table>
       </section>
 
-      {/* FAQ: answers the questions people ask search engines and AI
-          assistants. Mirrored in FAQPage JSON-LD above. */}
-      <section>
-        <h2 className="editorial text-2xl font-semibold leading-tight md:text-3xl">
-          Common questions
-        </h2>
-        {/* Collapsed by default so the ranking stays the focus; the
-            questions scan quickly and answers open on demand. Search
-            engines still index the collapsed text. */}
-        <div className="mt-4 divide-y divide-border rounded-md border border-border bg-card">
-          {faqs.map((f, i) => (
-            <details key={i} className="group px-4 py-3" open={i === 0}>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-foreground [&::-webkit-details-marker]:hidden">
-                {f.q}
-                <span
-                  aria-hidden
-                  className="shrink-0 text-muted-foreground transition-transform group-open:rotate-45"
-                >
-                  +
-                </span>
-              </summary>
-              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground md:text-base">
-                {linkify(f.a)}
-              </p>
-            </details>
-          ))}
-        </div>
-      </section>
+      <LiveFaq faqs={faqs} />
 
       <p className="text-xs text-muted-foreground">
         Methodology and source code are public — read{" "}

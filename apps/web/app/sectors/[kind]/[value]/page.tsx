@@ -7,6 +7,20 @@ import { BackLink } from "@/components/back-link";
 import { MoverChip } from "@/components/mover-chip";
 import { SectorChart } from "@/components/sector-chart";
 import { SectorMembersPanel } from "@/components/sector-members-panel";
+import { LiveFaq, QuickAnswer } from "@/components/live-answers";
+import {
+  APP_SCORING,
+  FM_SCORING,
+  SEE_THE_DATA,
+  bestNow,
+  computeLeaders,
+  gainingNow,
+  openSourceNow,
+  rankByScore,
+  resolveFaqs,
+  withYear,
+  type Faq,
+} from "@/lib/live-answers";
 
 // Sector detail — like an index page but rolled up by tag.
 //
@@ -64,9 +78,17 @@ function parseEk(raw: string | undefined, kind: string): EkFilter {
 
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   const { kind, value } = await params;
+  const noun = sectorNoun(kind, value, "application");
+  // Where a /top/* page already targets "best X", this page takes the
+  // "every X" angle so the two don't compete for the same search.
+  const title = TOP_COVERED.has(`${kind}:${value}`)
+    ? `All ${titleCase(noun)}, Ranked Live`
+    : withYear(`Best ${titleCase(noun)} ({year}): Live Ranking`);
   return {
-    title: `${pretty(value)} agents — ${kind} sector`,
-    description: `Live ranking of agents tagged ${kind}:${value}. Composite chart, member list, AgentScore.`,
+    // Absolute: the /sectors layout sets a plain title, which stops the
+    // root "%s | AgentTape" template reaching this segment.
+    title: { absolute: `${title} | AgentTape` },
+    description: `Live ranking of the best ${noun}, ordered by AgentScore from public adoption, community, quality and momentum signals. Score history, 24-hour movers and every member, updated hourly.`,
     alternates: { canonical: `/sectors/${kind}/${value}` },
   };
 }
@@ -126,6 +148,10 @@ export default async function SectorDetailPage({ params, searchParams }: PagePar
     );
   }
 
+  const noun = sectorNoun(kind, value, ek);
+  const leaders = computeLeaders(rankByScore(members.items), `/sectors/${kind}/${value}`);
+  const faqs = resolveFaqs(sectorFaqs(kind, ek, noun), leaders);
+
   const composite =
     history.length > 0 ? history.at(-1)?.avg_score ?? null : null;
   const first = history.length > 0 ? history[0]?.avg_score ?? null : null;
@@ -141,13 +167,14 @@ export default async function SectorDetailPage({ params, searchParams }: PagePar
             Sector · {kind}
           </div>
           <h1 className="editorial mt-2 text-3xl font-semibold leading-tight md:text-5xl">
-            {pretty(value)}
+            {sentenceCase(noun)}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Cohort of {members.total} admitted agents tagged{" "}
             <span className="font-mono">{kind}:{value}</span>. Composite
             below is the cohort's average AgentScore.
           </p>
+          <QuickAnswer noun={noun} leaders={leaders} className="mt-4" />
 
           <div className="mt-6 grid gap-6 md:grid-cols-[auto_1fr]">
             <div>
@@ -179,6 +206,8 @@ export default async function SectorDetailPage({ params, searchParams }: PagePar
         )}
         <SectorMembersPanel members={members.items} />
 
+        <LiveFaq faqs={faqs} />
+
         <p className="hairline pt-6 text-xs text-muted-foreground">
           Browse all sectors at{" "}
           <Link href="/sectors" className="text-primary hover:underline">
@@ -189,6 +218,117 @@ export default async function SectorDetailPage({ params, searchParams }: PagePar
       </div>
     </article>
   );
+}
+
+// Search-friendly plural noun for a sector, used in the title, h1 and
+// live answers ("the top-ranked AI research agents on AgentTape are…").
+// Falls back to a generic form for tags without a hand-written name.
+const CAPABILITY_NOUNS: Record<string, string> = {
+  "code-generation": "AI coding agents",
+  browsing: "AI browser agents",
+  research: "AI research agents",
+  rag: "RAG agents",
+  "multi-agent": "multi-agent frameworks",
+  automation: "AI automation agents",
+  "tool-use": "tool-using AI agents",
+  memory: "AI agent memory tools",
+  vision: "vision AI agents",
+  voice: "voice AI agents",
+};
+const DEPLOYMENT_NOUNS: Record<string, string> = {
+  library: "AI agent libraries",
+  cli: "CLI AI agents",
+  saas: "SaaS AI agents",
+  "ide-plugin": "AI coding IDE plugins",
+  "browser-extension": "AI browser extensions",
+  "mcp-server": "MCP servers",
+};
+const LICENSE_NAMES: Record<string, string> = {
+  mit: "MIT",
+  "apache-2.0": "Apache 2.0",
+  bsd: "BSD",
+  mpl: "MPL",
+  gpl: "GPL",
+  agpl: "AGPL",
+};
+const MODEL_NAMES: Record<string, string> = {
+  claude: "Claude",
+  gpt: "GPT",
+  openai: "OpenAI",
+  gemini: "Gemini",
+  llama: "Llama",
+  deepseek: "DeepSeek",
+  qwen: "Qwen",
+  mistral: "Mistral",
+};
+
+function sectorNoun(kind: string, value: string, ek: EkFilter): string {
+  if (ek === "foundation_model") {
+    return kind === "license"
+      ? `${LICENSE_NAMES[value] ?? pretty(value)}-licensed foundation models`
+      : `${pretty(value).toLowerCase()} foundation models`;
+  }
+  switch (kind) {
+    case "capability":
+      return CAPABILITY_NOUNS[value] ?? `${pretty(value).toLowerCase()} AI agents`;
+    case "deployment":
+      return DEPLOYMENT_NOUNS[value] ?? `${pretty(value)} AI agents`;
+    case "license":
+      if (value === "proprietary") return "proprietary AI agents";
+      if (value === "unknown") return "AI agents with no declared license";
+      return `${LICENSE_NAMES[value] ?? pretty(value)}-licensed AI agents`;
+    case "model_dep":
+      return `AI agents built on ${MODEL_NAMES[value] ?? pretty(value)}`;
+    case "domain":
+      return `AI agents for ${pretty(value).toLowerCase()}`;
+    default:
+      return `${pretty(value).toLowerCase()} AI agents`;
+  }
+}
+
+// Every sector gets the questions the live data can answer, plus how
+// the score works with a pointer to the charts and breakdowns.
+function sectorFaqs(kind: string, ek: EkFilter, noun: string): Faq[] {
+  // Singular of the head noun only ("AI agents for sales" → "AI agent
+  // for sales"), so tag words ending in "s" are left alone.
+  const one = noun.replace(
+    /\b(agents|frameworks|tools|servers|plugins|extensions|models|libraries)\b/,
+    (w) => (w === "libraries" ? "library" : w.slice(0, -1)),
+  );
+  const faqs: Faq[] = [
+    { q: `What is the best ${one} right now?`, a: bestNow(one) },
+    { q: `Which ${noun} are gaining fastest right now?`, a: gainingNow },
+  ];
+  if (kind !== "license" && ek !== "foundation_model") {
+    faqs.push({ q: `Which ${noun} are open source?`, a: openSourceNow(noun) });
+  }
+  faqs.push({
+    q: "How is this ranking calculated?",
+    a:
+      (ek === "foundation_model" ? FM_SCORING : APP_SCORING) +
+      " The headline above is the cohort's average AgentScore; the chart shows how it has moved." +
+      SEE_THE_DATA,
+  });
+  return faqs;
+}
+
+const TOP_COVERED = new Set([
+  "capability:code-generation",
+  "capability:browsing",
+  "deployment:mcp-server",
+]);
+
+const SMALL_WORDS = new Set(["on", "for", "with", "no", "and", "of"]);
+
+function titleCase(text: string): string {
+  return text
+    .split(" ")
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function pretty(value: string): string {
